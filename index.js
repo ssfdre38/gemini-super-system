@@ -3,10 +3,14 @@
 const { Server } = require("@modelcontextprotocol/sdk/server/index.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { CallToolRequestSchema, ListToolsRequestSchema } = require("@modelcontextprotocol/sdk/types.js");
-const { GeminiSuperOrchestrator } = require("./lib/orchestrator.js");
-const readline = require("readline");
-
-const orchestrator = new GeminiSuperOrchestrator();
+let orchestrator = null;
+function getOrchestrator() {
+  if (!orchestrator) {
+    const { GeminiSuperOrchestrator } = require("./lib/orchestrator.js");
+    orchestrator = new GeminiSuperOrchestrator();
+  }
+  return orchestrator;
+}
 
 const server = new Server(
   {
@@ -76,10 +80,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-  await orchestrator.initialize();
+  const orch = getOrchestrator();
+  await orch.initialize();
 
   if (name === "super_telemetry") {
-    const telemetry = orchestrator.getTelemetry();
+    const telemetry = orch.getTelemetry();
     return {
       content: [
         {
@@ -97,7 +102,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === "super_dispatch_task") {
-    const res = await orchestrator.dispatchTask(args.prompt, args.engine);
+    const res = await orch.dispatchTask(args.prompt, args.engine);
     return {
       content: [
         {
@@ -109,7 +114,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   }
 
   if (name === "super_launch_swarm") {
-    const swarm = await orchestrator.launchSwarm(args.goal, args.roles);
+    const swarm = await orch.launchSwarm(args.goal, args.roles);
     const workerList = swarm.workers.map(w => `  - [${w.id}] ${w.role}: ${w.status}`).join("\n");
     return {
       content: [
@@ -128,8 +133,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 });
 
 async function runCliMode() {
-  await orchestrator.initialize();
-  const telemetry = orchestrator.getTelemetry();
+  const readline = require("readline");
+  const orch = getOrchestrator();
+  await orch.initialize();
+  const telemetry = orch.getTelemetry();
 
   console.log("\n=======================================================");
   console.log("   ⚡ UNIFIED GEMINI SUPER SYSTEM CONTROL CENTER ⚡");
