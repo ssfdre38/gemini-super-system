@@ -106,6 +106,42 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["targetDir"]
         }
+      },
+      {
+        name: "super_poll_bus",
+        description: "Polls the Universal Shared Bus across all surfaces (Dashboard, Alt+Space Gemini overlay, CLI, Antigravity) returning active queued tasks and swarm state.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            engine: {
+              type: "string",
+              description: "Optional engine filter ('agy', 'gemini', 'swarm', 'google-labs')."
+            }
+          }
+        }
+      },
+      {
+        name: "super_complete_task",
+        description: "Marks a task on the Universal Shared Bus as COMPLETED (or FAILED) with result details, immediately broadcasting the update over SSE to the Web Dashboard and connected engines.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            taskId: {
+              type: "string",
+              description: "The unique task ID to mark as completed."
+            },
+            result: {
+              type: "string",
+              description: "Result summary or execution output."
+            },
+            success: {
+              type: "boolean",
+              default: true,
+              description: "Whether the task succeeded."
+            }
+          },
+          required: ["taskId", "result"]
+        }
       }
     ]
   };
@@ -180,6 +216,39 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           text: res.success
             ? `✅ Build Success (${res.command}):\n${res.summary || res.message}`
             : `❌ Build Failed (${res.command}) with ${res.errorCount} error(s):\n${res.errors.join("\n")}\n\nDiagnostic Log Snippet:\n${res.rawLogSnippet}`
+        }
+      ]
+    };
+  }
+
+  if (name === "super_poll_bus") {
+    const tasks = orch.getPendingTasks(args?.engine || null);
+    const busState = orch.getBusState();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ Universal Bus State:\n` +
+                `• Active Queued Tasks: ${tasks.length}\n` +
+                `• Active Swarms: ${busState.swarms.length}\n` +
+                `• Completed Tasks: ${busState.completedTasks.length}\n\n` +
+                (tasks.length > 0 
+                  ? `Pending Tasks:\n` + tasks.map(t => `  - [${t.id}] Target: ${t.engine.toUpperCase()} | Prompt: "${t.prompt}" | Source: ${t.source}`).join("\n")
+                  : `(No pending tasks queued on bus)`)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_complete_task") {
+    const completed = orch.completeTask(args.taskId, args.result, args.success !== false);
+    return {
+      content: [
+        {
+          type: "text",
+          text: completed
+            ? `✅ Task [${completed.id}] marked as ${completed.status}.\nResult: ${completed.result}\nBroadcasted to Web Dashboard & connected engines.`
+            : `❌ Task [${args.taskId}] not found on bus or already completed.`
         }
       ]
     };
