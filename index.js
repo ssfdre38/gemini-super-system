@@ -142,6 +142,53 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["taskId", "result"]
         }
+      },
+      {
+        name: "super_local_infer",
+        description: "Executes sovereign local LLM inference directly against local llama-server (port 11436), Haven Server (port 18799), or any OpenAI-compatible GGUF endpoint, logging results to the Universal Super Bus.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            prompt: {
+              type: "string",
+              description: "The user query or prompt for local inference."
+            },
+            systemPrompt: {
+              type: "string",
+              description: "Optional system instructions for the local model.",
+              default: "You are Haven Sovereign Assistant running bare-metal on local hardware."
+            },
+            endpoint: {
+              type: "string",
+              description: "OpenAI-compatible chat completions endpoint (defaults to http://127.0.0.1:11436/v1/chat/completions).",
+              default: "http://127.0.0.1:11436/v1/chat/completions"
+            },
+            model: {
+              type: "string",
+              description: "Model identifier (defaults to gemma-4).",
+              default: "gemma-4"
+            },
+            maxTokens: {
+              type: "number",
+              description: "Max tokens to generate.",
+              default: 2048
+            },
+            temperature: {
+              type: "number",
+              description: "Sampling temperature (0.0 to 1.0).",
+              default: 0.7
+            }
+          },
+          required: ["prompt"]
+        }
+      },
+      {
+        name: "super_netbird_status",
+        description: "Queries the WireGuard NetBird mesh network daemon, returning node FQDN, mesh IP, signal/relay health, and connected peer nodes.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
     ]
   };
@@ -154,17 +201,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === "super_telemetry") {
     const telemetry = orch.getTelemetry();
+    const hw = telemetry.hardware || {};
+    const nb = telemetry.netbird || {};
+    const inf = telemetry.inference || {};
+
     return {
       content: [
         {
           type: "text",
           text: `⚡ UNIFIED GEMINI SUPER SYSTEM TELEMETRY ⚡\n` +
                 `Timestamp: ${telemetry.timestamp}\n\n` +
-                `• Antigravity CLI (AGY) : ${telemetry.engines.agy.installed ? `v${telemetry.engines.agy.version} [ONLINE]` : "[OFFLINE]"} (${telemetry.engines.agy.path})\n` +
-                `• Gemini Native Core    : ${telemetry.engines.gemini.installed ? `v${telemetry.engines.gemini.version} [ONLINE]` : "[OFFLINE]"} (${telemetry.engines.gemini.path})\n` +
-                `• Google Labs MCP (CDP) : ${telemetry.engines.googleLabsMcp.available ? `[READY - Port 9222 ${telemetry.engines.googleLabsMcp.cdpLive ? "CONNECTED" : "STANDBY"}]` : "[OFFLINE]"}\n` +
-                `• IDE Companion Mode    : ${telemetry.engines.ideCompanion.activeSessions > 0 ? `[${telemetry.engines.ideCompanion.activeSessions} ACTIVE SESSIONS]` : "[IDLE]"}\n` +
-                `• Active Swarms Running : ${telemetry.activeSwarmCount}`
+                `[SYSTEM HARDWARE]\n` +
+                `• OS / Kernel        : ${hw.platform} ${hw.arch} (Kernel ${hw.release})\n` +
+                `• Processor          : ${hw.cpu?.model} (${hw.cpu?.cores} Logical Cores)\n` +
+                `• System Memory (RAM): ${hw.ram?.used} / ${hw.ram?.total} (${hw.ram?.usedPercentage} Used, ${hw.ram?.free} Free)\n` +
+                `• Node Uptime        : ${hw.uptime?.formatted}\n` +
+                `• Process Heap / RSS : ${hw.process?.heapUsed} / ${hw.process?.rss}\n\n` +
+                `[NETBIRD WIREGUARD MESH]\n` +
+                `• Daemon Status      : ${nb.installed ? `[ONLINE - ${nb.management}]` : "[NOT INSTALLED]"}\n` +
+                `• Mesh IPv4 Address  : ${nb.netbirdIp || "N/A"}\n` +
+                `• Mesh FQDN Node     : ${nb.fqdn || "N/A"}\n` +
+                `• Relays / Signal    : ${nb.relays} • ${nb.signal}\n` +
+                `• Connected Peers    : ${nb.peersCount}\n\n` +
+                `[ENGINES & RUNTIMES]\n` +
+                `• Antigravity CLI    : ${telemetry.engines.agy.installed ? `v${telemetry.engines.agy.version} [ONLINE]` : "[OFFLINE]"} (${telemetry.engines.agy.path})\n` +
+                `• Gemini Native Core : ${telemetry.engines.gemini.installed ? `v${telemetry.engines.gemini.version} [ONLINE]` : "[OFFLINE]"} (${telemetry.engines.gemini.path})\n` +
+                `• Google Labs MCP    : ${telemetry.engines.googleLabsMcp.available ? `[READY - Port 9222 ${telemetry.engines.googleLabsMcp.cdpLive ? "CONNECTED" : "STANDBY"}]` : "[OFFLINE]"}\n` +
+                `• Local llama-server : ${inf.llamaServer?.online ? "[ONLINE - Port 11436]" : "[OFFLINE - Port 11436]"}\n` +
+                `• Haven C# Server    : ${inf.havenServer?.online ? "[ONLINE - Port 18799]" : "[OFFLINE - Port 18799]"}\n` +
+                `• IDE Companion Mode : ${telemetry.engines.ideCompanion.activeSessions > 0 ? `[${telemetry.engines.ideCompanion.activeSessions} ACTIVE SESSIONS]` : "[IDLE]"}\n` +
+                `• Active Swarms      : ${telemetry.activeSwarmCount}\n` +
+                `• Bus Tasks (Active) : ${telemetry.activeTaskCount} queued / ${telemetry.completedTaskCount} completed`
         }
       ]
     };
@@ -249,6 +316,46 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           text: completed
             ? `✅ Task [${completed.id}] marked as ${completed.status}.\nResult: ${completed.result}\nBroadcasted to Web Dashboard & connected engines.`
             : `❌ Task [${args.taskId}] not found on bus or already completed.`
+        }
+      ]
+    };
+  }
+
+  if (name === "super_local_infer") {
+    const res = await orch.localInfer(args.prompt, {
+      systemPrompt: args.systemPrompt,
+      endpoint: args.endpoint,
+      model: args.model,
+      maxTokens: args.maxTokens,
+      temperature: args.temperature
+    });
+    return {
+      content: [
+        {
+          type: "text",
+          text: res.success
+            ? `🤖 Local Inference Response [${res.model} @ ${res.endpoint}]:\n\n${res.reply}`
+            : `⚠️ ${res.error}`
+        }
+      ]
+    };
+  }
+
+  if (name === "super_netbird_status") {
+    const nb = orch.getNetBirdStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🌐 NetBird WireGuard Mesh Telemetry:\n` +
+                `• Installed   : ${nb.installed}\n` +
+                `• Management  : ${nb.management}\n` +
+                `• Signal      : ${nb.signal}\n` +
+                `• Node FQDN   : ${nb.fqdn || "N/A"}\n` +
+                `• NetBird IP  : ${nb.netbirdIp || "N/A"}\n` +
+                `• Relays      : ${nb.relays}\n` +
+                `• WG Port     : ${nb.wireguardPort}\n` +
+                `• Peers Count : ${nb.peersCount}`
         }
       ]
     };
