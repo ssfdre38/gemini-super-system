@@ -416,6 +416,19 @@ async function runCliMode() {
 }
 
 async function main() {
+  if (process.argv.includes("--version") || process.argv.includes("-v")) {
+    console.log("gemini-super-system v1.0.0 (Native SEA Standalone)");
+    process.exit(0);
+  }
+  if (process.argv.includes("--help") || process.argv.includes("-h")) {
+    console.log("Gemini Super System - Native MCP & CLI Engine");
+    console.log("Usage: gemini-super [options]");
+    console.log("  --cli       Launch interactive terminal console");
+    console.log("  --version   Show version information");
+    console.log("  --help      Show this help message");
+    console.log("  (default)   Run as Model Context Protocol (MCP) server over stdio");
+    process.exit(0);
+  }
   if (process.argv.includes("--cli")) {
     await runCliMode();
   } else {
