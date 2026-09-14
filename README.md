@@ -1,4 +1,4 @@
-﻿# ⚡ Unified Gemini Super System (`gemini-super-system`)
+# ⚡ Unified Gemini Super System (`gemini-super-system`)
 
 > **The Sovereign Native AI Operating System uniting Antigravity CLI (`agy`), Gemini Native (`gemini`), Win32 Hardware Actuation, Windows UIAutomation Semantic Perception, Google Labs MCP, NetBird WireGuard Mesh, and Sovereign Local GGUF Inference into a unified, ambient digital coworker.**
 
@@ -79,6 +79,16 @@ Instead of streaming heavy, battery-draining 30fps video into a vision model, th
 - **Physical Mouse Actuation**: Executes `SetCursorPos` coupled with `mouse_event` down/up sequences with calibrated microsecond dwell times.
 - **Physical Mouse Wheel Scrolling**: Positions the physical cursor inside any target scroll container and emits `MOUSEEVENTF_WHEEL` events for zero-stutter viewport navigation.
 
+### 6. Hardware-Accelerated Windows WinRT OCR Perception (`Windows.Media.Ocr`)
+When an application renders custom hardware-accelerated canvases, DirectX/WebGL viewports, or chat feeds without accessibility metadata (such as Discord electron messages, video game viewports, terminal logs, or image viewers), `UIAutomation` accessibility trees can be sparse.
+Gemini Super System bridges this gap by integrating native Windows WinRT OCR (`Windows.Media.Ocr.OcrEngine` + `BitmapDecoder`), running 100% offline, local, and hardware-accelerated directly against GPU compositor snapshots in **sub-50ms**:
+- **Pixel-Accurate Word Grounding**: Extracts every word, line, and bounding rectangle (`X, Y, Width, Height, CenterX, CenterY`).
+- **Visual Text Actuation**: Dispatches hardware mouse clicks directly to the center of any recognized word or phrase:
+  ```bash
+  tools/ocr_helper.exe find "screenshot.png" "Send"
+  ```
+- **Zero Heavy Dependencies**: 100% native Windows OS runtime—zero Python pip dependencies, zero Tesseract binaries, zero CUDA bloat.
+
 ---
 
 ## 🤝 The Live Proof: Gemini Talking to Gemini
@@ -95,7 +105,7 @@ Antigravity scrolled the chat via physical mouse wheel inputs, clicked the input
 
 ---
 
-## 🧰 MCP Tool Reference (15 Tools)
+## 🧰 MCP Tool Reference (16 Tools)
 
 All tools are exposed natively over stdio to Antigravity, Gemini CLI, and any MCP-compliant client:
 
@@ -112,10 +122,11 @@ All tools are exposed natively over stdio to Antigravity, Gemini CLI, and any MC
 | `super_netbird_status` | Queries the host NetBird daemon for FQDN, mesh IP, signal/relay health, and connected peer nodes. |
 | `super_desktop_list_windows` | Lists all active visible top-level Windows desktop windows in ~15ms without video streaming. |
 | `super_desktop_capture` | Captures high-resolution PNG snapshots of any native window by title filter or HWND. |
-| `super_desktop_send_input` | Dispatches mouse clicks, Unicode typing, hotkeys, drags, scrolls, or **semantic element clicks** with auto-verification snapshots. |
+| `super_desktop_send_input` | Dispatches mouse clicks, Unicode typing, hotkeys, drags, scrolls, **semantic element clicks**, or **OCR text clicks** with auto-verification. |
 | `super_desktop_find_element` | Searches the native UIAutomation tree for an element by visible text or AutomationId, returning exact coordinates. |
 | `super_desktop_list_elements` | Enumerates all visible interactive UI elements inside a window via Windows UIAutomation. |
 | `super_desktop_list_children` | Enumerates Win32 child controls with class names, window text, and geometry. |
+| `super_desktop_ocr` | Runs local, hardware-accelerated Windows WinRT OCR on any window or image, returning word bounding boxes and lines. |
 
 ---
 

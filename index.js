@@ -284,6 +284,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "boolean",
               description: "Force window to the foreground and activate keyboard input focus."
             },
+            textQuery: {
+              type: "string",
+              description: "Target text to find and click semantically via native Windows WinRT OCR if standard UIAutomation accessibility tree is not available."
+            },
             autoSnapshot: {
               type: "boolean",
               default: false,
@@ -337,6 +341,24 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             }
           },
           required: ["titleFilter"]
+        }
+      },
+      {
+        name: "super_desktop_ocr",
+        description: "Performs local, hardware-accelerated Windows WinRT OCR text recognition on any window or image file. Returns recognized text lines, individual words, and exact pixel bounding boxes for visual UI grounding.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            target: {
+              type: "string",
+              description: "Window title filter (e.g. 'Discord', 'Chrome', 'Task Manager') OR absolute image file path."
+            },
+            query: {
+              type: "string",
+              description: "Optional text query to search for. If provided, returns exact bounding boxes and center coordinates for all matching occurrences."
+            }
+          },
+          required: ["target"]
         }
       }
     ]
@@ -560,6 +582,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const btn = args.button || "left";
       actionResult = await bridge.clickElement(args.titleFilter, args.element, btn);
       actionDesc = `🎯 Clicked element "${args.element}" (${btn}) in "${args.titleFilter}"`;
+    } else if (args.textQuery && args.text) {
+      const clickRes = await bridge.clickText(args.titleFilter, args.textQuery, args.button || "left");
+      if (!clickRes.success) {
+        actionResult = clickRes;
+        actionDesc = `⚠️ Failed to click OCR text "${args.textQuery}": ${clickRes.error}`;
+      } else {
+        await new Promise(r => setTimeout(r, 120));
+        actionResult = await bridge.typeText(args.titleFilter, args.text);
+        actionDesc = `🎯⌨️ Clicked OCR text "${args.textQuery}" at [${clickRes.x}, ${clickRes.y}] and typed ${args.text.length} Unicode characters into "${args.titleFilter}"`;
+      }
+    } else if (args.textQuery) {
+      const btn = args.button || "left";
+      actionResult = await bridge.clickText(args.titleFilter, args.textQuery, btn);
+      actionDesc = actionResult.success
+        ? `🎯 Clicked OCR text "${actionResult.text}" at [${actionResult.x}, ${actionResult.y}] (${btn}) in "${args.titleFilter}"`
+        : `⚠️ OCR text "${args.textQuery}" not found in "${args.titleFilter}": ${actionResult.error}`;
     } else if (args.click && args.text) {
       actionResult = await bridge.clickAndType(args.titleFilter, args.click.x, args.click.y, args.text);
       actionDesc = `🖱️⌨️ Clicked at [${args.click.x}, ${args.click.y}] and typed ${args.text.length} Unicode characters into "${args.titleFilter}"`;
@@ -663,6 +701,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
       ]
     };
+  }
+
+  if (name === "super_desktop_ocr") {
+    const bridge = getDesktopBridge();
+    if (args.query) {
+      const res = await bridge.findText(args.target, args.query);
+      return {
+        content: [
+          {
+            type: "text",
+            text: res.matches && res.matches.length > 0
+              ? `🔍 WinRT OCR found ${res.matches.length} matches for "${args.query}" in "${args.target}":\n` +
+                res.matches.map(m => `• "${m.text}" @ center [${m.centerX}, ${m.centerY}] (bounds: [${m.x}, ${m.y}] ${m.width}x${m.height}) [Line: "${m.line}"]`).join("\n")
+              : `⚠️ No OCR matches found for "${args.query}" in "${args.target}"`
+          }
+        ]
+      };
+    } else {
+      const res = await bridge.runOcr(args.target);
+      return {
+        content: [
+          {
+            type: "text",
+            text: res.lines
+              ? `👁️ Windows WinRT OCR Result for "${args.target}" (${res.lineCount} lines):\n` +
+                res.lines.map(l => l.text).join("\n")
+              : `⚠️ OCR failed: ${res.error || "No text detected"}`
+          }
+        ]
+      };
+    }
   }
 
   return {
