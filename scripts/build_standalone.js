@@ -92,6 +92,15 @@ if (inject.status !== 0) {
 if (fs.existsSync(seaConfigPath)) fs.unlinkSync(seaConfigPath);
 if (fs.existsSync(seaBlobPath)) fs.unlinkSync(seaBlobPath);
 
+// Copy tools/desktop_helper.exe to dist/tools/
+const toolsSrc = path.join(root, "tools");
+const toolsDist = path.join(dist, "tools");
+if (fs.existsSync(path.join(toolsSrc, "desktop_helper.exe"))) {
+  if (!fs.existsSync(toolsDist)) fs.mkdirSync(toolsDist, { recursive: true });
+  fs.copyFileSync(path.join(toolsSrc, "desktop_helper.exe"), path.join(toolsDist, "desktop_helper.exe"));
+  console.log("Copied desktop_helper.exe to dist/tools/");
+}
+
 const stats = fs.statSync(targetExe);
 const sizeMB = (stats.size / (1024 * 1024)).toFixed(1);
 

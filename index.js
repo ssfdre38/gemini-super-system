@@ -12,6 +12,8 @@ function getOrchestrator() {
   return orchestrator;
 }
 
+const { getDesktopBridge } = require("./lib/desktop-bridge.js");
+
 const server = new Server(
   {
     name: "gemini-super-system",
@@ -189,6 +191,58 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           type: "object",
           properties: {}
         }
+      },
+      {
+        name: "super_desktop_list_windows",
+        description: "Lists all active visible native Windows desktop windows (HWND, PID, title, dimensions, coordinates) in under 20ms without video streaming.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_desktop_capture",
+        description: "Captures an on-demand high-resolution PNG snapshot of a native Windows desktop window by title filter (e.g. Task Manager, NetBird, qBittorrent, Blender).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            titleFilter: {
+              type: "string",
+              description: "Substring of the window title to capture."
+            },
+            outputPath: {
+              type: "string",
+              description: "Optional custom absolute path to save the PNG snapshot."
+            }
+          },
+          required: ["titleFilter"]
+        }
+      },
+      {
+        name: "super_desktop_send_input",
+        description: "Sends native virtual keystrokes (SendKeys) or mouse clicks to a target native desktop window.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            titleFilter: {
+              type: "string",
+              description: "Substring of the window title to target."
+            },
+            keys: {
+              type: "string",
+              description: "Keystrokes to send (e.g. text, '{ENTER}', '^s')."
+            },
+            click: {
+              type: "object",
+              description: "Optional relative coordinates to click inside the window.",
+              properties: {
+                x: { type: "number" },
+                y: { type: "number" }
+              }
+            }
+          },
+          required: ["titleFilter"]
+        }
       }
     ]
   };
@@ -359,6 +413,66 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
       ]
     };
+  }
+
+  if (name === "super_desktop_list_windows") {
+    const bridge = getDesktopBridge();
+    const windows = bridge.listWindows();
+    return {
+      content: [
+        {
+          type: "text",
+          text: Array.isArray(windows)
+            ? `🖥️ Active Native Windows (${windows.length} found):\n` +
+              windows.map(w => `• [PID ${w.pid}] ${w.title} (${w.width}x${w.height} @ [${w.x}, ${w.y}])`).join("\n")
+            : `⚠️ Error listing windows: ${windows.error || "Unknown error"}`
+        }
+      ]
+    };
+  }
+
+  if (name === "super_desktop_capture") {
+    const bridge = getDesktopBridge();
+    const res = await bridge.captureWindow(args.titleFilter, args.outputPath);
+    return {
+      content: [
+        {
+          type: "text",
+          text: res.success
+            ? `📸 Native Window Captured: "${res.title}" (${res.width}x${res.height})\nSaved to: ${res.path}`
+            : `⚠️ Failed to capture window: ${res.error || "Unknown error"}`
+        }
+      ]
+    };
+  }
+
+  if (name === "super_desktop_send_input") {
+    const bridge = getDesktopBridge();
+    if (args.click) {
+      const res = await bridge.clickWindow(args.titleFilter, args.click.x, args.click.y);
+      return {
+        content: [
+          {
+            type: "text",
+            text: res.success
+              ? `🖱️ Click dispatched to "${args.titleFilter}" at [${res.x}, ${res.y}]`
+              : `⚠️ Click failed: ${res.error || "Unknown error"}`
+          }
+        ]
+      };
+    } else if (args.keys) {
+      const res = await bridge.sendKeys(args.titleFilter, args.keys);
+      return {
+        content: [
+          {
+            type: "text",
+            text: res.success
+              ? `⌨️ Keystrokes dispatched to "${args.titleFilter}": ${args.keys}`
+              : `⚠️ Keystrokes failed: ${res.error || "Unknown error"}`
+          }
+        ]
+      };
+    }
   }
 
   return {
