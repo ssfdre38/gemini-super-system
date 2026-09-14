@@ -39,10 +39,65 @@ namespace GeminiSuperDesktop {
         static extern bool ShowWindowAsync(IntPtr hWnd, int nCmdShow);
 
         [DllImport("user32.dll")]
+        static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
+        [DllImport("user32.dll")]
+        static extern bool IsIconic(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+        [DllImport("user32.dll")]
+        static extern void SwitchToThisWindow(IntPtr hWnd, bool fUnknown);
+
+        [DllImport("user32.dll")]
+        static extern bool SetThreadDesktop(IntPtr hDesktop);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr SetActiveWindow(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr GetForegroundWindow();
+
+        [DllImport("kernel32.dll")]
+        static extern uint GetCurrentThreadId();
+
+        [DllImport("user32.dll")]
+        static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+        [DllImport("user32.dll")]
+        static extern bool BringWindowToTop(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern IntPtr SetFocus(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern void keybd_event(byte bVk, byte bScan, uint dwFlags, int dwExtraInfo);
+
+        [DllImport("user32.dll")]
+        static extern bool EnumChildWindows(IntPtr hWndParent, EnumChildProc lpEnumFunc, IntPtr lParam);
+        delegate bool EnumChildProc(IntPtr hWnd, IntPtr lParam);
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
+
+        [DllImport("user32.dll")]
         static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);
 
         [DllImport("user32.dll")]
         static extern bool SetCursorPos(int X, int Y);
+
+        [DllImport("user32.dll")]
+        static extern int GetSystemMetrics(int nIndex);
+
+        [DllImport("user32.dll")]
+        static extern bool GetCursorPos(out POINT lpPoint);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POINT {
+            public int X;
+            public int Y;
+        }
 
         [DllImport("user32.dll", SetLastError = true)]
         static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
@@ -85,6 +140,7 @@ namespace GeminiSuperDesktop {
         const uint KEYEVENTF_KEYUP = 0x0002;
         const uint KEYEVENTF_UNICODE = 0x0004;
 
+        const uint MOUSEEVENTF_MOVE = 0x0001;
         const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
         const uint MOUSEEVENTF_LEFTUP = 0x0004;
         const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
@@ -92,6 +148,7 @@ namespace GeminiSuperDesktop {
         const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
         const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
         const uint MOUSEEVENTF_WHEEL = 0x0800;
+        const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
 
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT {
@@ -103,8 +160,12 @@ namespace GeminiSuperDesktop {
 
         static void Main(string[] args) {
             Console.OutputEncoding = Encoding.UTF8;
+            try {
+                IntPtr hDeskInit = OpenDesktop("Default", 0, false, 0x01FF);
+                if (hDeskInit != IntPtr.Zero) SetThreadDesktop(hDeskInit);
+            } catch {}
             if (args.Length == 0) {
-                Console.WriteLine("{\"error\": \"Usage: desktop_helper [list | capture | sendkeys | type | click | doubleclick | rightclick | drag | scroll | hotkey]\"}");
+                Console.WriteLine("{\"error\": \"Usage: desktop_helper [list | capture | sendkeys | type | click | doubleclick | rightclick | drag | scroll | hotkey | focus | listchildren]\"}");
                 return;
             }
 
@@ -143,8 +204,47 @@ namespace GeminiSuperDesktop {
                 ScrollInWindow(args[1], delta, x, y);
             } else if (cmd == "hotkey" && args.Length >= 3) {
                 HotkeyWindow(args[1], args[2]);
+            } else if (cmd == "focus" && args.Length >= 2) {
+                FocusWindowCmd(args[1]);
+            } else if (cmd == "listchildren" && args.Length >= 2) {
+                ListChildWindows(args[1]);
+            } else if (cmd == "scan" && args.Length >= 2) {
+                int rT = args.Length >= 3 ? int.Parse(args[2]) : 180;
+                int gT = args.Length >= 4 ? int.Parse(args[3]) : 180;
+                int bT = args.Length >= 5 ? int.Parse(args[4]) : 180;
+                ScanImageWhitePixels(args[1], rT, gT, bT);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
+            }
+        }
+
+        static void ScanImageWhitePixels(string imagePath, int rThresh, int gThresh, int bThresh) {
+            if (!File.Exists(imagePath)) {
+                Console.WriteLine("{\"error\": \"Image file not found\"}");
+                return;
+            }
+            using (var bmp = new Bitmap(imagePath)) {
+                int minX = int.MaxValue, maxX = int.MinValue;
+                int minY = int.MaxValue, maxY = int.MinValue;
+                int count = 0;
+                for (int y = 0; y < bmp.Height; y++) {
+                    for (int x = 0; x < bmp.Width; x++) {
+                        Color c = bmp.GetPixel(x, y);
+                        if (c.R >= rThresh && c.G >= gThresh && c.B >= bThresh) {
+                            if (x < minX) minX = x;
+                            if (x > maxX) maxX = x;
+                            if (y < minY) minY = y;
+                            if (y > maxY) maxY = y;
+                            count++;
+                        }
+                    }
+                }
+                if (count > 0) {
+                    Console.WriteLine(string.Format("{{\"count\": {0}, \"minX\": {1}, \"maxX\": {2}, \"minY\": {3}, \"maxY\": {4}, \"centerX\": {5}, \"centerY\": {6}}}",
+                        count, minX, maxX, minY, maxY, (minX + maxX) / 2, (minY + maxY) / 2));
+                } else {
+                    Console.WriteLine("{\"count\": 0}");
+                }
             }
         }
 
@@ -304,6 +404,103 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static bool ForceForegroundWindow(IntPtr hWnd) {
+            if (hWnd == IntPtr.Zero) return false;
+            IntPtr hFore = GetForegroundWindow();
+            if (hFore == hWnd) return true;
+
+            try { AllowSetForegroundWindow(-1); } catch {}
+
+            uint forePid, targetPid;
+            uint foreThread = GetWindowThreadProcessId(hFore, out forePid);
+            uint targetThread = GetWindowThreadProcessId(hWnd, out targetPid);
+            uint appThread = GetCurrentThreadId();
+
+            if (foreThread != 0 && targetThread != 0 && foreThread != targetThread) {
+                AttachThreadInput(foreThread, targetThread, true);
+            }
+            if (foreThread != 0 && foreThread != appThread) AttachThreadInput(appThread, foreThread, true);
+            if (targetThread != 0 && targetThread != appThread) AttachThreadInput(appThread, targetThread, true);
+
+            // Force switch via Windows task switcher API
+            SwitchToThisWindow(hWnd, true);
+
+            // Tap Alt down to break Windows foreground lock
+            keybd_event(0x12, 0, 0, 0);
+
+            if (IsIconic(hWnd)) {
+                ShowWindow(hWnd, 9); // SW_RESTORE
+            } else {
+                ShowWindow(hWnd, 5); // SW_SHOW
+            }
+
+            SetForegroundWindow(hWnd);
+            BringWindowToTop(hWnd);
+            SetFocus(hWnd);
+
+            keybd_event(0x12, 0, 2, 0); // Alt up
+
+            if (targetThread != 0 && targetThread != appThread) AttachThreadInput(appThread, targetThread, false);
+            if (foreThread != 0 && foreThread != appThread) AttachThreadInput(appThread, foreThread, false);
+            if (foreThread != 0 && targetThread != 0 && foreThread != targetThread) {
+                AttachThreadInput(foreThread, targetThread, false);
+            }
+
+            for (int i = 0; i < 8; i++) {
+                if (GetForegroundWindow() == hWnd) return true;
+                System.Threading.Thread.Sleep(25);
+            }
+
+            return GetForegroundWindow() == hWnd;
+        }
+
+        static void FocusWindowCmd(string titleFilter) {
+            IntPtr hDesk = OpenDesktop("Default", 0, false, 0x0100 | 0x0001);
+            IntPtr targetHwnd;
+            string actualTitle;
+
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                return;
+            }
+
+            bool focused = ForceForegroundWindow(targetHwnd);
+            IntPtr finalFore = GetForegroundWindow();
+            Console.WriteLine(string.Format("{{\"success\": {0}, \"title\": \"{1}\", \"handle\": \"{2}\", \"currentFore\": \"{3}\"}}",
+                focused ? "true" : "false", EscapeJson(actualTitle), targetHwnd, finalFore));
+        }
+
+        static void ListChildWindows(string titleFilter) {
+            IntPtr hDesk = OpenDesktop("Default", 0, false, 0x0100 | 0x0001);
+            IntPtr targetHwnd;
+            string actualTitle;
+
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                Console.WriteLine("[]");
+                return;
+            }
+
+            var children = new List<string>();
+            EnumChildWindows(targetHwnd, (hChild, lParam) => {
+                var sbClass = new StringBuilder(128);
+                GetClassName(hChild, sbClass, sbClass.Capacity);
+                var sbText = new StringBuilder(256);
+                GetWindowText(hChild, sbText, sbText.Capacity);
+                RECT r;
+                GetWindowRect(hChild, out r);
+                int w = r.Right - r.Left;
+                int h = r.Bottom - r.Top;
+
+                if (w > 0 && h > 0) {
+                    children.Add(string.Format("{{\"handle\": \"{0}\", \"class\": \"{1}\", \"text\": \"{2}\", \"x\": {3}, \"y\": {4}, \"width\": {5}, \"height\": {6}}}",
+                        hChild, EscapeJson(sbClass.ToString().Trim()), EscapeJson(sbText.ToString().Trim()), r.Left, r.Top, w, h));
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            Console.WriteLine("[" + string.Join(",", children.ToArray()) + "]");
+        }
+
         static void SendKeysToWindow(string titleFilter, string keys) {
             IntPtr hDesk = OpenDesktop("Default", 0, false, 0x0100 | 0x0001);
             IntPtr targetHwnd;
@@ -314,9 +511,8 @@ namespace GeminiSuperDesktop {
                 return;
             }
 
-            ShowWindowAsync(targetHwnd, 9); // SW_RESTORE
-            SetForegroundWindow(targetHwnd);
-            System.Threading.Thread.Sleep(100);
+            ForceForegroundWindow(targetHwnd);
+            System.Threading.Thread.Sleep(80);
             SendKeys.SendWait(keys);
             Console.WriteLine("{\"success\": true}");
         }
@@ -331,8 +527,7 @@ namespace GeminiSuperDesktop {
                 return;
             }
 
-            ShowWindowAsync(targetHwnd, 9);
-            SetForegroundWindow(targetHwnd);
+            ForceForegroundWindow(targetHwnd);
             System.Threading.Thread.Sleep(80);
 
             foreach (char c in text) {
@@ -370,30 +565,44 @@ namespace GeminiSuperDesktop {
             int absX = r.Left + relX;
             int absY = r.Top + relY;
 
-            ShowWindowAsync(targetHwnd, 9);
-            SetForegroundWindow(targetHwnd);
-            System.Threading.Thread.Sleep(50);
-            SetCursorPos(absX, absY);
+            ForceForegroundWindow(targetHwnd);
+            System.Threading.Thread.Sleep(80);
+
+            int screenW = Math.Max(1, GetSystemMetrics(0));
+            int screenH = Math.Max(1, GetSystemMetrics(1));
+            int normX = (int)Math.Round((absX * 65535.0) / (screenW - 1));
+            int normY = (int)Math.Round((absY * 65535.0) / (screenH - 1));
 
             string b = (button ?? "left").ToLowerInvariant();
-            if (b == "right") {
-                mouse_event(MOUSEEVENTF_RIGHTDOWN, (uint)absX, (uint)absY, 0, 0);
-                System.Threading.Thread.Sleep(50);
-                mouse_event(MOUSEEVENTF_RIGHTUP, (uint)absX, (uint)absY, 0, 0);
-            } else if (b == "middle") {
-                mouse_event(MOUSEEVENTF_MIDDLEDOWN, (uint)absX, (uint)absY, 0, 0);
-                System.Threading.Thread.Sleep(50);
-                mouse_event(MOUSEEVENTF_MIDDLEUP, (uint)absX, (uint)absY, 0, 0);
-            } else if (b == "double") {
-                mouse_event(MOUSEEVENTF_LEFTDOWN, (uint)absX, (uint)absY, 0, 0);
-                mouse_event(MOUSEEVENTF_LEFTUP, (uint)absX, (uint)absY, 0, 0);
+            uint downFlag = MOUSEEVENTF_LEFTDOWN;
+            uint upFlag = MOUSEEVENTF_LEFTUP;
+            if (b == "right") { downFlag = MOUSEEVENTF_RIGHTDOWN; upFlag = MOUSEEVENTF_RIGHTUP; }
+            else if (b == "middle") { downFlag = MOUSEEVENTF_MIDDLEDOWN; upFlag = MOUSEEVENTF_MIDDLEUP; }
+
+            INPUT[] moveInput = new INPUT[1];
+            moveInput[0].type = INPUT_MOUSE;
+            moveInput[0].mkhi.mi.dx = normX;
+            moveInput[0].mkhi.mi.dy = normY;
+            moveInput[0].mkhi.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
+            SendInput(1, moveInput, Marshal.SizeOf(typeof(INPUT)));
+            System.Threading.Thread.Sleep(30);
+
+            INPUT[] clickInputs = new INPUT[2];
+            clickInputs[0].type = INPUT_MOUSE;
+            clickInputs[0].mkhi.mi.dx = normX;
+            clickInputs[0].mkhi.mi.dy = normY;
+            clickInputs[0].mkhi.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | downFlag;
+
+            clickInputs[1].type = INPUT_MOUSE;
+            clickInputs[1].mkhi.mi.dx = normX;
+            clickInputs[1].mkhi.mi.dy = normY;
+            clickInputs[1].mkhi.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | upFlag;
+
+            SendInput(2, clickInputs, Marshal.SizeOf(typeof(INPUT)));
+
+            if (b == "double") {
                 System.Threading.Thread.Sleep(80);
-                mouse_event(MOUSEEVENTF_LEFTDOWN, (uint)absX, (uint)absY, 0, 0);
-                mouse_event(MOUSEEVENTF_LEFTUP, (uint)absX, (uint)absY, 0, 0);
-            } else {
-                mouse_event(MOUSEEVENTF_LEFTDOWN, (uint)absX, (uint)absY, 0, 0);
-                System.Threading.Thread.Sleep(50);
-                mouse_event(MOUSEEVENTF_LEFTUP, (uint)absX, (uint)absY, 0, 0);
+                SendInput(2, clickInputs, Marshal.SizeOf(typeof(INPUT)));
             }
 
             Console.WriteLine(string.Format("{{\"success\": true, \"button\": \"{0}\", \"x\": {1}, \"y\": {2}, \"title\": \"{3}\"}}",
@@ -417,12 +626,11 @@ namespace GeminiSuperDesktop {
             int endAbsX = r.Left + toX;
             int endAbsY = r.Top + toY;
 
-            ShowWindowAsync(targetHwnd, 9);
-            SetForegroundWindow(targetHwnd);
-            System.Threading.Thread.Sleep(50);
+            ForceForegroundWindow(targetHwnd);
+            System.Threading.Thread.Sleep(80);
 
             SetCursorPos(startAbsX, startAbsY);
-            mouse_event(MOUSEEVENTF_LEFTDOWN, (uint)startAbsX, (uint)startAbsY, 0, 0);
+            mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
             System.Threading.Thread.Sleep(100);
 
             int steps = 10;
@@ -433,7 +641,7 @@ namespace GeminiSuperDesktop {
                 System.Threading.Thread.Sleep(10);
             }
 
-            mouse_event(MOUSEEVENTF_LEFTUP, (uint)endAbsX, (uint)endAbsY, 0, 0);
+            mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, 0);
             Console.WriteLine(string.Format("{{\"success\": true, \"from\": [{0},{1}], \"to\": [{2},{3}], \"title\": \"{4}\"}}",
                 startAbsX, startAbsY, endAbsX, endAbsY, EscapeJson(actualTitle)));
         }
@@ -453,11 +661,10 @@ namespace GeminiSuperDesktop {
             int absX = (relX > 0) ? (r.Left + relX) : (r.Left + (r.Right - r.Left) / 2);
             int absY = (relY > 0) ? (r.Top + relY) : (r.Top + (r.Bottom - r.Top) / 2);
 
-            ShowWindowAsync(targetHwnd, 9);
-            SetForegroundWindow(targetHwnd);
-            System.Threading.Thread.Sleep(50);
+            ForceForegroundWindow(targetHwnd);
+            System.Threading.Thread.Sleep(80);
             SetCursorPos(absX, absY);
-            mouse_event(MOUSEEVENTF_WHEEL, (uint)absX, (uint)absY, (uint)delta, 0);
+            mouse_event(MOUSEEVENTF_WHEEL, 0, 0, (uint)delta, 0);
             Console.WriteLine(string.Format("{{\"success\": true, \"scrolled\": {0}, \"title\": \"{1}\"}}",
                 delta, EscapeJson(actualTitle)));
         }
@@ -472,8 +679,7 @@ namespace GeminiSuperDesktop {
                 return;
             }
 
-            ShowWindowAsync(targetHwnd, 9);
-            SetForegroundWindow(targetHwnd);
+            ForceForegroundWindow(targetHwnd);
             System.Threading.Thread.Sleep(80);
 
             string norm = combo.ToLowerInvariant().Trim();

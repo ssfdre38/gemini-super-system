@@ -276,10 +276,28 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               },
               required: ["delta"]
             },
+            focus: {
+              type: "boolean",
+              description: "Force window to the foreground and activate keyboard input focus."
+            },
             autoSnapshot: {
               type: "boolean",
               default: false,
               description: "Whether to immediately capture and return a post-action visual verification snapshot."
+            }
+          },
+          required: ["titleFilter"]
+        }
+      },
+      {
+        name: "super_desktop_list_children",
+        description: "Enumerates native child windows and UI controls (buttons, textboxes, treeviews, status bars) inside a window with Win32 ClassName, Text, coordinates, and dimensions.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            titleFilter: {
+              type: "string",
+              description: "Target window title, substring, or numeric HWND."
             }
           },
           required: ["titleFilter"]
@@ -511,8 +529,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     } else if (args.keys) {
       actionResult = await bridge.sendKeys(args.titleFilter, args.keys);
       actionDesc = `⌨️ Key sequence "${args.keys}" sent to "${args.titleFilter}"`;
+    } else if (args.focus) {
+      actionResult = await bridge.focus(args.titleFilter);
+      actionDesc = `🎯 Focused window "${args.titleFilter}"`;
     } else {
-      actionResult = { success: false, error: "No action specified (provide text, click, drag, scroll, hotkey, or keys)" };
+      actionResult = { success: false, error: "No action specified (provide text, click, drag, scroll, hotkey, keys, or focus)" };
       actionDesc = "⚠️ No action specified";
     }
 
@@ -533,6 +554,22 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           text: actionResult && actionResult.success
             ? `${actionDesc} -> SUCCESS${snapInfo}`
             : `⚠️ Action failed on "${args.titleFilter}": ${actionResult?.error || "Unknown error"}`
+        }
+      ]
+    };
+  }
+
+  if (name === "super_desktop_list_children") {
+    const bridge = getDesktopBridge();
+    const children = await bridge.listChildren(args.titleFilter);
+    return {
+      content: [
+        {
+          type: "text",
+          text: Array.isArray(children)
+            ? `🎛️ Controls inside "${args.titleFilter}" (${children.length} found):\n` +
+              children.map(c => `• [${c.class}] "${c.text}" @ [${c.x}, ${c.y}] (${c.width}x${c.height}) HWND:${c.handle}`).join("\n")
+            : `⚠️ Error enumerating children: ${JSON.stringify(children)}`
         }
       ]
     };
