@@ -50,6 +50,7 @@ flowchart TD
 | **Sovereign Local LLM** | `http://127.0.0.1:11436` / `18799` | **Offline Fallback**: Direct GGUF inference via llama-server and Haven companion server. |
 | **NetBird WireGuard Mesh** | Port 51820 (`ns1003135.mesh.barrer.net`) | **Secure Fabric**: Zero-trust WireGuard mesh linking datacenter nodes, mobile companions, and dev machines. |
 | **Hardware Profiler** | OS Native | **Host Metrics**: Real-time CPU cores, memory utilization (GB/percentage), and node uptime. |
+| **Native Desktop Bridge** | `tools/desktop_helper.exe` (Win32) | **Host Perception**: Sub-20ms window enumeration, `PrintWindow` full-frame raster capture, and native input dispatch without video streaming. |
 
 ---
 
@@ -60,10 +61,13 @@ flowchart TD
 3. **`super_launch_swarm`**: Spawns a parallel autonomous swarm with dedicated specialist worker roles.
 4. **`super_local_infer`**: Direct inference against local llama-server (port 11436), Haven Server (port 18799), or any OpenAI-compatible GGUF endpoint.
 5. **`super_netbird_status`**: Queries the host NetBird daemon for FQDN, mesh IP, signal/relay health, and connected peer nodes.
-6. **`super_start_dashboard`**: Spawns the zero-dependency Web Mission Control dashboard on port 18880.
-7. **`super_self_healing_build`**: Builds projects (e.g. `dotnet build`, `cmake`) and parses compiler diagnostics for automatic healing.
-8. **`super_poll_bus`**: Returns active queued tasks and swarm state across all surfaces.
-9. **`super_complete_task`**: Completes tasks on the Universal Bus and broadcasts updates via Server-Sent Events (SSE).
+6. **`super_desktop_list_windows`**: Lists all active top-level Windows desktop windows (HWND, PID, title, dimensions, coordinates) in ~15-20ms without video streaming.
+7. **`super_desktop_capture`**: Captures an on-demand high-resolution PNG snapshot of a native Windows desktop window by title filter (e.g. Task Manager, NetBird, qBittorrent, Discord, Blender).
+8. **`super_desktop_send_input`**: Sends native virtual keystrokes (`SendKeys`) or mouse clicks to any target desktop window.
+9. **`super_start_dashboard`**: Spawns the zero-dependency Web Mission Control dashboard on port 18880.
+10. **`super_self_healing_build`**: Builds projects (e.g. `dotnet build`, `cmake`) and parses compiler diagnostics for automatic healing.
+11. **`super_poll_bus`**: Returns active queued tasks and swarm state across all surfaces.
+12. **`super_complete_task`**: Completes tasks on the Universal Bus and broadcasts updates via Server-Sent Events (SSE).
 
 ---
 
