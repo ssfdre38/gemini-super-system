@@ -397,6 +397,16 @@ namespace GeminiSuperDesktop {
         public static extern bool SetCursorPos(int X, int Y);
 
         [DllImport("user32.dll")]
+        public static extern bool ClientToScreen(IntPtr hWnd, ref POINT lpPoint);
+
+        [DllImport("user32.dll")]
+        public static extern bool ScreenToClient(IntPtr hWnd, ref POINT lpPoint);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetClientRect(IntPtr hWnd, out RECT lpRect);
+
+        [DllImport("user32.dll")]
         static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, UIntPtr dwExtraInfo);
 
         [DllImport("user32.dll", SetLastError = true)]
@@ -1178,10 +1188,15 @@ namespace GeminiSuperDesktop {
                 return;
             }
 
-            RECT r;
-            GetWindowRect(targetHwnd, out r);
-            int absX = r.Left + relX;
-            int absY = r.Top + relY;
+            POINT pt = new POINT { x = relX, y = relY };
+            if (!ClientToScreen(targetHwnd, ref pt)) {
+                RECT r;
+                GetWindowRect(targetHwnd, out r);
+                pt.x = r.Left + relX;
+                pt.y = r.Top + relY;
+            }
+            int absX = pt.x;
+            int absY = pt.y;
 
             ForceForegroundWindow(targetHwnd);
             System.Threading.Thread.Sleep(80);
@@ -1227,12 +1242,24 @@ namespace GeminiSuperDesktop {
                 return;
             }
 
-            RECT r;
-            GetWindowRect(targetHwnd, out r);
-            int startAbsX = r.Left + fromX;
-            int startAbsY = r.Top + fromY;
-            int endAbsX = r.Left + toX;
-            int endAbsY = r.Top + toY;
+            POINT ptStart = new POINT { x = fromX, y = fromY };
+            if (!ClientToScreen(targetHwnd, ref ptStart)) {
+                RECT r;
+                GetWindowRect(targetHwnd, out r);
+                ptStart.x = r.Left + fromX;
+                ptStart.y = r.Top + fromY;
+            }
+            POINT ptEnd = new POINT { x = toX, y = toY };
+            if (!ClientToScreen(targetHwnd, ref ptEnd)) {
+                RECT r;
+                GetWindowRect(targetHwnd, out r);
+                ptEnd.x = r.Left + toX;
+                ptEnd.y = r.Top + toY;
+            }
+            int startAbsX = ptStart.x;
+            int startAbsY = ptStart.y;
+            int endAbsX = ptEnd.x;
+            int endAbsY = ptEnd.y;
 
             ForceForegroundWindow(targetHwnd);
             System.Threading.Thread.Sleep(80);
@@ -1302,10 +1329,23 @@ namespace GeminiSuperDesktop {
                 return;
             }
 
-            RECT r;
-            GetWindowRect(targetHwnd, out r);
-            int absX = (relX > 0) ? (r.Left + relX) : (r.Left + (r.Right - r.Left) / 2);
-            int absY = (relY > 0) ? (r.Top + relY) : (r.Top + (r.Bottom - r.Top) / 2);
+            int absX, absY;
+            if (relX >= 0 && relY >= 0) {
+                POINT pt = new POINT { x = relX, y = relY };
+                if (!ClientToScreen(targetHwnd, ref pt)) {
+                    RECT r;
+                    GetWindowRect(targetHwnd, out r);
+                    pt.x = r.Left + relX;
+                    pt.y = r.Top + relY;
+                }
+                absX = pt.x;
+                absY = pt.y;
+            } else {
+                RECT r;
+                GetWindowRect(targetHwnd, out r);
+                absX = r.Left + (r.Right - r.Left) / 2;
+                absY = r.Top + (r.Bottom - r.Top) / 2;
+            }
 
             ForceForegroundWindow(targetHwnd);
             System.Threading.Thread.Sleep(80);
@@ -1767,8 +1807,10 @@ namespace GeminiSuperDesktop {
                 int h = elRect.Bottom - elRect.Top;
                 int centerX = elRect.Left + w / 2;
                 int centerY = elRect.Top + h / 2;
-                int relX = elRect.Left - winRect.Left;
-                int relY = elRect.Top - winRect.Top;
+                POINT ptCenter = new POINT { x = centerX, y = centerY };
+                ScreenToClient(targetHwnd, ref ptCenter);
+                int relX = ptCenter.x;
+                int relY = ptCenter.y;
                 Console.WriteLine(string.Format("{{\"success\": true, \"name\": \"{0}\", \"type\": \"{1}\", \"x\": {2}, \"y\": {3}, \"width\": {4}, \"height\": {5}, \"relX\": {6}, \"relY\": {7}, \"centerX\": {8}, \"centerY\": {9}}}",
                     EscapeJson(name), EscapeJson(type), elRect.Left, elRect.Top, w, h, relX, relY, centerX, centerY));
             } else {

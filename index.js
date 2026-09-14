@@ -240,6 +240,18 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description: "Shortcut key combination (e.g. 'ctrl+s', 'ctrl+a', 'ctrl+c', 'ctrl+v', 'ctrl+z')."
             },
+            target: {
+              type: "string",
+              description: "Unified high-reliability target: tries semantic UIAutomation first, automatically falling back to WinRT OCR visual grounding."
+            },
+            navigateDiscord: {
+              type: "string",
+              description: "Quickly and deterministically navigates Discord to a channel or user DM (e.g. 'ShaneMKelley', '#gemini-chat') via native Ctrl+K quick-switcher."
+            },
+            focusDiscordChat: {
+              type: "boolean",
+              description: "Clears any open context menus or popups via Esc and focuses the active Discord chat input box."
+            },
             element: {
               type: "string",
               description: "Target UI element by visible text, label, or AutomationId (e.g. 'Spark BETA', 'New chat', 'Settings'). Resolves the element semantically via Windows UIAutomation and clicks its center directly without guessing coordinates."
@@ -592,7 +604,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     let actionResult = null;
     let actionDesc = "";
 
-    if (args.element && args.text) {
+    if (args.navigateDiscord) {
+      actionResult = await bridge.navigateDiscord(args.navigateDiscord);
+      actionDesc = `🚀 Autonomously navigated Discord to "${args.navigateDiscord}" via quick-switcher`;
+    } else if (args.focusDiscordChat) {
+      actionResult = await bridge.focusDiscordChat();
+      actionDesc = `💬 Focused Discord chat input box`;
+    } else if (args.target) {
+      const btn = args.button || "left";
+      actionResult = await bridge.clickTarget(args.titleFilter, args.target, btn);
+      actionDesc = actionResult.success
+        ? `🎯 Targeted and clicked "${args.target}" via ${actionResult.method} (${btn}) in "${args.titleFilter}"`
+        : `⚠️ Failed to target "${args.target}": ${actionResult.error}`;
+    } else if (args.element && args.text) {
       const clickRes = await bridge.clickElement(args.titleFilter, args.element, args.button || "left");
       if (!clickRes.success) {
         actionResult = clickRes;

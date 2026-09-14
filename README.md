@@ -115,6 +115,11 @@ Walking deep accessibility trees across complex virtualized Electron application
 - **Single-Roundtrip Pre-Fetching**: Pre-fetches `Name`, `BoundingRectangle`, `ControlType`, `AutomationId`, and `IsOffscreen` in a single bulk IPC transaction.
 - **Sub-15ms Query Times**: Drops tree-walk inspection latencies from ~300ms down to sub-15ms with automatic fallback to live properties when dynamic elements shift.
 
+### 11. True Client-Area Normalization (`ClientToScreen`) & Multi-Tier Actuation
+- **Client-to-Screen Geometric Precision**: Standard Win32 `GetWindowRect` includes non-client window borders, caption title bars (+32px), and invisible DWM resize frames (-7px to -11px). The engine incorporates Win32 `ClientToScreen` and `ScreenToClient` P/Invoke mapping across all clicks, drags, scrolls, and element finders. Pixel coordinates sampled from captured screenshots map with 1:1 hardware accuracy directly onto physical monitor pixels.
+- **Multi-Tier Semantic/OCR Actuation**: The `clickTarget` engine unifies discovery: Tier 1 executes sub-15ms cached UIAutomation resolution (`clickElement`), automatically falling back to Tier 2 native WinRT OCR visual grounding (`clickText`) if an element is non-standard or unexposed by accessibility trees.
+- **Application Quick-Navigation**: Built-in deterministic macro routing for Electron applications (e.g. Discord `Ctrl+K` quick-switcher navigation and chat focus recovery).
+
 ---
 
 ## 🤝 The Live Proof: Gemini Talking to Gemini
