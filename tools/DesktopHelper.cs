@@ -128,26 +128,73 @@ namespace GeminiSuperDesktop {
             Console.WriteLine("[" + string.Join(",", list.ToArray()) + "]");
         }
 
-        static void CaptureWindow(string titleFilter, string outputPath) {
-            IntPtr hDesk = OpenDesktop("Default", 0, false, 0x0100 | 0x0001);
-            IntPtr targetHwnd = IntPtr.Zero;
-            string actualTitle = "";
+        static bool FindWindow(IntPtr hDesk, string query, out IntPtr targetHwnd, out string actualTitle) {
+            targetHwnd = IntPtr.Zero;
+            actualTitle = "";
 
+            long handleNum = 0;
+            bool isHandle = long.TryParse(query, out handleNum);
+
+            var candidates = new List<KeyValuePair<IntPtr, string>>();
             EnumDesktopWindows(hDesk, (hWnd, lParam) => {
                 if (IsWindowVisible(hWnd)) {
                     var sb = new StringBuilder(256);
                     GetWindowText(hWnd, sb, sb.Capacity);
                     string title = sb.ToString().Trim();
-                    if (title.IndexOf(titleFilter, StringComparison.OrdinalIgnoreCase) >= 0) {
-                        targetHwnd = hWnd;
-                        actualTitle = title;
-                        return false;
+                    if (!string.IsNullOrEmpty(title) && title != "Program Manager") {
+                        candidates.Add(new KeyValuePair<IntPtr, string>(hWnd, title));
                     }
                 }
                 return true;
             }, IntPtr.Zero);
 
-            if (targetHwnd == IntPtr.Zero) {
+            // 1. Direct HWND check
+            if (isHandle) {
+                foreach (var pair in candidates) {
+                    if (pair.Key.ToInt64() == handleNum) {
+                        targetHwnd = pair.Key;
+                        actualTitle = pair.Value;
+                        return true;
+                    }
+                }
+            }
+
+            // 2. Exact match (case-insensitive)
+            foreach (var pair in candidates) {
+                if (string.Equals(pair.Value, query, StringComparison.OrdinalIgnoreCase)) {
+                    targetHwnd = pair.Key;
+                    actualTitle = pair.Value;
+                    return true;
+                }
+            }
+
+            // 3. Starts with match
+            foreach (var pair in candidates) {
+                if (pair.Value.StartsWith(query, StringComparison.OrdinalIgnoreCase)) {
+                    targetHwnd = pair.Key;
+                    actualTitle = pair.Value;
+                    return true;
+                }
+            }
+
+            // 4. Substring match
+            foreach (var pair in candidates) {
+                if (pair.Value.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0) {
+                    targetHwnd = pair.Key;
+                    actualTitle = pair.Value;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        static void CaptureWindow(string titleFilter, string outputPath) {
+            IntPtr hDesk = OpenDesktop("Default", 0, false, 0x0100 | 0x0001);
+            IntPtr targetHwnd;
+            string actualTitle;
+
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
                 Console.WriteLine("{{\"success\": false, \"error\": \"Window not found matching: {0}\"}}", titleFilter);
                 return;
             }
@@ -191,22 +238,10 @@ namespace GeminiSuperDesktop {
 
         static void SendKeysToWindow(string titleFilter, string keys) {
             IntPtr hDesk = OpenDesktop("Default", 0, false, 0x0100 | 0x0001);
-            IntPtr targetHwnd = IntPtr.Zero;
+            IntPtr targetHwnd;
+            string actualTitle;
 
-            EnumDesktopWindows(hDesk, (hWnd, lParam) => {
-                if (IsWindowVisible(hWnd)) {
-                    var sb = new StringBuilder(256);
-                    GetWindowText(hWnd, sb, sb.Capacity);
-                    string title = sb.ToString().Trim();
-                    if (title.IndexOf(titleFilter, StringComparison.OrdinalIgnoreCase) >= 0) {
-                        targetHwnd = hWnd;
-                        return false;
-                    }
-                }
-                return true;
-            }, IntPtr.Zero);
-
-            if (targetHwnd == IntPtr.Zero) {
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
                 Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
                 return;
             }
@@ -220,22 +255,10 @@ namespace GeminiSuperDesktop {
 
         static void ClickWindow(string titleFilter, int relX, int relY) {
             IntPtr hDesk = OpenDesktop("Default", 0, false, 0x0100 | 0x0001);
-            IntPtr targetHwnd = IntPtr.Zero;
+            IntPtr targetHwnd;
+            string actualTitle;
 
-            EnumDesktopWindows(hDesk, (hWnd, lParam) => {
-                if (IsWindowVisible(hWnd)) {
-                    var sb = new StringBuilder(256);
-                    GetWindowText(hWnd, sb, sb.Capacity);
-                    string title = sb.ToString().Trim();
-                    if (title.IndexOf(titleFilter, StringComparison.OrdinalIgnoreCase) >= 0) {
-                        targetHwnd = hWnd;
-                        return false;
-                    }
-                }
-                return true;
-            }, IntPtr.Zero);
-
-            if (targetHwnd == IntPtr.Zero) {
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
                 Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
                 return;
             }

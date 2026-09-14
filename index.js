@@ -545,6 +545,12 @@ async function main() {
   }
   if (process.argv.includes("--cli")) {
     await runCliMode();
+  } else if (process.argv.includes("--dashboard")) {
+    const orch = getOrchestrator();
+    await orch.initialize();
+    const url = orch.startDashboard(18880);
+    console.log(`Mission Control Dashboard active at: ${url}`);
+    setInterval(() => {}, 60000);
   } else {
     const transport = new StdioServerTransport();
     await server.connect(transport);
