@@ -402,6 +402,18 @@ namespace GeminiSuperDesktop {
         [DllImport("user32.dll", SetLastError = true)]
         static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool BlockInput(bool fBlockIt);
+
+        [DllImport("user32.dll")]
+        public static extern short GetAsyncKeyState(int vKey);
+
+        const int VK_SHIFT = 0x10;
+        const int VK_CONTROL = 0x11;
+        const int VK_MENU = 0x12;
+        const int VK_LWIN = 0x5B;
+        const int VK_RWIN = 0x5C;
+
         [StructLayout(LayoutKind.Sequential)]
         struct INPUT {
             public uint type;
@@ -449,6 +461,48 @@ namespace GeminiSuperDesktop {
         const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
         const uint MOUSEEVENTF_WHEEL = 0x0800;
         const uint MOUSEEVENTF_ABSOLUTE = 0x8000;
+
+        public class AtomicInputLock : IDisposable {
+            private bool locked = false;
+
+            public AtomicInputLock(bool enable = true) {
+                if (enable) {
+                    try {
+                        locked = BlockInput(true);
+                    } catch {}
+                }
+            }
+
+            public void Dispose() {
+                if (locked) {
+                    try {
+                        BlockInput(false);
+                    } catch {}
+                    locked = false;
+                }
+            }
+        }
+
+        public static List<ushort> ReleaseActiveModifiers() {
+            int[] checkKeys = new int[] { 0x10, 0x11, 0x12, 0x5B, 0x5C, 0xA0, 0xA1, 0xA2, 0xA3, 0xA4, 0xA5 };
+            var released = new List<ushort>();
+            foreach (int vk in checkKeys) {
+                try {
+                    if ((GetAsyncKeyState(vk) & 0x8000) != 0) {
+                        INPUT[] inUp = new INPUT[1];
+                        inUp[0].type = INPUT_KEYBOARD;
+                        inUp[0].mkhi.ki.wVk = (ushort)vk;
+                        inUp[0].mkhi.ki.dwFlags = KEYEVENTF_KEYUP;
+                        SendInput(1, inUp, Marshal.SizeOf(typeof(INPUT)));
+                        released.Add((ushort)vk);
+                    }
+                } catch {}
+            }
+            if (released.Count > 0) {
+                Thread.Sleep(10);
+            }
+            return released;
+        }
 
 
         static string EscapeJson(string s) {
@@ -994,6 +1048,7 @@ namespace GeminiSuperDesktop {
         }
 
         static void SendTextDirect(string text, int delayMs) {
+            ReleaseActiveModifiers();
             for (int i = 0; i < text.Length; i++) {
                 char c = text[i];
                 if (c == '\r') continue;
@@ -1081,6 +1136,7 @@ namespace GeminiSuperDesktop {
                 System.Threading.Thread.Sleep(80);
             }
 
+            ReleaseActiveModifiers();
             keybd_event(0x11, 0, 0, 0); // Ctrl down
             System.Threading.Thread.Sleep(25);
             keybd_event(0x56, 0, 0, 0); // V down
@@ -1141,18 +1197,20 @@ namespace GeminiSuperDesktop {
             if (b == "right") { downFlag = MOUSEEVENTF_RIGHTDOWN; upFlag = MOUSEEVENTF_RIGHTUP; }
             else if (b == "middle") { downFlag = MOUSEEVENTF_MIDDLEDOWN; upFlag = MOUSEEVENTF_MIDDLEUP; }
 
-            SetCursorPos(absX, absY);
-            System.Threading.Thread.Sleep(50);
+            using (new AtomicInputLock()) {
+                SetCursorPos(absX, absY);
+                System.Threading.Thread.Sleep(30);
 
-            mouse_event(downFlag, 0, 0, 0, UIntPtr.Zero);
-            System.Threading.Thread.Sleep(35);
-            mouse_event(upFlag, 0, 0, 0, UIntPtr.Zero);
-
-            if (b == "double") {
-                System.Threading.Thread.Sleep(60);
                 mouse_event(downFlag, 0, 0, 0, UIntPtr.Zero);
-                System.Threading.Thread.Sleep(35);
+                System.Threading.Thread.Sleep(30);
                 mouse_event(upFlag, 0, 0, 0, UIntPtr.Zero);
+
+                if (b == "double") {
+                    System.Threading.Thread.Sleep(50);
+                    mouse_event(downFlag, 0, 0, 0, UIntPtr.Zero);
+                    System.Threading.Thread.Sleep(30);
+                    mouse_event(upFlag, 0, 0, 0, UIntPtr.Zero);
+                }
             }
 
             Console.WriteLine(string.Format("{{\"success\": true, \"button\": \"{0}\", \"x\": {1}, \"y\": {2}, \"title\": \"{3}\"}}",
@@ -1185,33 +1243,39 @@ namespace GeminiSuperDesktop {
             int normStartX = (int)Math.Round((startAbsX * 65535.0) / (screenW - 1));
             int normStartY = (int)Math.Round((startAbsY * 65535.0) / (screenH - 1));
 
-            INPUT[] down = new INPUT[2];
-            down[0].type = INPUT_MOUSE;
-            down[0].mkhi.mi.dx = normStartX;
-            down[0].mkhi.mi.dy = normStartY;
-            down[0].mkhi.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
+            using (new AtomicInputLock()) {
+                INPUT[] down = new INPUT[2];
+                down[0].type = INPUT_MOUSE;
+                down[0].mkhi.mi.dx = normStartX;
+                down[0].mkhi.mi.dy = normStartY;
+                down[0].mkhi.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
 
-            down[1].type = INPUT_MOUSE;
-            down[1].mkhi.mi.dx = normStartX;
-            down[1].mkhi.mi.dy = normStartY;
-            down[1].mkhi.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_LEFTDOWN;
-            SendInput(2, down, Marshal.SizeOf(typeof(INPUT)));
-            System.Threading.Thread.Sleep(50);
+                down[1].type = INPUT_MOUSE;
+                down[1].mkhi.mi.dx = normStartX;
+                down[1].mkhi.mi.dy = normStartY;
+                down[1].mkhi.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_LEFTDOWN;
+                SendInput(2, down, Marshal.SizeOf(typeof(INPUT)));
+                System.Threading.Thread.Sleep(50);
 
-            int steps = 15;
-            for (int i = 1; i <= steps; i++) {
-                int curX = startAbsX + (endAbsX - startAbsX) * i / steps;
-                int curY = startAbsY + (endAbsY - startAbsY) * i / steps;
-                int nX = (int)Math.Round((curX * 65535.0) / (screenW - 1));
-                int nY = (int)Math.Round((curY * 65535.0) / (screenH - 1));
+                int steps = 15;
+                for (int i = 1; i <= steps; i++) {
+                    int curX = startAbsX + (endAbsX - startAbsX) * i / steps;
+                    int curY = startAbsY + (endAbsY - startAbsY) * i / steps;
+                    int nX = (int)Math.Round((curX * 65535.0) / (screenW - 1));
+                    int nY = (int)Math.Round((curY * 65535.0) / (screenH - 1));
 
-                INPUT[] step = new INPUT[1];
-                step[0].type = INPUT_MOUSE;
-                step[0].mkhi.mi.dx = nX;
-                step[0].mkhi.mi.dy = nY;
-                step[0].mkhi.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
-                SendInput(1, step, Marshal.SizeOf(typeof(INPUT)));
-                System.Threading.Thread.Sleep(8);
+                    INPUT[] step = new INPUT[1];
+                    step[0].type = INPUT_MOUSE;
+                    step[0].mkhi.mi.dx = nX;
+                    step[0].mkhi.mi.dy = nY;
+                    step[0].mkhi.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
+                    SendInput(1, step, Marshal.SizeOf(typeof(INPUT)));
+                    System.Threading.Thread.Sleep(8);
+                }
+
+                SetCursorPos(endAbsX, endAbsY);
+                System.Threading.Thread.Sleep(50);
+                mouse_event(MOUSEEVENTF_LEFTUP, 0, 0, 0, UIntPtr.Zero);
             }
 
             int normEndX = (int)Math.Round((endAbsX * 65535.0) / (screenW - 1));
@@ -1505,6 +1569,17 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static CacheRequest CreateStandardCacheRequest() {
+            CacheRequest req = new CacheRequest();
+            req.Add(AutomationElement.NameProperty);
+            req.Add(AutomationElement.BoundingRectangleProperty);
+            req.Add(AutomationElement.ControlTypeProperty);
+            req.Add(AutomationElement.AutomationIdProperty);
+            req.Add(AutomationElement.IsOffscreenProperty);
+            req.TreeScope = TreeScope.Element | TreeScope.Descendants;
+            return req;
+        }
+
         static void ListUIElements(string titleFilter) {
             IntPtr hDesk = EnsureInteractiveDesktop();
             IntPtr targetHwnd;
@@ -1524,16 +1599,40 @@ namespace GeminiSuperDesktop {
                 RECT winRect;
                 GetWindowRect(targetHwnd, out winRect);
 
-                var elements = root.FindAll(TreeScope.Descendants, Condition.TrueCondition);
+                AutomationElementCollection elements;
+                try {
+                    CacheRequest cache = CreateStandardCacheRequest();
+                    using (cache.Activate()) {
+                        elements = root.FindAll(TreeScope.Descendants, Condition.TrueCondition);
+                    }
+                } catch {
+                    elements = root.FindAll(TreeScope.Descendants, Condition.TrueCondition);
+                }
+
                 var list = new List<string>();
-                for (int i = 0; i < elements.Count; i++) {
+                int maxCount = Math.Min(elements.Count, 600);
+                for (int i = 0; i < maxCount; i++) {
                     var el = elements[i];
                     try {
-                        var r = el.Current.BoundingRectangle;
-                        string name = el.Current.Name ?? "";
-                        string type = el.Current.ControlType != null ? el.Current.ControlType.ProgrammaticName.Replace("ControlType.", "") : "";
-                        string autoId = el.Current.AutomationId ?? "";
-                        bool isOffscreen = el.Current.IsOffscreen;
+                        System.Windows.Rect r;
+                        string name;
+                        string type;
+                        string autoId;
+                        bool isOffscreen;
+
+                        try {
+                            r = el.Cached.BoundingRectangle;
+                            name = el.Cached.Name ?? "";
+                            type = el.Cached.ControlType != null ? el.Cached.ControlType.ProgrammaticName.Replace("ControlType.", "") : "";
+                            autoId = el.Cached.AutomationId ?? "";
+                            isOffscreen = el.Cached.IsOffscreen;
+                        } catch {
+                            r = el.Current.BoundingRectangle;
+                            name = el.Current.Name ?? "";
+                            type = el.Current.ControlType != null ? el.Current.ControlType.ProgrammaticName.Replace("ControlType.", "") : "";
+                            autoId = el.Current.AutomationId ?? "";
+                            isOffscreen = el.Current.IsOffscreen;
+                        }
 
                         if (!isOffscreen && r.Width > 0 && r.Height > 0 && (!string.IsNullOrEmpty(name) || !string.IsNullOrEmpty(autoId))) {
                             int relX = (int)r.X - winRect.Left;
@@ -1561,41 +1660,86 @@ namespace GeminiSuperDesktop {
                 AutomationElement root = AutomationElement.FromHandle(targetHwnd);
                 if (root == null) return false;
 
-                var elements = root.FindAll(TreeScope.Descendants, Condition.TrueCondition);
-                for (int i = 0; i < elements.Count; i++) {
+                AutomationElementCollection elements;
+                try {
+                    CacheRequest cache = CreateStandardCacheRequest();
+                    using (cache.Activate()) {
+                        elements = root.FindAll(TreeScope.Descendants, Condition.TrueCondition);
+                    }
+                } catch {
+                    elements = root.FindAll(TreeScope.Descendants, Condition.TrueCondition);
+                }
+
+                int count = elements.Count;
+                // Exact match pass
+                for (int i = 0; i < count; i++) {
                     var el = elements[i];
                     try {
-                        if (el.Current.IsOffscreen) continue;
-                        var rect = el.Current.BoundingRectangle;
-                        if (rect.Width <= 0 || rect.Height <= 0) continue;
-                        string name = el.Current.Name ?? "";
-                        string autoId = el.Current.AutomationId ?? "";
+                        bool isOffscreen = false;
+                        System.Windows.Rect rect;
+                        string name;
+                        string autoId;
+                        string ctrlType;
+
+                        try {
+                            isOffscreen = el.Cached.IsOffscreen;
+                            rect = el.Cached.BoundingRectangle;
+                            name = el.Cached.Name ?? "";
+                            autoId = el.Cached.AutomationId ?? "";
+                            ctrlType = el.Cached.ControlType != null ? el.Cached.ControlType.ProgrammaticName.Replace("ControlType.", "") : "";
+                        } catch {
+                            isOffscreen = el.Current.IsOffscreen;
+                            rect = el.Current.BoundingRectangle;
+                            name = el.Current.Name ?? "";
+                            autoId = el.Current.AutomationId ?? "";
+                            ctrlType = el.Current.ControlType != null ? el.Current.ControlType.ProgrammaticName.Replace("ControlType.", "") : "";
+                        }
+
+                        if (isOffscreen || rect.Width <= 0 || rect.Height <= 0) continue;
                         if (string.Equals(name, query, StringComparison.OrdinalIgnoreCase) || string.Equals(autoId, query, StringComparison.OrdinalIgnoreCase)) {
                             r.Left = (int)rect.X;
                             r.Top = (int)rect.Y;
                             r.Right = (int)(rect.X + rect.Width);
                             r.Bottom = (int)(rect.Y + rect.Height);
                             matchedName = name;
-                            matchedType = el.Current.ControlType != null ? el.Current.ControlType.ProgrammaticName.Replace("ControlType.", "") : "";
+                            matchedType = ctrlType;
                             return true;
                         }
                     } catch {}
                 }
-                for (int i = 0; i < elements.Count; i++) {
+
+                // Substring match pass
+                for (int i = 0; i < count; i++) {
                     var el = elements[i];
                     try {
-                        if (el.Current.IsOffscreen) continue;
-                        var rect = el.Current.BoundingRectangle;
-                        if (rect.Width <= 0 || rect.Height <= 0) continue;
-                        string name = el.Current.Name ?? "";
-                        string autoId = el.Current.AutomationId ?? "";
+                        bool isOffscreen = false;
+                        System.Windows.Rect rect;
+                        string name;
+                        string autoId;
+                        string ctrlType;
+
+                        try {
+                            isOffscreen = el.Cached.IsOffscreen;
+                            rect = el.Cached.BoundingRectangle;
+                            name = el.Cached.Name ?? "";
+                            autoId = el.Cached.AutomationId ?? "";
+                            ctrlType = el.Cached.ControlType != null ? el.Cached.ControlType.ProgrammaticName.Replace("ControlType.", "") : "";
+                        } catch {
+                            isOffscreen = el.Current.IsOffscreen;
+                            rect = el.Current.BoundingRectangle;
+                            name = el.Current.Name ?? "";
+                            autoId = el.Current.AutomationId ?? "";
+                            ctrlType = el.Current.ControlType != null ? el.Current.ControlType.ProgrammaticName.Replace("ControlType.", "") : "";
+                        }
+
+                        if (isOffscreen || rect.Width <= 0 || rect.Height <= 0) continue;
                         if (name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || autoId.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0) {
                             r.Left = (int)rect.X;
                             r.Top = (int)rect.Y;
                             r.Right = (int)(rect.X + rect.Width);
                             r.Bottom = (int)(rect.Y + rect.Height);
                             matchedName = name;
-                            matchedType = el.Current.ControlType != null ? el.Current.ControlType.ProgrammaticName.Replace("ControlType.", "") : "";
+                            matchedType = ctrlType;
                             return true;
                         }
                     } catch {}
@@ -1665,17 +1809,19 @@ namespace GeminiSuperDesktop {
             if (b == "right") { downFlag = MOUSEEVENTF_RIGHTDOWN; upFlag = MOUSEEVENTF_RIGHTUP; }
             else if (b == "middle") { downFlag = MOUSEEVENTF_MIDDLEDOWN; upFlag = MOUSEEVENTF_MIDDLEUP; }
 
-            SetCursorPos(centerX, centerY);
-            System.Threading.Thread.Sleep(50);
-            mouse_event(downFlag, 0, 0, 0, UIntPtr.Zero);
-            System.Threading.Thread.Sleep(35);
-            mouse_event(upFlag, 0, 0, 0, UIntPtr.Zero);
-
-            if (b == "double") {
-                System.Threading.Thread.Sleep(60);
+            using (new AtomicInputLock()) {
+                SetCursorPos(centerX, centerY);
+                System.Threading.Thread.Sleep(30);
                 mouse_event(downFlag, 0, 0, 0, UIntPtr.Zero);
-                System.Threading.Thread.Sleep(35);
+                System.Threading.Thread.Sleep(30);
                 mouse_event(upFlag, 0, 0, 0, UIntPtr.Zero);
+
+                if (b == "double") {
+                    System.Threading.Thread.Sleep(50);
+                    mouse_event(downFlag, 0, 0, 0, UIntPtr.Zero);
+                    System.Threading.Thread.Sleep(30);
+                    mouse_event(upFlag, 0, 0, 0, UIntPtr.Zero);
+                }
             }
 
             Console.WriteLine(string.Format("{{\"success\": true, \"clicked\": \"{0}\", \"type\": \"{1}\", \"centerX\": {2}, \"centerY\": {3}, \"title\": \"{4}\"}}",
