@@ -220,25 +220,66 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "super_desktop_send_input",
-        description: "Sends native virtual keystrokes (SendKeys) or mouse clicks to a target native desktop window.",
+        description: "Executes hardware-level keyboard and mouse interaction inside any native Windows desktop window. Supports Unicode text typing, clicks, double-clicks, right-clicks, drag-and-drop, mouse wheel scrolling, hotkeys (e.g. Ctrl+S), and auto-verifying snapshot capture.",
         inputSchema: {
           type: "object",
           properties: {
             titleFilter: {
               type: "string",
-              description: "Substring of the window title to target."
+              description: "Target window title, substring, or numeric HWND."
+            },
+            text: {
+              type: "string",
+              description: "Raw Unicode text to type directly into documents, editors, or inputs without escaping issues."
             },
             keys: {
               type: "string",
-              description: "Keystrokes to send (e.g. text, '{ENTER}', '^s')."
+              description: "SendKeys sequence (e.g. '{ENTER}', '^s', '%{F4}')."
+            },
+            hotkey: {
+              type: "string",
+              description: "Shortcut key combination (e.g. 'ctrl+s', 'ctrl+a', 'ctrl+c', 'ctrl+v', 'ctrl+z')."
             },
             click: {
               type: "object",
-              description: "Optional relative coordinates to click inside the window.",
+              description: "Mouse click at relative window coordinates.",
               properties: {
+                x: { type: "number", description: "Relative X offset inside the window." },
+                y: { type: "number", description: "Relative Y offset inside the window." },
+                button: {
+                  type: "string",
+                  enum: ["left", "right", "middle", "double"],
+                  default: "left",
+                  description: "Mouse button action."
+                }
+              },
+              required: ["x", "y"]
+            },
+            drag: {
+              type: "object",
+              description: "Drag-and-drop gesture inside the target window.",
+              properties: {
+                fromX: { type: "number" },
+                fromY: { type: "number" },
+                toX: { type: "number" },
+                toY: { type: "number" }
+              },
+              required: ["fromX", "fromY", "toX", "toY"]
+            },
+            scroll: {
+              type: "object",
+              description: "Mouse wheel scroll inside target window.",
+              properties: {
+                delta: { type: "number", description: "Scroll amount (positive = up, negative = down)." },
                 x: { type: "number" },
                 y: { type: "number" }
-              }
+              },
+              required: ["delta"]
+            },
+            autoSnapshot: {
+              type: "boolean",
+              default: false,
+              description: "Whether to immediately capture and return a post-action visual verification snapshot."
             }
           },
           required: ["titleFilter"]
@@ -448,31 +489,53 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === "super_desktop_send_input") {
     const bridge = getDesktopBridge();
-    if (args.click) {
-      const res = await bridge.clickWindow(args.titleFilter, args.click.x, args.click.y);
-      return {
-        content: [
-          {
-            type: "text",
-            text: res.success
-              ? `🖱️ Click dispatched to "${args.titleFilter}" at [${res.x}, ${res.y}]`
-              : `⚠️ Click failed: ${res.error || "Unknown error"}`
-          }
-        ]
-      };
+    let actionResult = null;
+    let actionDesc = "";
+
+    if (args.text) {
+      actionResult = await bridge.typeText(args.titleFilter, args.text);
+      actionDesc = `⌨️ Typed ${args.text.length} Unicode characters into "${args.titleFilter}"`;
+    } else if (args.click) {
+      const btn = args.click.button || "left";
+      actionResult = await bridge.clickWindow(args.titleFilter, args.click.x, args.click.y, btn);
+      actionDesc = `🖱️ ${btn.toUpperCase()} Click dispatched to "${args.titleFilter}" at [${args.click.x}, ${args.click.y}]`;
+    } else if (args.drag) {
+      actionResult = await bridge.drag(args.titleFilter, args.drag.fromX, args.drag.fromY, args.drag.toX, args.drag.toY);
+      actionDesc = `🖱️ Dragged in "${args.titleFilter}" from [${args.drag.fromX}, ${args.drag.fromY}] to [${args.drag.toX}, ${args.drag.toY}]`;
+    } else if (args.scroll) {
+      actionResult = await bridge.scroll(args.titleFilter, args.scroll.delta, args.scroll.x ?? -1, args.scroll.y ?? -1);
+      actionDesc = `🖱️ Scrolled wheel by ${args.scroll.delta} in "${args.titleFilter}"`;
+    } else if (args.hotkey) {
+      actionResult = await bridge.hotkey(args.titleFilter, args.hotkey);
+      actionDesc = `⌨️ Hotkey combo "${args.hotkey}" sent to "${args.titleFilter}"`;
     } else if (args.keys) {
-      const res = await bridge.sendKeys(args.titleFilter, args.keys);
-      return {
-        content: [
-          {
-            type: "text",
-            text: res.success
-              ? `⌨️ Keystrokes dispatched to "${args.titleFilter}": ${args.keys}`
-              : `⚠️ Keystrokes failed: ${res.error || "Unknown error"}`
-          }
-        ]
-      };
+      actionResult = await bridge.sendKeys(args.titleFilter, args.keys);
+      actionDesc = `⌨️ Key sequence "${args.keys}" sent to "${args.titleFilter}"`;
+    } else {
+      actionResult = { success: false, error: "No action specified (provide text, click, drag, scroll, hotkey, or keys)" };
+      actionDesc = "⚠️ No action specified";
     }
+
+    let snapInfo = "";
+    if (args.autoSnapshot && actionResult && actionResult.success) {
+      try {
+        const snap = await bridge.captureWindow(args.titleFilter);
+        if (snap && snap.success) {
+          snapInfo = `\n📸 Post-Action Verification Snapshot: "${snap.title}" (${snap.width}x${snap.height}) -> ${snap.path}`;
+        }
+      } catch {}
+    }
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: actionResult && actionResult.success
+            ? `${actionDesc} -> SUCCESS${snapInfo}`
+            : `⚠️ Action failed on "${args.titleFilter}": ${actionResult?.error || "Unknown error"}`
+        }
+      ]
+    };
   }
 
   return {

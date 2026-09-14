@@ -44,10 +44,54 @@ namespace GeminiSuperDesktop {
         [DllImport("user32.dll")]
         static extern bool SetCursorPos(int X, int Y);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern uint SendInput(uint nInputs, INPUT[] pInputs, int cbSize);
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct INPUT {
+            public uint type;
+            public MOUSEKEYBDHARDWAREINPUT mkhi;
+        }
+
+        [StructLayout(LayoutKind.Explicit)]
+        struct MOUSEKEYBDHARDWAREINPUT {
+            [FieldOffset(0)]
+            public KEYBDINPUT ki;
+            [FieldOffset(0)]
+            public MOUSEINPUT mi;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct KEYBDINPUT {
+            public ushort wVk;
+            public ushort wScan;
+            public uint dwFlags;
+            public uint time;
+            public IntPtr dwExtraInfo;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct MOUSEINPUT {
+            public int dx;
+            public int dy;
+            public uint mouseData;
+            public uint dwFlags;
+            public uint time;
+            public IntPtr dwExtraInfo;
+        }
+
+        const uint INPUT_MOUSE = 0;
+        const uint INPUT_KEYBOARD = 1;
+        const uint KEYEVENTF_KEYUP = 0x0002;
+        const uint KEYEVENTF_UNICODE = 0x0004;
+
         const uint MOUSEEVENTF_LEFTDOWN = 0x0002;
         const uint MOUSEEVENTF_LEFTUP = 0x0004;
         const uint MOUSEEVENTF_RIGHTDOWN = 0x0008;
         const uint MOUSEEVENTF_RIGHTUP = 0x0010;
+        const uint MOUSEEVENTF_MIDDLEDOWN = 0x0020;
+        const uint MOUSEEVENTF_MIDDLEUP = 0x0040;
+        const uint MOUSEEVENTF_WHEEL = 0x0800;
 
         [StructLayout(LayoutKind.Sequential)]
         public struct RECT {
@@ -60,7 +104,7 @@ namespace GeminiSuperDesktop {
         static void Main(string[] args) {
             Console.OutputEncoding = Encoding.UTF8;
             if (args.Length == 0) {
-                Console.WriteLine("{\"error\": \"Usage: desktop_helper [list | capture | sendkeys | click]\"}");
+                Console.WriteLine("{\"error\": \"Usage: desktop_helper [list | capture | sendkeys | type | click | doubleclick | rightclick | drag | scroll | hotkey]\"}");
                 return;
             }
 
@@ -71,10 +115,34 @@ namespace GeminiSuperDesktop {
                 CaptureWindow(args[1], args[2]);
             } else if (cmd == "sendkeys" && args.Length >= 3) {
                 SendKeysToWindow(args[1], args[2]);
+            } else if (cmd == "type" && args.Length >= 3) {
+                TypeTextToWindow(args[1], args[2]);
             } else if (cmd == "click" && args.Length >= 4) {
                 int x = int.Parse(args[2]);
                 int y = int.Parse(args[3]);
-                ClickWindow(args[1], x, y);
+                string btn = args.Length >= 5 ? args[4] : "left";
+                ClickWindow(args[1], x, y, btn);
+            } else if (cmd == "doubleclick" && args.Length >= 4) {
+                int x = int.Parse(args[2]);
+                int y = int.Parse(args[3]);
+                ClickWindow(args[1], x, y, "double");
+            } else if (cmd == "rightclick" && args.Length >= 4) {
+                int x = int.Parse(args[2]);
+                int y = int.Parse(args[3]);
+                ClickWindow(args[1], x, y, "right");
+            } else if (cmd == "drag" && args.Length >= 6) {
+                int fx = int.Parse(args[2]);
+                int fy = int.Parse(args[3]);
+                int tx = int.Parse(args[4]);
+                int ty = int.Parse(args[5]);
+                DragInWindow(args[1], fx, fy, tx, ty);
+            } else if (cmd == "scroll" && args.Length >= 3) {
+                int delta = int.Parse(args[2]);
+                int x = args.Length >= 4 ? int.Parse(args[3]) : -1;
+                int y = args.Length >= 5 ? int.Parse(args[4]) : -1;
+                ScrollInWindow(args[1], delta, x, y);
+            } else if (cmd == "hotkey" && args.Length >= 3) {
+                HotkeyWindow(args[1], args[2]);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
@@ -253,7 +321,41 @@ namespace GeminiSuperDesktop {
             Console.WriteLine("{\"success\": true}");
         }
 
-        static void ClickWindow(string titleFilter, int relX, int relY) {
+        static void TypeTextToWindow(string titleFilter, string text) {
+            IntPtr hDesk = OpenDesktop("Default", 0, false, 0x0100 | 0x0001);
+            IntPtr targetHwnd;
+            string actualTitle;
+
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                return;
+            }
+
+            ShowWindowAsync(targetHwnd, 9);
+            SetForegroundWindow(targetHwnd);
+            System.Threading.Thread.Sleep(80);
+
+            foreach (char c in text) {
+                INPUT[] inputs = new INPUT[2];
+                inputs[0].type = INPUT_KEYBOARD;
+                inputs[0].mkhi.ki.wVk = 0;
+                inputs[0].mkhi.ki.wScan = (ushort)c;
+                inputs[0].mkhi.ki.dwFlags = KEYEVENTF_UNICODE;
+
+                inputs[1].type = INPUT_KEYBOARD;
+                inputs[1].mkhi.ki.wVk = 0;
+                inputs[1].mkhi.ki.wScan = (ushort)c;
+                inputs[1].mkhi.ki.dwFlags = KEYEVENTF_UNICODE | KEYEVENTF_KEYUP;
+
+                SendInput(2, inputs, Marshal.SizeOf(typeof(INPUT)));
+                System.Threading.Thread.Sleep(2);
+            }
+
+            Console.WriteLine(string.Format("{{\"success\": true, \"typed\": {0}, \"title\": \"{1}\"}}",
+                text.Length, EscapeJson(actualTitle)));
+        }
+
+        static void ClickWindow(string titleFilter, int relX, int relY, string button) {
             IntPtr hDesk = OpenDesktop("Default", 0, false, 0x0100 | 0x0001);
             IntPtr targetHwnd;
             string actualTitle;
@@ -272,11 +374,126 @@ namespace GeminiSuperDesktop {
             SetForegroundWindow(targetHwnd);
             System.Threading.Thread.Sleep(50);
             SetCursorPos(absX, absY);
-            mouse_event(MOUSEEVENTF_LEFTDOWN, (uint)absX, (uint)absY, 0, 0);
-            System.Threading.Thread.Sleep(50);
-            mouse_event(MOUSEEVENTF_LEFTUP, (uint)absX, (uint)absY, 0, 0);
 
-            Console.WriteLine("{{\"success\": true, \"x\": {0}, \"y\": {1}}}", absX, absY);
+            string b = (button ?? "left").ToLowerInvariant();
+            if (b == "right") {
+                mouse_event(MOUSEEVENTF_RIGHTDOWN, (uint)absX, (uint)absY, 0, 0);
+                System.Threading.Thread.Sleep(50);
+                mouse_event(MOUSEEVENTF_RIGHTUP, (uint)absX, (uint)absY, 0, 0);
+            } else if (b == "middle") {
+                mouse_event(MOUSEEVENTF_MIDDLEDOWN, (uint)absX, (uint)absY, 0, 0);
+                System.Threading.Thread.Sleep(50);
+                mouse_event(MOUSEEVENTF_MIDDLEUP, (uint)absX, (uint)absY, 0, 0);
+            } else if (b == "double") {
+                mouse_event(MOUSEEVENTF_LEFTDOWN, (uint)absX, (uint)absY, 0, 0);
+                mouse_event(MOUSEEVENTF_LEFTUP, (uint)absX, (uint)absY, 0, 0);
+                System.Threading.Thread.Sleep(80);
+                mouse_event(MOUSEEVENTF_LEFTDOWN, (uint)absX, (uint)absY, 0, 0);
+                mouse_event(MOUSEEVENTF_LEFTUP, (uint)absX, (uint)absY, 0, 0);
+            } else {
+                mouse_event(MOUSEEVENTF_LEFTDOWN, (uint)absX, (uint)absY, 0, 0);
+                System.Threading.Thread.Sleep(50);
+                mouse_event(MOUSEEVENTF_LEFTUP, (uint)absX, (uint)absY, 0, 0);
+            }
+
+            Console.WriteLine(string.Format("{{\"success\": true, \"button\": \"{0}\", \"x\": {1}, \"y\": {2}, \"title\": \"{3}\"}}",
+                b, absX, absY, EscapeJson(actualTitle)));
+        }
+
+        static void DragInWindow(string titleFilter, int fromX, int fromY, int toX, int toY) {
+            IntPtr hDesk = OpenDesktop("Default", 0, false, 0x0100 | 0x0001);
+            IntPtr targetHwnd;
+            string actualTitle;
+
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                return;
+            }
+
+            RECT r;
+            GetWindowRect(targetHwnd, out r);
+            int startAbsX = r.Left + fromX;
+            int startAbsY = r.Top + fromY;
+            int endAbsX = r.Left + toX;
+            int endAbsY = r.Top + toY;
+
+            ShowWindowAsync(targetHwnd, 9);
+            SetForegroundWindow(targetHwnd);
+            System.Threading.Thread.Sleep(50);
+
+            SetCursorPos(startAbsX, startAbsY);
+            mouse_event(MOUSEEVENTF_LEFTDOWN, (uint)startAbsX, (uint)startAbsY, 0, 0);
+            System.Threading.Thread.Sleep(100);
+
+            int steps = 10;
+            for (int i = 1; i <= steps; i++) {
+                int curX = startAbsX + (endAbsX - startAbsX) * i / steps;
+                int curY = startAbsY + (endAbsY - startAbsY) * i / steps;
+                SetCursorPos(curX, curY);
+                System.Threading.Thread.Sleep(10);
+            }
+
+            mouse_event(MOUSEEVENTF_LEFTUP, (uint)endAbsX, (uint)endAbsY, 0, 0);
+            Console.WriteLine(string.Format("{{\"success\": true, \"from\": [{0},{1}], \"to\": [{2},{3}], \"title\": \"{4}\"}}",
+                startAbsX, startAbsY, endAbsX, endAbsY, EscapeJson(actualTitle)));
+        }
+
+        static void ScrollInWindow(string titleFilter, int delta, int relX, int relY) {
+            IntPtr hDesk = OpenDesktop("Default", 0, false, 0x0100 | 0x0001);
+            IntPtr targetHwnd;
+            string actualTitle;
+
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                return;
+            }
+
+            RECT r;
+            GetWindowRect(targetHwnd, out r);
+            int absX = (relX > 0) ? (r.Left + relX) : (r.Left + (r.Right - r.Left) / 2);
+            int absY = (relY > 0) ? (r.Top + relY) : (r.Top + (r.Bottom - r.Top) / 2);
+
+            ShowWindowAsync(targetHwnd, 9);
+            SetForegroundWindow(targetHwnd);
+            System.Threading.Thread.Sleep(50);
+            SetCursorPos(absX, absY);
+            mouse_event(MOUSEEVENTF_WHEEL, (uint)absX, (uint)absY, (uint)delta, 0);
+            Console.WriteLine(string.Format("{{\"success\": true, \"scrolled\": {0}, \"title\": \"{1}\"}}",
+                delta, EscapeJson(actualTitle)));
+        }
+
+        static void HotkeyWindow(string titleFilter, string combo) {
+            IntPtr hDesk = OpenDesktop("Default", 0, false, 0x0100 | 0x0001);
+            IntPtr targetHwnd;
+            string actualTitle;
+
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                return;
+            }
+
+            ShowWindowAsync(targetHwnd, 9);
+            SetForegroundWindow(targetHwnd);
+            System.Threading.Thread.Sleep(80);
+
+            string norm = combo.ToLowerInvariant().Trim();
+            string sendStr = "";
+            if (norm == "ctrl+s") sendStr = "^s";
+            else if (norm == "ctrl+a") sendStr = "^a";
+            else if (norm == "ctrl+c") sendStr = "^c";
+            else if (norm == "ctrl+v") sendStr = "^v";
+            else if (norm == "ctrl+z") sendStr = "^z";
+            else if (norm == "ctrl+y") sendStr = "^y";
+            else if (norm == "ctrl+f") sendStr = "^f";
+            else if (norm == "enter") sendStr = "{ENTER}";
+            else if (norm == "esc" || norm == "escape") sendStr = "{ESC}";
+            else if (norm == "tab") sendStr = "{TAB}";
+            else if (norm == "backspace") sendStr = "{BACKSPACE}";
+            else sendStr = combo;
+
+            SendKeys.SendWait(sendStr);
+            Console.WriteLine(string.Format("{{\"success\": true, \"hotkey\": \"{0}\", \"title\": \"{1}\"}}",
+                combo, EscapeJson(actualTitle)));
         }
     }
 }
