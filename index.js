@@ -360,6 +360,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["target"]
         }
+      },
+      {
+        name: "super_desktop_elevation",
+        description: "Checks UIPI (User Interface Privilege Isolation) elevation status and PerMonitorV2 DPI awareness of the native desktop automation subsystem.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
     ]
   };
@@ -556,8 +564,24 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: res.success
-            ? `📸 Native Window Captured: "${res.title}" (${res.width}x${res.height})\nSaved to: ${res.path}`
+            ? `📸 Native Window Captured: "${res.title}" (${res.width}x${res.height})\nMethod: ${res.method || "dxgi_hardware_duplication"}\nSaved to: ${res.path}`
             : `⚠️ Failed to capture window: ${res.error || "Unknown error"}`
+        }
+      ]
+    };
+  }
+
+  if (name === "super_desktop_elevation") {
+    const bridge = getDesktopBridge();
+    const elev = await bridge.getElevationStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ UIPI Elevation Telemetry:\n` +
+                `• Is Elevated : ${elev.isElevated ? "✅ YES (Admin / HighestAvailable)" : "❌ NO (Standard User)"}\n` +
+                `• DPI Aware   : ${elev.dpiAware ? "✅ YES (PerMonitorV2)" : "❌ NO"}\n` +
+                `• UI Access   : ${elev.uiAccess ? "✅ YES" : "ℹ️ Standard Token"}`
         }
       ]
     };

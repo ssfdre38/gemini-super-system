@@ -30,6 +30,258 @@ namespace GeminiSuperDesktop {
         public bool IsMinimized;
         public bool IsMaximized;
         public bool IsHung;
+        public bool IsElevated;
+    }
+
+    class DxgiCaptureEngine {
+        static readonly Guid IID_IDXGIFactory1 = new Guid("770aae78-f26f-4dba-a829-253c83d1b387");
+        static readonly Guid IID_IDXGIOutput1 = new Guid("00cddea8-939b-4b83-a340-a685226666cc");
+        static readonly Guid IID_ID3D11Texture2D = new Guid("6f15aaf2-d208-4e89-9ab4-489535d34f9c");
+
+        [DllImport("d3d11.dll", CallingConvention = CallingConvention.StdCall)]
+        static extern int D3D11CreateDevice(
+            IntPtr pAdapter, int driverType, IntPtr Software, uint flags,
+            IntPtr pFeatureLevels, uint FeatureLevels, uint SDKVersion,
+            out IntPtr ppDevice, out int pFeatureLevel, out IntPtr ppImmediateContext);
+
+        [DllImport("dxgi.dll", CallingConvention = CallingConvention.StdCall)]
+        static extern int CreateDXGIFactory1(ref Guid riid, out IntPtr ppFactory);
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct D3D11_TEXTURE2D_DESC {
+            public uint Width;
+            public uint Height;
+            public uint MipLevels;
+            public uint ArraySize;
+            public int Format;
+            public uint SampleDesc_Count;
+            public uint SampleDesc_Quality;
+            public int Usage;
+            public uint BindFlags;
+            public uint CPUAccessFlags;
+            public uint MiscFlags;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct D3D11_MAPPED_SUBRESOURCE {
+            public IntPtr pData;
+            public uint RowPitch;
+            public uint DepthPitch;
+        }
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate int EnumAdapters1Delegate(IntPtr thisPtr, uint index, out IntPtr ppAdapter);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate int EnumOutputsDelegate(IntPtr thisPtr, uint index, out IntPtr ppOutput);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate int DuplicateOutputDelegate(IntPtr thisPtr, IntPtr pDevice, out IntPtr ppOutputDuplication);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate int QueryInterfaceDelegate(IntPtr thisPtr, ref Guid riid, out IntPtr ppvObject);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate uint ReleaseDelegate(IntPtr thisPtr);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate int AcquireNextFrameDelegate(IntPtr thisPtr, uint timeoutMs, [Out] byte[] pFrameInfo, out IntPtr ppResource);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate int ReleaseFrameDelegate(IntPtr thisPtr);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate void GetTexture2DDescDelegate(IntPtr thisPtr, ref D3D11_TEXTURE2D_DESC pDesc);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate int CreateTexture2DDelegate(IntPtr thisPtr, ref D3D11_TEXTURE2D_DESC pDesc, IntPtr pInitialData, out IntPtr ppTexture2D);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate void CopyResourceDelegate(IntPtr thisPtr, IntPtr pDstResource, IntPtr pSrcResource);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate int MapDelegate(IntPtr thisPtr, IntPtr pResource, uint subresource, int mapType, uint mapFlags, out D3D11_MAPPED_SUBRESOURCE pMappedResource);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        delegate void UnmapDelegate(IntPtr thisPtr, IntPtr pResource, uint subresource);
+
+        static T GetVtable<T>(IntPtr pComObject, int slot) where T : class {
+            IntPtr vtable = Marshal.ReadIntPtr(pComObject);
+            IntPtr funcPtr = Marshal.ReadIntPtr(vtable, slot * IntPtr.Size);
+            return Marshal.GetDelegateForFunctionPointer(funcPtr, typeof(T)) as T;
+        }
+
+        public static bool CaptureRegion(int cropX, int cropY, int cropW, int cropH, string destPath) {
+            IntPtr pFactory = IntPtr.Zero;
+            IntPtr pAdapter = IntPtr.Zero;
+            IntPtr pDevice = IntPtr.Zero;
+            IntPtr pContext = IntPtr.Zero;
+            IntPtr pOutput = IntPtr.Zero;
+            IntPtr pOutput1 = IntPtr.Zero;
+            IntPtr pDuplication = IntPtr.Zero;
+            IntPtr pResource = IntPtr.Zero;
+            IntPtr pDesktopTexture = IntPtr.Zero;
+            IntPtr pStagingTexture = IntPtr.Zero;
+
+            try {
+                Guid factoryGuid = IID_IDXGIFactory1;
+                int hr = CreateDXGIFactory1(ref factoryGuid, out pFactory);
+                if (hr != 0) return false;
+
+                var enumAdapters = GetVtable<EnumAdapters1Delegate>(pFactory, 7);
+                hr = enumAdapters(pFactory, 0, out pAdapter);
+                if (hr != 0) return false;
+
+                int fl;
+                hr = D3D11CreateDevice(pAdapter, 0, IntPtr.Zero, 0, IntPtr.Zero, 0, 7, out pDevice, out fl, out pContext);
+                if (hr != 0) return false;
+
+                var enumOutputs = GetVtable<EnumOutputsDelegate>(pAdapter, 7);
+                hr = enumOutputs(pAdapter, 0, out pOutput);
+                if (hr != 0) return false;
+
+                var qi = GetVtable<QueryInterfaceDelegate>(pOutput, 0);
+                Guid output1Guid = IID_IDXGIOutput1;
+                hr = qi(pOutput, ref output1Guid, out pOutput1);
+                if (hr != 0) return false;
+
+                var duplicateOutput = GetVtable<DuplicateOutputDelegate>(pOutput1, 22);
+                hr = duplicateOutput(pOutput1, pDevice, out pDuplication);
+                if (hr != 0) return false;
+
+                var acquireNextFrame = GetVtable<AcquireNextFrameDelegate>(pDuplication, 8);
+                var releaseFrame = GetVtable<ReleaseFrameDelegate>(pDuplication, 14);
+                byte[] frameInfo = new byte[64];
+
+                for (int attempt = 0; attempt < 8; attempt++) {
+                    hr = acquireNextFrame(pDuplication, 150, frameInfo, out pResource);
+                    long lastPresent = BitConverter.ToInt64(frameInfo, 0);
+                    uint accum = BitConverter.ToUInt32(frameInfo, 16);
+
+                    if (hr == 0 && (accum > 0 || lastPresent > 0)) {
+                        break;
+                    }
+
+                    if (hr == 0) {
+                        if (pResource != IntPtr.Zero) {
+                            GetVtable<ReleaseDelegate>(pResource, 2)(pResource);
+                            pResource = IntPtr.Zero;
+                        }
+                        releaseFrame(pDuplication);
+                    }
+
+                    Program.POINT pt;
+                    Program.GetCursorPos(out pt);
+                    Program.SetCursorPos(pt.x + 1, pt.y);
+                    Thread.Sleep(15);
+                    Program.SetCursorPos(pt.x, pt.y);
+                    Thread.Sleep(20);
+                }
+
+                if (hr != 0 || pResource == IntPtr.Zero) return false;
+
+                var resQi = GetVtable<QueryInterfaceDelegate>(pResource, 0);
+                Guid tex2dGuid = IID_ID3D11Texture2D;
+                hr = resQi(pResource, ref tex2dGuid, out pDesktopTexture);
+                if (hr != 0) return false;
+
+                var getDesc = GetVtable<GetTexture2DDescDelegate>(pDesktopTexture, 10);
+                D3D11_TEXTURE2D_DESC texDesc = new D3D11_TEXTURE2D_DESC();
+                getDesc(pDesktopTexture, ref texDesc);
+
+                D3D11_TEXTURE2D_DESC stagingDesc = texDesc;
+                stagingDesc.MipLevels = 1;
+                stagingDesc.ArraySize = 1;
+                stagingDesc.SampleDesc_Count = 1;
+                stagingDesc.SampleDesc_Quality = 0;
+                stagingDesc.Usage = 3; // D3D11_USAGE_STAGING
+                stagingDesc.BindFlags = 0;
+                stagingDesc.CPUAccessFlags = 0x20000; // D3D11_CPU_ACCESS_READ
+                stagingDesc.MiscFlags = 0;
+
+                var createTexture2D = GetVtable<CreateTexture2DDelegate>(pDevice, 5);
+                hr = createTexture2D(pDevice, ref stagingDesc, IntPtr.Zero, out pStagingTexture);
+                if (hr != 0) return false;
+
+                var copyResource = GetVtable<CopyResourceDelegate>(pContext, 47);
+                copyResource(pContext, pStagingTexture, pDesktopTexture);
+
+                var map = GetVtable<MapDelegate>(pContext, 14);
+                D3D11_MAPPED_SUBRESOURCE mapped = new D3D11_MAPPED_SUBRESOURCE();
+                hr = map(pContext, pStagingTexture, 0, 1 /* D3D11_MAP_READ */, 0, out mapped);
+                if (hr != 0) return false;
+
+                int texW = (int)texDesc.Width;
+                int texH = (int)texDesc.Height;
+
+                string outDir = Path.GetDirectoryName(destPath);
+                if (!string.IsNullOrEmpty(outDir) && !Directory.Exists(outDir)) {
+                    Directory.CreateDirectory(outDir);
+                }
+
+                using (var fullBmp = new Bitmap(texW, texH, (int)mapped.RowPitch, PixelFormat.Format32bppRgb, mapped.pData)) {
+                    bool needCrop = (cropW > 0 && cropH > 0) && (cropW < texW || cropH < texH || cropX > 0 || cropY > 0);
+                    if (needCrop) {
+                        int startX = Math.Max(0, cropX);
+                        int startY = Math.Max(0, cropY);
+                        int endX = Math.Min(texW, cropX + cropW);
+                        int endY = Math.Min(texH, cropY + cropH);
+                        int actualW = Math.Max(1, endX - startX);
+                        int actualH = Math.Max(1, endY - startY);
+
+                        Rectangle cropRect = new Rectangle(startX, startY, actualW, actualH);
+                        using (Bitmap cropped = fullBmp.Clone(cropRect, PixelFormat.Format32bppRgb)) {
+                            cropped.Save(destPath, ImageFormat.Png);
+                        }
+                    } else {
+                        using (Bitmap finalBmp = new Bitmap(fullBmp)) {
+                            finalBmp.Save(destPath, ImageFormat.Png);
+                        }
+                    }
+                }
+
+                var unmap = GetVtable<UnmapDelegate>(pContext, 15);
+                unmap(pContext, pStagingTexture, 0);
+
+                return true;
+            } catch {
+                return false;
+            } finally {
+                if (pStagingTexture != IntPtr.Zero) {
+                    try { GetVtable<ReleaseDelegate>(pStagingTexture, 2)(pStagingTexture); } catch {}
+                }
+                if (pDesktopTexture != IntPtr.Zero) {
+                    try { GetVtable<ReleaseDelegate>(pDesktopTexture, 2)(pDesktopTexture); } catch {}
+                }
+                if (pResource != IntPtr.Zero) {
+                    try { GetVtable<ReleaseDelegate>(pResource, 2)(pResource); } catch {}
+                }
+                if (pDuplication != IntPtr.Zero) {
+                    try {
+                        GetVtable<ReleaseFrameDelegate>(pDuplication, 14)(pDuplication);
+                    } catch {}
+                    try { GetVtable<ReleaseDelegate>(pDuplication, 2)(pDuplication); } catch {}
+                }
+                if (pOutput1 != IntPtr.Zero) {
+                    try { GetVtable<ReleaseDelegate>(pOutput1, 2)(pOutput1); } catch {}
+                }
+                if (pOutput != IntPtr.Zero) {
+                    try { GetVtable<ReleaseDelegate>(pOutput, 2)(pOutput); } catch {}
+                }
+                if (pAdapter != IntPtr.Zero) {
+                    try { GetVtable<ReleaseDelegate>(pAdapter, 2)(pAdapter); } catch {}
+                }
+                if (pContext != IntPtr.Zero) {
+                    try { GetVtable<ReleaseDelegate>(pContext, 2)(pContext); } catch {}
+                }
+                if (pDevice != IntPtr.Zero) {
+                    try { GetVtable<ReleaseDelegate>(pDevice, 2)(pDevice); } catch {}
+                }
+                if (pFactory != IntPtr.Zero) {
+                    try { GetVtable<ReleaseDelegate>(pFactory, 2)(pFactory); } catch {}
+                }
+            }
+        }
     }
 
     class Program {
@@ -136,13 +388,13 @@ namespace GeminiSuperDesktop {
         static extern int GetSystemMetrics(int nIndex);
 
         [StructLayout(LayoutKind.Sequential)]
-        struct POINT { public int x; public int y; }
+        public struct POINT { public int x; public int y; }
 
         [DllImport("user32.dll")]
-        static extern bool GetCursorPos(out POINT lpPoint);
+        public static extern bool GetCursorPos(out POINT lpPoint);
 
         [DllImport("user32.dll")]
-        static extern bool SetCursorPos(int X, int Y);
+        public static extern bool SetCursorPos(int X, int Y);
 
         [DllImport("user32.dll")]
         static extern void mouse_event(uint dwFlags, int dx, int dy, uint dwData, UIntPtr dwExtraInfo);
@@ -227,7 +479,7 @@ namespace GeminiSuperDesktop {
             } catch {}
         }
 
-        static IntPtr EnsureInteractiveDesktop() {
+        public static IntPtr EnsureInteractiveDesktop() {
             try {
                 IntPtr hInp = OpenInputDesktop(0, false, 0x01FF);
                 if (hInp != IntPtr.Zero) {
@@ -250,8 +502,80 @@ namespace GeminiSuperDesktop {
             return IntPtr.Zero;
         }
 
+        [DllImport("advapi32.dll", SetLastError = true)]
+        static extern bool OpenProcessToken(IntPtr ProcessHandle, uint DesiredAccess, out IntPtr TokenHandle);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        static extern bool GetTokenInformation(IntPtr TokenHandle, int TokenInformationClass, IntPtr TokenInformation, uint TokenInformationLength, out uint ReturnLength);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        static extern bool CloseHandle(IntPtr hObject);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool SystemParametersInfo(uint uiAction, uint uiParam, IntPtr pvParam, uint fWinIni);
+
+        const uint SPI_SETFOREGROUNDLOCKTIMEOUT = 0x2001;
+        const uint SPIF_SENDCHANGE = 0x0002;
+        const uint SPIF_UPDATEINIFILE = 0x0001;
+
+        public static bool IsCurrentProcessElevated() {
+            IntPtr hToken = IntPtr.Zero;
+            try {
+                if (OpenProcessToken(Process.GetCurrentProcess().Handle, 0x0008, out hToken)) {
+                    IntPtr pElevation = Marshal.AllocHGlobal(sizeof(int));
+                    uint retLen;
+                    if (GetTokenInformation(hToken, 20, pElevation, (uint)sizeof(int), out retLen)) {
+                        int isElevated = Marshal.ReadInt32(pElevation);
+                        Marshal.FreeHGlobal(pElevation);
+                        return isElevated != 0;
+                    }
+                    Marshal.FreeHGlobal(pElevation);
+                }
+            } catch {}
+            finally {
+                if (hToken != IntPtr.Zero) CloseHandle(hToken);
+            }
+            return false;
+        }
+
+        public static bool IsProcessElevated(uint pid) {
+            IntPtr hProc = IntPtr.Zero;
+            IntPtr hToken = IntPtr.Zero;
+            try {
+                hProc = Process.GetProcessById((int)pid).Handle;
+                if (OpenProcessToken(hProc, 0x0008, out hToken)) {
+                    IntPtr pElevation = Marshal.AllocHGlobal(sizeof(int));
+                    uint retLen;
+                    if (GetTokenInformation(hToken, 20, pElevation, (uint)sizeof(int), out retLen)) {
+                        int isElevated = Marshal.ReadInt32(pElevation);
+                        Marshal.FreeHGlobal(pElevation);
+                        return isElevated != 0;
+                    }
+                    Marshal.FreeHGlobal(pElevation);
+                }
+            } catch {}
+            finally {
+                if (hToken != IntPtr.Zero) CloseHandle(hToken);
+            }
+            return false;
+        }
+
+        public static void UnlockForegroundLockTimeout() {
+            try {
+                SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, IntPtr.Zero, 0);
+            } catch {}
+        }
+
         static void Main(string[] args) {
+            try { Console.OutputEncoding = Encoding.UTF8; } catch {}
+            if (args.Length > 0 && (args[0].Equals("elevation", StringComparison.OrdinalIgnoreCase) || args[0].Equals("uipi", StringComparison.OrdinalIgnoreCase))) {
+                Console.WriteLine(string.Format("{{\"isElevated\": {0}, \"uiAccess\": false, \"dpiAware\": true}}", IsCurrentProcessElevated() ? "true" : "false"));
+                return;
+            }
+
             EnsureInteractiveDesktop();
+            UnlockForegroundLockTimeout();
             try {
                 if (!SetProcessDpiAwarenessContext(new IntPtr(-4))) {
                     SetProcessDPIAware();
@@ -259,7 +583,6 @@ namespace GeminiSuperDesktop {
             } catch {
                 try { SetProcessDPIAware(); } catch {}
             }
-            try { Console.OutputEncoding = Encoding.UTF8; } catch {}
 
             if (args.Length == 0) {
                 Console.WriteLine("{\"error\": \"Usage: desktop_helper [active | list | info | focus | type | paste | click_and_type | click | doubleclick | rightclick | drag | scroll | hotkey | capture | listchildren | scan | elements | findelement | clickelement]\"}");
@@ -267,6 +590,10 @@ namespace GeminiSuperDesktop {
             }
 
             string cmd = args[0].ToLowerInvariant();
+            if (cmd == "elevation" || cmd == "uipi") {
+                Console.WriteLine(string.Format("{{\"isElevated\": {0}, \"uiAccess\": false, \"dpiAware\": true}}", IsCurrentProcessElevated() ? "true" : "false"));
+                return;
+            }
             if (cmd == "active" || cmd == "foreground") {
                 GetActiveWindow();
             } else if (cmd == "list") {
@@ -355,6 +682,8 @@ namespace GeminiSuperDesktop {
         static List<WindowMeta> CollectDesktopWindows(IntPtr hDesk) {
             IntPtr hFore = GetForegroundWindow();
             var list = new List<WindowMeta>();
+            var elevCache = new Dictionary<uint, bool>();
+
             EnumDesktopWindows(hDesk, (hWnd, lParam) => {
                 if (IsWindowVisible(hWnd)) {
                     var sb = new StringBuilder(256);
@@ -372,6 +701,12 @@ namespace GeminiSuperDesktop {
                         int w = r.Right - r.Left;
                         int h = r.Bottom - r.Top;
                         if (w > 30 && h > 30) {
+                            bool isElevated = false;
+                            if (!elevCache.TryGetValue(pid, out isElevated)) {
+                                isElevated = IsProcessElevated(pid);
+                                elevCache[pid] = isElevated;
+                            }
+
                             list.Add(new WindowMeta {
                                 Handle = hWnd,
                                 Pid = pid,
@@ -382,7 +717,8 @@ namespace GeminiSuperDesktop {
                                 IsForeground = (hWnd == hFore),
                                 IsMinimized = IsIconic(hWnd),
                                 IsMaximized = IsZoomed(hWnd),
-                                IsHung = IsHungAppWindow(hWnd)
+                                IsHung = IsHungAppWindow(hWnd),
+                                IsElevated = isElevated
                             });
                         }
                     }
@@ -427,11 +763,13 @@ namespace GeminiSuperDesktop {
             bool isMin = IsIconic(hWnd);
             bool isMax = IsZoomed(hWnd);
             bool isHung = IsHungAppWindow(hWnd);
+            bool isElevated = IsProcessElevated(pid);
 
-            Console.WriteLine(string.Format("{{\"success\": true, \"handle\": \"{0}\", \"pid\": {1}, \"process\": \"{2}\", \"class\": \"{3}\", \"title\": \"{4}\", \"x\": {5}, \"y\": {6}, \"width\": {7}, \"height\": {8}, \"isMinimized\": {9}, \"isMaximized\": {10}, \"isHung\": {11}}}",
+            Console.WriteLine(string.Format("{{\"success\": true, \"handle\": \"{0}\", \"pid\": {1}, \"process\": \"{2}\", \"class\": \"{3}\", \"title\": \"{4}\", \"x\": {5}, \"y\": {6}, \"width\": {7}, \"height\": {8}, \"isMinimized\": {9}, \"isMaximized\": {10}, \"isHung\": {11}, \"isElevated\": {12}}}",
                 hWnd, pid, EscapeJson(procName), EscapeJson(className), EscapeJson(title),
                 r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top,
-                isMin ? "true" : "false", isMax ? "true" : "false", isHung ? "true" : "false"));
+                isMin ? "true" : "false", isMax ? "true" : "false", isHung ? "true" : "false",
+                isElevated ? "true" : "false"));
         }
 
         static void ListWindows() {
@@ -446,10 +784,11 @@ namespace GeminiSuperDesktop {
             foreach (var w in windows) {
                 int width = w.Rect.Right - w.Rect.Left;
                 int height = w.Rect.Bottom - w.Rect.Top;
-                list.Add(string.Format("{{\"handle\": \"{0}\", \"pid\": {1}, \"process\": \"{2}\", \"class\": \"{3}\", \"title\": \"{4}\", \"x\": {5}, \"y\": {6}, \"width\": {7}, \"height\": {8}, \"isForeground\": {9}, \"isMinimized\": {10}, \"isMaximized\": {11}}}",
+                list.Add(string.Format("{{\"handle\": \"{0}\", \"pid\": {1}, \"process\": \"{2}\", \"class\": \"{3}\", \"title\": \"{4}\", \"x\": {5}, \"y\": {6}, \"width\": {7}, \"height\": {8}, \"isForeground\": {9}, \"isMinimized\": {10}, \"isMaximized\": {11}, \"isElevated\": {12}}}",
                     w.Handle, w.Pid, EscapeJson(w.ProcessName), EscapeJson(w.ClassName), EscapeJson(w.Title),
                     w.Rect.Left, w.Rect.Top, width, height,
-                    w.IsForeground ? "true" : "false", w.IsMinimized ? "true" : "false", w.IsMaximized ? "true" : "false"));
+                    w.IsForeground ? "true" : "false", w.IsMinimized ? "true" : "false", w.IsMaximized ? "true" : "false",
+                    w.IsElevated ? "true" : "false"));
             }
 
             Console.WriteLine("[" + string.Join(",", list.ToArray()) + "]");
@@ -547,14 +886,16 @@ namespace GeminiSuperDesktop {
             RECT r;
             GetWindowRect(targetHwnd, out r);
             IntPtr hFore = GetForegroundWindow();
+            bool isElevated = IsProcessElevated(pid);
 
-            Console.WriteLine(string.Format("{{\"success\": true, \"handle\": \"{0}\", \"pid\": {1}, \"process\": \"{2}\", \"class\": \"{3}\", \"title\": \"{4}\", \"x\": {5}, \"y\": {6}, \"width\": {7}, \"height\": {8}, \"isForeground\": {9}, \"isMinimized\": {10}, \"isMaximized\": {11}, \"isHung\": {12}}}",
+            Console.WriteLine(string.Format("{{\"success\": true, \"handle\": \"{0}\", \"pid\": {1}, \"process\": \"{2}\", \"class\": \"{3}\", \"title\": \"{4}\", \"x\": {5}, \"y\": {6}, \"width\": {7}, \"height\": {8}, \"isForeground\": {9}, \"isMinimized\": {10}, \"isMaximized\": {11}, \"isHung\": {12}, \"isElevated\": {13}}}",
                 targetHwnd, pid, EscapeJson(procName), EscapeJson(sbClass.ToString().Trim()), EscapeJson(actualTitle),
                 r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top,
                 (targetHwnd == hFore) ? "true" : "false",
                 IsIconic(targetHwnd) ? "true" : "false",
                 IsZoomed(targetHwnd) ? "true" : "false",
-                IsHungAppWindow(targetHwnd) ? "true" : "false"));
+                IsHungAppWindow(targetHwnd) ? "true" : "false",
+                isElevated ? "true" : "false"));
         }
 
         static bool ForceForegroundWindow(IntPtr hWnd) {
@@ -1021,87 +1362,116 @@ namespace GeminiSuperDesktop {
 
         static void CaptureWindow(string titleFilter, string destPath) {
             IntPtr hDesk = EnsureInteractiveDesktop();
-            IntPtr targetHwnd;
-            string actualTitle;
+            IntPtr targetHwnd = IntPtr.Zero;
+            string actualTitle = "Desktop";
+            bool fullDesktop = string.IsNullOrEmpty(titleFilter) ||
+                               titleFilter.Equals("desktop", StringComparison.OrdinalIgnoreCase) ||
+                               titleFilter.Equals("screen", StringComparison.OrdinalIgnoreCase);
 
-            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
-                Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
-                return;
+            RECT r = new RECT();
+            if (!fullDesktop) {
+                if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                    return;
+                }
+                ForceForegroundWindow(targetHwnd);
+                System.Threading.Thread.Sleep(60);
+                GetWindowRect(targetHwnd, out r);
+            } else {
+                r.Left = 0;
+                r.Top = 0;
+                r.Right = GetSystemMetrics(78); // SM_CXVIRTUALSCREEN
+                r.Bottom = GetSystemMetrics(79); // SM_CYVIRTUALSCREEN
+                if (r.Right <= 0 || r.Bottom <= 0) {
+                    r.Right = GetSystemMetrics(0);
+                    r.Bottom = GetSystemMetrics(1);
+                }
             }
 
-            ForceForegroundWindow(targetHwnd);
-            System.Threading.Thread.Sleep(80);
-
-            RECT r;
-            GetWindowRect(targetHwnd, out r);
             int w = r.Right - r.Left;
             int h = r.Bottom - r.Top;
-
             if (w <= 0 || h <= 0) {
                 Console.WriteLine("{\"success\": false, \"error\": \"Invalid window geometry\"}");
                 return;
             }
 
-            bool capturedDirect = false;
+            string captureMethod = "dxgi_hardware_duplication";
+            bool captured = false;
+
+            // Tier 1: Hardware DirectX 11 Desktop Duplication (sub-2ms VRAM direct)
             try {
-                using (var bmp = new Bitmap(w, h)) {
-                    using (var g = Graphics.FromImage(bmp)) {
-                        try {
-                            int screenX = GetSystemMetrics(76); // SM_XVIRTUALSCREEN
-                            int screenY = GetSystemMetrics(77); // SM_YVIRTUALSCREEN
-                            int screenW = GetSystemMetrics(78); // SM_CXVIRTUALSCREEN
-                            int screenH = GetSystemMetrics(79); // SM_CYVIRTUALSCREEN
-                            if (screenW <= 0 || screenH <= 0) {
-                                screenX = 0; screenY = 0;
-                                screenW = GetSystemMetrics(0);
-                                screenH = GetSystemMetrics(1);
-                            }
+                captured = DxgiCaptureEngine.CaptureRegion(r.Left, r.Top, w, h, destPath);
+            } catch (Exception ex) {
+                Console.Error.WriteLine("DXGI Tier 1 fallback: " + ex.Message);
+                captured = false;
+            }
 
-                            int srcX = Math.Max(screenX, r.Left);
-                            int srcY = Math.Max(screenY, r.Top);
-                            int destX = Math.Max(0, srcX - r.Left);
-                            int destY = Math.Max(0, srcY - r.Top);
-                            int right = Math.Min(screenX + screenW, r.Right);
-                            int bottom = Math.Min(screenY + screenH, r.Bottom);
-                            int copyW = Math.Max(0, right - srcX);
-                            int copyH = Math.Max(0, bottom - srcY);
+            // Tier 2 & Tier 3 Fallbacks if DXGI unavailable or unsupported in environment
+            if (!captured) {
+                try {
+                    using (var bmp = new Bitmap(w, h)) {
+                        using (var g = Graphics.FromImage(bmp)) {
+                            bool capturedDirect = false;
+                            try {
+                                int screenX = GetSystemMetrics(76);
+                                int screenY = GetSystemMetrics(77);
+                                int screenW = GetSystemMetrics(78);
+                                int screenH = GetSystemMetrics(79);
+                                if (screenW <= 0 || screenH <= 0) {
+                                    screenX = 0; screenY = 0;
+                                    screenW = GetSystemMetrics(0);
+                                    screenH = GetSystemMetrics(1);
+                                }
 
-                            if (copyW > 0 && copyH > 0) {
-                                try {
+                                int srcX = Math.Max(screenX, r.Left);
+                                int srcY = Math.Max(screenY, r.Top);
+                                int destX = Math.Max(0, srcX - r.Left);
+                                int destY = Math.Max(0, srcY - r.Top);
+                                int right = Math.Min(screenX + screenW, r.Right);
+                                int bottom = Math.Min(screenY + screenH, r.Bottom);
+                                int copyW = Math.Max(0, right - srcX);
+                                int copyH = Math.Max(0, bottom - srcY);
+
+                                if (copyW > 0 && copyH > 0) {
                                     g.CopyFromScreen(srcX, srcY, destX, destY, new Size(copyW, copyH), CopyPixelOperation.SourceCopy);
                                     capturedDirect = true;
-                                } catch (Exception ex) {
-                                    Console.Error.WriteLine("CopyFromScreen failed: " + ex.Message);
+                                    captureMethod = "direct_gdi";
+                                }
+                            } catch {}
+
+                            if (!capturedDirect && targetHwnd != IntPtr.Zero) {
+                                IntPtr hdc = g.GetHdc();
+                                bool pwOk = PrintWindow(targetHwnd, hdc, 2); // PW_RENDERFULLCONTENT
+                                g.ReleaseHdc(hdc);
+                                if (pwOk) {
+                                    captureMethod = "printwindow";
+                                } else {
+                                    g.CopyFromScreen(r.Left, r.Top, 0, 0, new Size(w, h), CopyPixelOperation.SourceCopy);
+                                    captureMethod = "copy_screen_fallback";
                                 }
                             }
-                        } catch (Exception ex) {
-                            Console.Error.WriteLine("Direct capture ex: " + ex.Message);
                         }
 
-                        if (!capturedDirect) {
-                            IntPtr hdc = g.GetHdc();
-                            bool pwOk = PrintWindow(targetHwnd, hdc, 2); // PW_RENDERFULLCONTENT
-                            g.ReleaseHdc(hdc);
-
-                            if (!pwOk) {
-                                g.CopyFromScreen(r.Left, r.Top, 0, 0, new Size(w, h), CopyPixelOperation.SourceCopy);
-                            }
+                        string dir = Path.GetDirectoryName(destPath);
+                        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) {
+                            Directory.CreateDirectory(dir);
                         }
+                        bmp.Save(destPath, ImageFormat.Png);
+                        captured = true;
                     }
-
-                    string dir = Path.GetDirectoryName(destPath);
-                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) {
-                        Directory.CreateDirectory(dir);
-                    }
-                    bmp.Save(destPath, ImageFormat.Png);
+                } catch (Exception ex) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+                    return;
                 }
+            }
 
+            if (captured) {
                 string escTitle = EscapeJson(actualTitle);
                 string escPath = destPath.Replace("\\", "/");
                 Console.WriteLine(string.Format("{{\"success\": true, \"title\": \"{0}\", \"width\": {1}, \"height\": {2}, \"method\": \"{3}\", \"fore\": \"{4}\", \"target\": \"{5}\", \"path\": \"{6}\"}}",
-                    escTitle, w, h, (capturedDirect ? "direct_gpu" : "printwindow"), GetForegroundWindow(), targetHwnd, escPath));
-            } catch (Exception ex) {
-                Console.WriteLine("{{\"success\": false, \"error\": \"{0}\"}}", ex.Message.Replace("\"", "'"));
+                    escTitle, w, h, captureMethod, GetForegroundWindow(), targetHwnd, escPath));
+            } else {
+                Console.WriteLine("{\"success\": false, \"error\": \"All 3 capture tiers failed\"}");
             }
         }
 

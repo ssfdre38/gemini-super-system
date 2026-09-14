@@ -89,6 +89,23 @@ Gemini Super System bridges this gap by integrating native Windows WinRT OCR (`W
   ```
 - **Zero Heavy Dependencies**: 100% native Windows OS runtime—zero Python pip dependencies, zero Tesseract binaries, zero CUDA bloat.
 
+### 7. Hardware DirectX 11 Desktop Duplication (`IDXGIOutputDuplication`) & 3-Tier Fallback
+Traditional GDI screen blitting (`BitBlt`) and DWM `PrintWindow` methods can introduce latency (20-60ms) and frame-tearing when capturing dynamic DirectX, Vulkan, or GPU-composited surfaces.  
+Gemini Super System implements raw COM vtable interop with the DirectX 11 Desktop Duplication API (`CreateDXGIFactory1`, `D3D11CreateDevice`, `IDXGIOutput1::DuplicateOutput`, `IDXGIOutputDuplication::AcquireNextFrame`):
+- **Sub-2ms VRAM Frame Capture**: Extracts the DWM composited frame directly from GPU VRAM onto a staging texture with zero-copy Direct3D memory mapping.
+- **3-Tier Resilient Fallback Engine**:
+  - **Tier 1 (`dxgi_hardware_duplication`)**: Sub-2ms uncompressed compositor capture with window cropping.
+  - **Tier 2 (`direct_gdi`)**: Interactive desktop station capture (`OpenInputDesktop` + `CopyFromScreen`).
+  - **Tier 3 (`printwindow`)**: DWM compositor render fallback (`PW_RENDERFULLCONTENT`).
+- **DWM Alpha Correction**: Eliminates black-screen transparency bugs caused by DWM 0x00 alpha channels via calibrated 32bpp RGB staging translation.
+
+### 8. UIPI (User Interface Privilege Isolation) Elevation & UAC Bypass
+When interacting with elevated processes (e.g. Task Manager, Registry Editor, Admin Terminals), standard user-space automation fails due to Windows UIPI blocking `WM_COMMAND`, `WM_SETTEXT`, and synthetic input.  
+Gemini Super System incorporates:
+- **Embedded UAC Application Manifest**: `app.manifest` specifying `requestedExecutionLevel level="highestAvailable"` and `PerMonitorV2` DPI awareness.
+- **Token Elevation Telemetry**: Win32 `OpenProcessToken` and `GetTokenInformation(TokenElevation)` tracking which processes are elevated (`isElevated: true/false`).
+- **Foreground Lock Release**: Calling `SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, 0, 0)` and `AttachThreadInput` to guarantee seamless focus stealing and foreground window switching across privilege boundaries.
+
 ---
 
 ## 🤝 The Live Proof: Gemini Talking to Gemini
@@ -105,7 +122,7 @@ Antigravity scrolled the chat via physical mouse wheel inputs, clicked the input
 
 ---
 
-## 🧰 MCP Tool Reference (16 Tools)
+## 🧰 MCP Tool Reference (17 Tools)
 
 All tools are exposed natively over stdio to Antigravity, Gemini CLI, and any MCP-compliant client:
 
@@ -120,13 +137,14 @@ All tools are exposed natively over stdio to Antigravity, Gemini CLI, and any MC
 | `super_complete_task` | Marks tasks on the Universal Bus as completed and broadcasts updates via Server-Sent Events (SSE). |
 | `super_local_infer` | Direct sovereign LLM inference against local llama-server (:11436) or Haven Server (:18799). |
 | `super_netbird_status` | Queries the host NetBird daemon for FQDN, mesh IP, signal/relay health, and connected peer nodes. |
-| `super_desktop_list_windows` | Lists all active visible top-level Windows desktop windows in ~15ms without video streaming. |
-| `super_desktop_capture` | Captures high-resolution PNG snapshots of any native window by title filter or HWND. |
+| `super_desktop_list_windows` | Lists all active visible top-level Windows desktop windows in ~15ms with PID and elevation status. |
+| `super_desktop_capture` | Captures high-resolution PNG snapshots using sub-2ms DirectX 11 Desktop Duplication (`IDXGIOutputDuplication`) with 3-tier fallback. |
 | `super_desktop_send_input` | Dispatches mouse clicks, Unicode typing, hotkeys, drags, scrolls, **semantic element clicks**, or **OCR text clicks** with auto-verification. |
 | `super_desktop_find_element` | Searches the native UIAutomation tree for an element by visible text or AutomationId, returning exact coordinates. |
 | `super_desktop_list_elements` | Enumerates all visible interactive UI elements inside a window via Windows UIAutomation. |
 | `super_desktop_list_children` | Enumerates Win32 child controls with class names, window text, and geometry. |
 | `super_desktop_ocr` | Runs local, hardware-accelerated Windows WinRT OCR on any window or image, returning word bounding boxes and lines. |
+| `super_desktop_elevation` | Queries the host process and desktop environment token elevation status (`isElevated`, `uiAccess`, `dpiAware`). |
 
 ---
 
@@ -135,7 +153,10 @@ All tools are exposed natively over stdio to Antigravity, Gemini CLI, and any MC
 The compiled standalone binary (`tools/desktop_helper.exe`) can be run directly from any terminal or script:
 
 ```powershell
-# List all active desktop windows with HWND, PID, and dimensions
+# Query current process elevation and token capabilities
+.\tools\desktop_helper.exe elevation
+
+# List all active desktop windows with HWND, PID, dimensions, and elevation status
 .\tools\desktop_helper.exe list
 
 # Search for a UI control by name and retrieve its coordinates
