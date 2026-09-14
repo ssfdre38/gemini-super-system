@@ -897,24 +897,9 @@ namespace GeminiSuperDesktop {
             ForceForegroundWindow(targetHwnd);
             System.Threading.Thread.Sleep(80);
 
-            int screenW = Math.Max(1, GetSystemMetrics(0));
-            int screenH = Math.Max(1, GetSystemMetrics(1));
-            int normX = (int)Math.Round((absX * 65535.0) / (screenW - 1));
-            int normY = (int)Math.Round((absY * 65535.0) / (screenH - 1));
-
-            INPUT[] inputs = new INPUT[2];
-            inputs[0].type = INPUT_MOUSE;
-            inputs[0].mkhi.mi.dx = normX;
-            inputs[0].mkhi.mi.dy = normY;
-            inputs[0].mkhi.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_MOVE;
-
-            inputs[1].type = INPUT_MOUSE;
-            inputs[1].mkhi.mi.dx = normX;
-            inputs[1].mkhi.mi.dy = normY;
-            inputs[1].mkhi.mi.mouseData = (uint)delta;
-            inputs[1].mkhi.mi.dwFlags = MOUSEEVENTF_ABSOLUTE | MOUSEEVENTF_WHEEL;
-
-            SendInput(2, inputs, Marshal.SizeOf(typeof(INPUT)));
+            SetCursorPos(absX, absY);
+            System.Threading.Thread.Sleep(50);
+            mouse_event(MOUSEEVENTF_WHEEL, 0, 0, unchecked((uint)delta), UIntPtr.Zero);
 
             Console.WriteLine(string.Format("{{\"success\": true, \"scrolled\": {0}, \"title\": \"{1}\"}}",
                 delta, EscapeJson(actualTitle)));

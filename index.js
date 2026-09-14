@@ -510,7 +510,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     let actionResult = null;
     let actionDesc = "";
 
-    if (args.text) {
+    if (args.click && args.text) {
+      actionResult = await bridge.clickAndType(args.titleFilter, args.click.x, args.click.y, args.text);
+      actionDesc = `🖱️⌨️ Clicked at [${args.click.x}, ${args.click.y}] and typed ${args.text.length} Unicode characters into "${args.titleFilter}"`;
+    } else if (args.text) {
       actionResult = await bridge.typeText(args.titleFilter, args.text);
       actionDesc = `⌨️ Typed ${args.text.length} Unicode characters into "${args.titleFilter}"`;
     } else if (args.click) {
