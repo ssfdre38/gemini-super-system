@@ -8,6 +8,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
 using System.Windows.Forms;
+using System.Windows.Automation;
 
 namespace GeminiSuperDesktop {
     [StructLayout(LayoutKind.Sequential)]
@@ -261,7 +262,7 @@ namespace GeminiSuperDesktop {
             try { Console.OutputEncoding = Encoding.UTF8; } catch {}
 
             if (args.Length == 0) {
-                Console.WriteLine("{\"error\": \"Usage: desktop_helper [active | list | info | focus | type | paste | click_and_type | click | doubleclick | rightclick | drag | scroll | hotkey | capture | listchildren | scan]\"}");
+                Console.WriteLine("{\"error\": \"Usage: desktop_helper [active | list | info | focus | type | paste | click_and_type | click | doubleclick | rightclick | drag | scroll | hotkey | capture | listchildren | scan | elements | findelement | clickelement]\"}");
                 return;
             }
 
@@ -274,6 +275,13 @@ namespace GeminiSuperDesktop {
                 GetWindowInfoCmd(args[1]);
             } else if (cmd == "focus" && args.Length >= 2) {
                 FocusWindowCmd(args[1]);
+            } else if (cmd == "elements" && args.Length >= 2) {
+                ListUIElements(args[1]);
+            } else if (cmd == "findelement" && args.Length >= 3) {
+                FindUIElementCmd(args[1], args[2]);
+            } else if (cmd == "clickelement" && args.Length >= 3) {
+                string btn = args.Length >= 4 ? args[3] : "left";
+                ClickUIElementCmd(args[1], args[2], btn);
             } else if (cmd == "type" && args.Length >= 3) {
                 int delay = args.Length >= 4 ? int.Parse(args[3]) : 2;
                 TypeTextToWindow(args[1], args[2], delay);
@@ -1125,6 +1133,183 @@ namespace GeminiSuperDesktop {
                     Console.WriteLine("{\"count\": 0}");
                 }
             }
+        }
+
+        static void ListUIElements(string titleFilter) {
+            IntPtr hDesk = EnsureInteractiveDesktop();
+            IntPtr targetHwnd;
+            string actualTitle;
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                return;
+            }
+
+            try {
+                AutomationElement root = AutomationElement.FromHandle(targetHwnd);
+                if (root == null) {
+                    Console.WriteLine("[]");
+                    return;
+                }
+
+                RECT winRect;
+                GetWindowRect(targetHwnd, out winRect);
+
+                var elements = root.FindAll(TreeScope.Descendants, Condition.TrueCondition);
+                var list = new List<string>();
+                for (int i = 0; i < elements.Count; i++) {
+                    var el = elements[i];
+                    try {
+                        var r = el.Current.BoundingRectangle;
+                        string name = el.Current.Name ?? "";
+                        string type = el.Current.ControlType != null ? el.Current.ControlType.ProgrammaticName.Replace("ControlType.", "") : "";
+                        string autoId = el.Current.AutomationId ?? "";
+                        bool isOffscreen = el.Current.IsOffscreen;
+
+                        if (!isOffscreen && r.Width > 0 && r.Height > 0 && (!string.IsNullOrEmpty(name) || !string.IsNullOrEmpty(autoId))) {
+                            int relX = (int)r.X - winRect.Left;
+                            int relY = (int)r.Y - winRect.Top;
+                            int centerX = (int)r.X + (int)r.Width / 2;
+                            int centerY = (int)r.Y + (int)r.Height / 2;
+                            list.Add(string.Format("{{\"name\": \"{0}\", \"type\": \"{1}\", \"autoId\": \"{2}\", \"x\": {3}, \"y\": {4}, \"width\": {5}, \"height\": {6}, \"relX\": {7}, \"relY\": {8}, \"centerX\": {9}, \"centerY\": {10}}}",
+                                EscapeJson(name), EscapeJson(type), EscapeJson(autoId),
+                                (int)r.X, (int)r.Y, (int)r.Width, (int)r.Height,
+                                relX, relY, centerX, centerY));
+                        }
+                    } catch {}
+                }
+                Console.WriteLine("[" + string.Join(",", list.ToArray()) + "]");
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static bool FindMatchingElement(IntPtr targetHwnd, string query, out RECT r, out string matchedName, out string matchedType) {
+            r = new RECT();
+            matchedName = "";
+            matchedType = "";
+            try {
+                AutomationElement root = AutomationElement.FromHandle(targetHwnd);
+                if (root == null) return false;
+
+                var elements = root.FindAll(TreeScope.Descendants, Condition.TrueCondition);
+                for (int i = 0; i < elements.Count; i++) {
+                    var el = elements[i];
+                    try {
+                        if (el.Current.IsOffscreen) continue;
+                        var rect = el.Current.BoundingRectangle;
+                        if (rect.Width <= 0 || rect.Height <= 0) continue;
+                        string name = el.Current.Name ?? "";
+                        string autoId = el.Current.AutomationId ?? "";
+                        if (string.Equals(name, query, StringComparison.OrdinalIgnoreCase) || string.Equals(autoId, query, StringComparison.OrdinalIgnoreCase)) {
+                            r.Left = (int)rect.X;
+                            r.Top = (int)rect.Y;
+                            r.Right = (int)(rect.X + rect.Width);
+                            r.Bottom = (int)(rect.Y + rect.Height);
+                            matchedName = name;
+                            matchedType = el.Current.ControlType != null ? el.Current.ControlType.ProgrammaticName.Replace("ControlType.", "") : "";
+                            return true;
+                        }
+                    } catch {}
+                }
+                for (int i = 0; i < elements.Count; i++) {
+                    var el = elements[i];
+                    try {
+                        if (el.Current.IsOffscreen) continue;
+                        var rect = el.Current.BoundingRectangle;
+                        if (rect.Width <= 0 || rect.Height <= 0) continue;
+                        string name = el.Current.Name ?? "";
+                        string autoId = el.Current.AutomationId ?? "";
+                        if (name.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 || autoId.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0) {
+                            r.Left = (int)rect.X;
+                            r.Top = (int)rect.Y;
+                            r.Right = (int)(rect.X + rect.Width);
+                            r.Bottom = (int)(rect.Y + rect.Height);
+                            matchedName = name;
+                            matchedType = el.Current.ControlType != null ? el.Current.ControlType.ProgrammaticName.Replace("ControlType.", "") : "";
+                            return true;
+                        }
+                    } catch {}
+                }
+            } catch {}
+            return false;
+        }
+
+        static void FindUIElementCmd(string titleFilter, string query) {
+            IntPtr hDesk = EnsureInteractiveDesktop();
+            IntPtr targetHwnd;
+            string actualTitle;
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                return;
+            }
+
+            RECT winRect;
+            GetWindowRect(targetHwnd, out winRect);
+
+            RECT elRect;
+            string name, type;
+            if (FindMatchingElement(targetHwnd, query, out elRect, out name, out type)) {
+                int w = elRect.Right - elRect.Left;
+                int h = elRect.Bottom - elRect.Top;
+                int centerX = elRect.Left + w / 2;
+                int centerY = elRect.Top + h / 2;
+                int relX = elRect.Left - winRect.Left;
+                int relY = elRect.Top - winRect.Top;
+                Console.WriteLine(string.Format("{{\"success\": true, \"name\": \"{0}\", \"type\": \"{1}\", \"x\": {2}, \"y\": {3}, \"width\": {4}, \"height\": {5}, \"relX\": {6}, \"relY\": {7}, \"centerX\": {8}, \"centerY\": {9}}}",
+                    EscapeJson(name), EscapeJson(type), elRect.Left, elRect.Top, w, h, relX, relY, centerX, centerY));
+            } else {
+                Console.WriteLine("{\"success\": false, \"error\": \"Element not found\"}");
+            }
+        }
+
+        static void ClickUIElementCmd(string titleFilter, string query, string button) {
+            IntPtr hDesk = EnsureInteractiveDesktop();
+            IntPtr targetHwnd;
+            string actualTitle;
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                return;
+            }
+
+            RECT winRect;
+            GetWindowRect(targetHwnd, out winRect);
+
+            RECT elRect;
+            string name, type;
+            if (!FindMatchingElement(targetHwnd, query, out elRect, out name, out type)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Element not found\"}");
+                return;
+            }
+
+            int w = elRect.Right - elRect.Left;
+            int h = elRect.Bottom - elRect.Top;
+            int centerX = elRect.Left + w / 2;
+            int centerY = elRect.Top + h / 2;
+
+            ForceForegroundWindow(targetHwnd);
+            System.Threading.Thread.Sleep(80);
+
+            string b = (button ?? "left").ToLowerInvariant();
+            uint downFlag = MOUSEEVENTF_LEFTDOWN;
+            uint upFlag = MOUSEEVENTF_LEFTUP;
+            if (b == "right") { downFlag = MOUSEEVENTF_RIGHTDOWN; upFlag = MOUSEEVENTF_RIGHTUP; }
+            else if (b == "middle") { downFlag = MOUSEEVENTF_MIDDLEDOWN; upFlag = MOUSEEVENTF_MIDDLEUP; }
+
+            SetCursorPos(centerX, centerY);
+            System.Threading.Thread.Sleep(50);
+            mouse_event(downFlag, 0, 0, 0, UIntPtr.Zero);
+            System.Threading.Thread.Sleep(35);
+            mouse_event(upFlag, 0, 0, 0, UIntPtr.Zero);
+
+            if (b == "double") {
+                System.Threading.Thread.Sleep(60);
+                mouse_event(downFlag, 0, 0, 0, UIntPtr.Zero);
+                System.Threading.Thread.Sleep(35);
+                mouse_event(upFlag, 0, 0, 0, UIntPtr.Zero);
+            }
+
+            Console.WriteLine(string.Format("{{\"success\": true, \"clicked\": \"{0}\", \"type\": \"{1}\", \"centerX\": {2}, \"centerY\": {3}, \"title\": \"{4}\"}}",
+                EscapeJson(name), EscapeJson(type), centerX, centerY, EscapeJson(actualTitle)));
         }
     }
 }

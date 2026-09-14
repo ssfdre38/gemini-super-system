@@ -240,6 +240,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "string",
               description: "Shortcut key combination (e.g. 'ctrl+s', 'ctrl+a', 'ctrl+c', 'ctrl+v', 'ctrl+z')."
             },
+            element: {
+              type: "string",
+              description: "Target UI element by visible text, label, or AutomationId (e.g. 'Spark BETA', 'New chat', 'Settings'). Resolves the element semantically via Windows UIAutomation and clicks its center directly without guessing coordinates."
+            },
             click: {
               type: "object",
               description: "Mouse click at relative window coordinates.",
@@ -292,6 +296,38 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       {
         name: "super_desktop_list_children",
         description: "Enumerates native child windows and UI controls (buttons, textboxes, treeviews, status bars) inside a window with Win32 ClassName, Text, coordinates, and dimensions.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            titleFilter: {
+              type: "string",
+              description: "Target window title, substring, or numeric HWND."
+            }
+          },
+          required: ["titleFilter"]
+        }
+      },
+      {
+        name: "super_desktop_find_element",
+        description: "Searches the native UIAutomation accessibility tree of a window for an element by visible label or AutomationId, returning exact screen and window-relative coordinates.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            titleFilter: {
+              type: "string",
+              description: "Target window title, substring, or numeric HWND."
+            },
+            query: {
+              type: "string",
+              description: "Element text, label, or automation ID (e.g. 'Spark BETA', 'New chat', 'Settings')."
+            }
+          },
+          required: ["titleFilter", "query"]
+        }
+      },
+      {
+        name: "super_desktop_list_elements",
+        description: "Enumerates all visible interactive UI elements (buttons, links, textboxes, tabs, list items) inside a window via Windows UIAutomation.",
         inputSchema: {
           type: "object",
           properties: {
@@ -510,7 +546,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     let actionResult = null;
     let actionDesc = "";
 
-    if (args.click && args.text) {
+    if (args.element && args.text) {
+      const clickRes = await bridge.clickElement(args.titleFilter, args.element, args.button || "left");
+      if (!clickRes.success) {
+        actionResult = clickRes;
+        actionDesc = `⚠️ Failed to click element "${args.element}"`;
+      } else {
+        await new Promise(r => setTimeout(r, 120));
+        actionResult = await bridge.typeText(args.titleFilter, args.text);
+        actionDesc = `🎯⌨️ Clicked element "${args.element}" and typed ${args.text.length} Unicode characters into "${args.titleFilter}"`;
+      }
+    } else if (args.element) {
+      const btn = args.button || "left";
+      actionResult = await bridge.clickElement(args.titleFilter, args.element, btn);
+      actionDesc = `🎯 Clicked element "${args.element}" (${btn}) in "${args.titleFilter}"`;
+    } else if (args.click && args.text) {
       actionResult = await bridge.clickAndType(args.titleFilter, args.click.x, args.click.y, args.text);
       actionDesc = `🖱️⌨️ Clicked at [${args.click.x}, ${args.click.y}] and typed ${args.text.length} Unicode characters into "${args.titleFilter}"`;
     } else if (args.text) {
@@ -536,7 +586,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       actionResult = await bridge.focus(args.titleFilter);
       actionDesc = `🎯 Focused window "${args.titleFilter}"`;
     } else {
-      actionResult = { success: false, error: "No action specified (provide text, click, drag, scroll, hotkey, keys, or focus)" };
+      actionResult = { success: false, error: "No action specified (provide element, text, click, drag, scroll, hotkey, keys, or focus)" };
       actionDesc = "⚠️ No action specified";
     }
 
@@ -557,6 +607,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           text: actionResult && actionResult.success
             ? `${actionDesc} -> SUCCESS${snapInfo}`
             : `⚠️ Action failed on "${args.titleFilter}": ${actionResult?.error || "Unknown error"}`
+        }
+      ]
+    };
+  }
+
+  if (name === "super_desktop_find_element") {
+    const bridge = getDesktopBridge();
+    const res = await bridge.findElement(args.titleFilter, args.query);
+    return {
+      content: [
+        {
+          type: "text",
+          text: res.success
+            ? `🎯 Found UI Element in "${args.titleFilter}":\n` +
+              `• Name        : "${res.name}"\n` +
+              `• Type        : ${res.type}\n` +
+              `• Bounds      : [${res.x}, ${res.y}] (${res.width}x${res.height})\n` +
+              `• Window Rel  : [${res.relX}, ${res.relY}]\n` +
+              `• Center Coords: [${res.centerX}, ${res.centerY}]`
+            : `⚠️ Element "${args.query}" not found in "${args.titleFilter}"`
+        }
+      ]
+    };
+  }
+
+  if (name === "super_desktop_list_elements") {
+    const bridge = getDesktopBridge();
+    const elements = await bridge.listElements(args.titleFilter);
+    return {
+      content: [
+        {
+          type: "text",
+          text: Array.isArray(elements)
+            ? `🎛️ UI Elements in "${args.titleFilter}" (${elements.length} found):\n` +
+              elements.slice(0, 50).map(e => `• [${e.type}] "${e.name}" @ [${e.relX}, ${e.relY}] (${e.width}x${e.height}) Center:[${e.centerX}, ${e.centerY}]`).join("\n") +
+              (elements.length > 50 ? `\n... and ${elements.length - 50} more elements.` : "")
+            : `⚠️ Error listing elements: ${JSON.stringify(elements)}`
         }
       ]
     };
