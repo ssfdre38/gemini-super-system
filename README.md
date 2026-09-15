@@ -194,6 +194,26 @@ The compiled standalone binary (`tools/desktop_helper.exe`) can be run directly 
 
 ---
 
+## 🦾 Biomechanical Human Kinematic Engine (`mouse_trainer.exe`)
+
+Eliminates robotic coordinate teleportation, synthetic input heuristics, and anti-bot flags. Simulates real human motor dynamics powered by **Fitts's Law**, cubic Bézier wrist-arc curvature, Flash & Hogan minimum-jerk polynomials, and inertial kinetic scroll decay.
+
+```powershell
+# 1. Record 15 seconds of real human telemetry (WH_MOUSE_LL low-level hook)
+.\tools\mouse_trainer.exe record 15 data\daniel_telemetry.jsonl
+
+# 2. Train and fit Fitts's Law + click dwell + wheel decay parameters
+.\tools\mouse_trainer.exe train data\daniel_telemetry.jsonl data\human_profile.json
+
+# 3. Kinematic cursor glide to target window coordinates with natural wrist arc
+.\tools\mouse_trainer.exe winmove data\human_profile.json Discord 500 500 left
+
+# 4. Inertial kinetic scroll decay inside target window container
+.\tools\mouse_trainer.exe winscroll data\human_profile.json Discord -480
+```
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. Web Mission Control Dashboard

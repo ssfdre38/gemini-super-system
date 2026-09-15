@@ -1,0 +1,15 @@
+{
+  "FittsA": 75,
+  "FittsB": 28,
+  "MeanCurvature": 0.08,
+  "CurvatureStdDev": 0.04,
+  "JitterStdDev": 1.2,
+  "MeanClickDwellMs": 85,
+  "ClickDwellStdDev": 18,
+  "WheelIntervalMs": 28,
+  "WheelDecayFactor": 1.15,
+  "SampleStrokesCount": 0,
+  "SampleClicksCount": 0,
+  "SampleWheelsCount": 0,
+  "TrainedAt": "2026-09-15T19:38:14.954Z"
+}

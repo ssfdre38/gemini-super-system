@@ -304,9 +304,21 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "boolean",
               default: false,
               description: "Whether to immediately capture and return a post-action visual verification snapshot."
+            },
+            humanize: {
+              type: "boolean",
+              default: true,
+              description: "Whether to execute mouse movement, clicks, and scrolls using biologically authentic human kinematics (Fitts's Law, cubic Bézier wrist arc, micro-tremor, and kinetic friction decay) instead of robotic coordinate jumping."
+            },
+            recordMouseSec: {
+              type: "number",
+              description: "Record real human mouse movements, clicks, and wheel scrolls for this duration (in seconds) to train the kinematic profile."
+            },
+            trainMouseFile: {
+              type: "string",
+              description: "Path to a recorded .jsonl telemetry file to fit Fitts's Law parameters and train the active human kinematic profile."
             }
-          },
-          required: ["titleFilter"]
+          }
         }
       },
       {
@@ -601,10 +613,18 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === "super_desktop_send_input") {
     const bridge = getDesktopBridge();
+    const humanize = args.humanize !== false;
     let actionResult = null;
     let actionDesc = "";
 
-    if (args.navigateDiscord) {
+    if (args.recordMouseSec) {
+      const dur = Number(args.recordMouseSec) || 15;
+      actionResult = await bridge.recordMouse(dur);
+      actionDesc = `🎥 Recorded ${dur}s of low-level mouse telemetry to ${actionResult.outputPath}`;
+    } else if (args.trainMouseFile) {
+      actionResult = await bridge.trainMouse(args.trainMouseFile);
+      actionDesc = `🧠 Fitted Fitts's Law & trained human kinematic profile from ${args.trainMouseFile}`;
+    } else if (args.navigateDiscord) {
       actionResult = await bridge.navigateDiscord(args.navigateDiscord);
       actionDesc = `🚀 Autonomously navigated Discord to "${args.navigateDiscord}" via quick-switcher`;
     } else if (args.focusDiscordChat) {
@@ -612,12 +632,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       actionDesc = `💬 Focused Discord chat input box`;
     } else if (args.target) {
       const btn = args.button || "left";
-      actionResult = await bridge.clickTarget(args.titleFilter, args.target, btn);
+      actionResult = await bridge.clickTarget(args.titleFilter, args.target, btn, humanize);
       actionDesc = actionResult.success
-        ? `🎯 Targeted and clicked "${args.target}" via ${actionResult.method} (${btn}) in "${args.titleFilter}"`
+        ? `🎯 Targeted and clicked "${args.target}" via ${actionResult.method} (${btn}) in "${args.titleFilter}"${humanize ? " [Kinematic Glide]" : ""}`
         : `⚠️ Failed to target "${args.target}": ${actionResult.error}`;
     } else if (args.element && args.text) {
-      const clickRes = await bridge.clickElement(args.titleFilter, args.element, args.button || "left");
+      const clickRes = await bridge.clickElement(args.titleFilter, args.element, args.button || "left", humanize);
       if (!clickRes.success) {
         actionResult = clickRes;
         actionDesc = `⚠️ Failed to click element "${args.element}"`;
@@ -628,10 +648,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
     } else if (args.element) {
       const btn = args.button || "left";
-      actionResult = await bridge.clickElement(args.titleFilter, args.element, btn);
-      actionDesc = `🎯 Clicked element "${args.element}" (${btn}) in "${args.titleFilter}"`;
+      actionResult = await bridge.clickElement(args.titleFilter, args.element, btn, humanize);
+      actionDesc = `🎯 Clicked element "${args.element}" (${btn}) in "${args.titleFilter}"${humanize ? " [Kinematic Glide]" : ""}`;
     } else if (args.textQuery && args.text) {
-      const clickRes = await bridge.clickText(args.titleFilter, args.textQuery, args.button || "left");
+      const clickRes = await bridge.clickText(args.titleFilter, args.textQuery, args.button || "left", humanize);
       if (!clickRes.success) {
         actionResult = clickRes;
         actionDesc = `⚠️ Failed to click OCR text "${args.textQuery}": ${clickRes.error}`;
@@ -642,9 +662,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
     } else if (args.textQuery) {
       const btn = args.button || "left";
-      actionResult = await bridge.clickText(args.titleFilter, args.textQuery, btn);
+      actionResult = await bridge.clickText(args.titleFilter, args.textQuery, btn, humanize);
       actionDesc = actionResult.success
-        ? `🎯 Clicked OCR text "${actionResult.text}" at [${actionResult.x}, ${actionResult.y}] (${btn}) in "${args.titleFilter}"`
+        ? `🎯 Clicked OCR text "${actionResult.text}" at [${actionResult.x}, ${actionResult.y}] (${btn}) in "${args.titleFilter}"${humanize ? " [Kinematic Glide]" : ""}`
         : `⚠️ OCR text "${args.textQuery}" not found in "${args.titleFilter}": ${actionResult.error}`;
     } else if (args.click && args.text) {
       actionResult = await bridge.clickAndType(args.titleFilter, args.click.x, args.click.y, args.text);
@@ -654,14 +674,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       actionDesc = `⌨️ Typed ${args.text.length} Unicode characters into "${args.titleFilter}"`;
     } else if (args.click) {
       const btn = args.click.button || "left";
-      actionResult = await bridge.clickWindow(args.titleFilter, args.click.x, args.click.y, btn);
-      actionDesc = `🖱️ ${btn.toUpperCase()} Click dispatched to "${args.titleFilter}" at [${args.click.x}, ${args.click.y}]`;
+      actionResult = await bridge.clickWindow(args.titleFilter, args.click.x, args.click.y, btn, humanize);
+      actionDesc = `🖱️ ${btn.toUpperCase()} Click dispatched to "${args.titleFilter}" at [${args.click.x}, ${args.click.y}]${humanize ? " [Kinematic Glide]" : ""}`;
     } else if (args.drag) {
-      actionResult = await bridge.drag(args.titleFilter, args.drag.fromX, args.drag.fromY, args.drag.toX, args.drag.toY);
-      actionDesc = `🖱️ Dragged in "${args.titleFilter}" from [${args.drag.fromX}, ${args.drag.fromY}] to [${args.drag.toX}, ${args.drag.toY}]`;
+      actionResult = await bridge.drag(args.titleFilter, args.drag.fromX, args.drag.fromY, args.drag.toX, args.drag.toY, humanize);
+      actionDesc = `🖱️ Dragged in "${args.titleFilter}" from [${args.drag.fromX}, ${args.drag.fromY}] to [${args.drag.toX}, ${args.drag.toY}]${humanize ? " [Kinematic Drag]" : ""}`;
     } else if (args.scroll) {
-      actionResult = await bridge.scroll(args.titleFilter, args.scroll.delta, args.scroll.x ?? -1, args.scroll.y ?? -1);
-      actionDesc = `🖱️ Scrolled wheel by ${args.scroll.delta} in "${args.titleFilter}"`;
+      actionResult = await bridge.scroll(args.titleFilter, args.scroll.delta, args.scroll.x ?? -1, args.scroll.y ?? -1, humanize);
+      actionDesc = `🖱️ Scrolled wheel by ${args.scroll.delta} in "${args.titleFilter}"${humanize ? " [Kinetic Decay]" : ""}`;
     } else if (args.hotkey) {
       actionResult = await bridge.hotkey(args.titleFilter, args.hotkey);
       actionDesc = `⌨️ Hotkey combo "${args.hotkey}" sent to "${args.titleFilter}"`;
@@ -672,7 +692,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       actionResult = await bridge.focus(args.titleFilter);
       actionDesc = `🎯 Focused window "${args.titleFilter}"`;
     } else {
-      actionResult = { success: false, error: "No action specified (provide element, text, click, drag, scroll, hotkey, keys, or focus)" };
+      actionResult = { success: false, error: "No action specified (provide element, text, click, drag, scroll, hotkey, keys, focus, recordMouseSec, or trainMouseFile)" };
       actionDesc = "⚠️ No action specified";
     }
 
