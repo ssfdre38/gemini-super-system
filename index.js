@@ -450,6 +450,58 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             }
           }
         }
+      },
+      {
+        name: "super_desktop_read_discord",
+        description: "Autonomously navigates Discord to any channel (e.g. 'gemini-chat'), captures a high-resolution snapshot, and runs native WinRT OCR to extract visible chat messages, users, and timestamps without requiring a bot token or Discord API.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            channel: {
+              type: "string",
+              default: "gemini-chat",
+              description: "Target Discord channel name to switch to and inspect (defaults to 'gemini-chat')."
+            }
+          }
+        }
+      },
+      {
+        name: "super_desktop_post_discord",
+        description: "Autonomously navigates Discord to a channel, focuses the chat input, and types or pastes a message using humanized kinematic cadence.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            channel: {
+              type: "string",
+              default: "gemini-chat",
+              description: "Target Discord channel name (e.g. 'gemini-chat')."
+            },
+            text: {
+              type: "string",
+              description: "Message text to dispatch to the Discord channel."
+            }
+          },
+          required: ["text"]
+        }
+      },
+      {
+        name: "super_run_playbook",
+        description: "Executes end-to-end multi-app autonomous playbooks ('discord_status_relay' or 'system_health_audit') with Zero Dead Air speech narration, live bus telemetry, and cross-application visual verification.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            playbook: {
+              type: "string",
+              enum: ["discord_status_relay", "system_health_audit"],
+              description: "Autonomous playbook name to execute."
+            },
+            params: {
+              type: "object",
+              description: "Optional parameters for the playbook."
+            }
+          },
+          required: ["playbook"]
+        }
       }
     ]
   };
@@ -909,6 +961,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         ]
       };
     }
+  }
+
+  if (name === "super_desktop_read_discord") {
+    const bridge = getDesktopBridge();
+    const channel = args.channel || "gemini-chat";
+    const res = await bridge.readDiscordMessages(channel);
+    return {
+      content: [
+        {
+          type: "text",
+          text: res.success
+            ? `💬 Discord Channel #${channel} Inspected via Native WinRT OCR (${res.lineCount} lines):\n` +
+              res.lines.map(l => `• ${l.text}`).join("\n") +
+              `\n📸 Snapshot: ${res.snapshotPath}`
+            : `⚠️ Failed to read Discord channel #${channel}: ${res.error}`
+        }
+      ]
+    };
+  }
+
+  if (name === "super_desktop_post_discord") {
+    const bridge = getDesktopBridge();
+    const channel = args.channel || "gemini-chat";
+    const res = await bridge.postDiscordMessage(channel, args.text);
+    return {
+      content: [
+        {
+          type: "text",
+          text: res.success
+            ? `🚀 Message successfully dispatched to Discord #${channel} (${args.text.length} chars) using humanized cadence.`
+            : `⚠️ Failed to post message to Discord #${channel}: ${res.error}`
+        }
+      ]
+    };
+  }
+
+  if (name === "super_run_playbook") {
+    const res = await orch.runPlaybook(args.playbook, args.params || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: res.success
+            ? `✅ Autonomous Playbook "${args.playbook}" executed successfully!\n` + JSON.stringify(res, null, 2)
+            : `⚠️ Playbook execution failed: ${res.error || "Unknown error"}`
+        }
+      ]
+    };
   }
 
   return {
