@@ -398,6 +398,28 @@ namespace GeminiSuperDesktop {
         [StructLayout(LayoutKind.Sequential)]
         public struct POINT { public int x; public int y; }
 
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WINDOWPLACEMENT {
+            public int length;
+            public int flags;
+            public int showCmd;
+            public POINT ptMinPosition;
+            public POINT ptMaxPosition;
+            public RECT rcNormalPosition;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+
+        const int SW_HIDE = 0;
+        const int SW_SHOWNORMAL = 1;
+        const int SW_SHOWMINIMIZED = 2;
+        const int SW_SHOWMAXIMIZED = 3;
+        const int SW_SHOWNOACTIVATE = 4;
+        const int SW_SHOW = 5;
+        const int SW_RESTORE = 9;
+        const int WPF_RESTORETOMAXIMIZED = 0x0002;
+
         [DllImport("user32.dll")]
         public static extern bool GetCursorPos(out POINT lpPoint);
 
@@ -657,7 +679,7 @@ namespace GeminiSuperDesktop {
             }
 
             if (args.Length == 0) {
-                Console.WriteLine("{\"error\": \"Usage: desktop_helper [active | list | info | focus | type | paste | click_and_type | click | doubleclick | rightclick | drag | scroll | hotkey | capture | deltacapture | listchildren | scan | elements | findelement | clickelement]\"}");
+                Console.WriteLine("{\"error\": \"Usage: desktop_helper [active | list | info | focus | maximize | minimize | restore | type | paste | click_and_type | click | doubleclick | rightclick | drag | scroll | hotkey | capture | deltacapture | listchildren | scan | elements | findelement | clickelement]\"}");
                 return;
             }
 
@@ -674,6 +696,12 @@ namespace GeminiSuperDesktop {
                 GetWindowInfoCmd(args[1]);
             } else if (cmd == "focus" && args.Length >= 2) {
                 FocusWindowCmd(args[1]);
+            } else if (cmd == "maximize" && args.Length >= 2) {
+                MaximizeWindowCmd(args[1]);
+            } else if (cmd == "minimize" && args.Length >= 2) {
+                MinimizeWindowCmd(args[1]);
+            } else if (cmd == "restore" && args.Length >= 2) {
+                RestoreWindowCmd(args[1]);
             } else if (cmd == "elements" && args.Length >= 2) {
                 ListUIElements(args[1]);
             } else if (cmd == "findelement" && args.Length >= 3) {
@@ -994,13 +1022,28 @@ namespace GeminiSuperDesktop {
             if (foreThread != 0 && foreThread != appThread) AttachThreadInput(appThread, foreThread, true);
             if (targetThread != 0 && targetThread != appThread) AttachThreadInput(appThread, targetThread, true);
 
-            SwitchToThisWindow(hWnd, true);
+            bool wasMaximized = IsZoomed(hWnd);
+            WINDOWPLACEMENT wp = new WINDOWPLACEMENT();
+            wp.length = Marshal.SizeOf(typeof(WINDOWPLACEMENT));
+            if (GetWindowPlacement(hWnd, ref wp)) {
+                if (wp.showCmd == SW_SHOWMAXIMIZED || (wp.flags & WPF_RESTORETOMAXIMIZED) != 0) {
+                    wasMaximized = true;
+                }
+            }
+
             keybd_event(0x12, 0, 0, 0); // Alt down
 
-            if (IsIconic(hWnd)) {
-                ShowWindow(hWnd, 9); // SW_RESTORE
+            if (wasMaximized) {
+                // Window is or was maximized - maintain maximized state, NEVER call SW_RESTORE
+                ShowWindow(hWnd, SW_SHOWMAXIMIZED);
+            } else if (IsIconic(hWnd)) {
+                ShowWindow(hWnd, SW_RESTORE);
             } else {
-                ShowWindow(hWnd, 5); // SW_SHOW
+                ShowWindow(hWnd, SW_SHOW);
+            }
+
+            if (!wasMaximized) {
+                try { SwitchToThisWindow(hWnd, false); } catch {}
             }
 
             SetForegroundWindow(hWnd);
@@ -1021,6 +1064,53 @@ namespace GeminiSuperDesktop {
             }
 
             return GetForegroundWindow() == hWnd;
+        }
+
+        static void MaximizeWindowCmd(string titleFilter) {
+            IntPtr hDesk = EnsureInteractiveDesktop();
+            IntPtr targetHwnd;
+            string actualTitle;
+
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                return;
+            }
+
+            ShowWindow(targetHwnd, SW_SHOWMAXIMIZED);
+            ForceForegroundWindow(targetHwnd);
+            Console.WriteLine(string.Format("{{\"success\": true, \"title\": \"{0}\", \"handle\": \"{1}\", \"isMaximized\": {2}}}",
+                EscapeJson(actualTitle), targetHwnd, IsZoomed(targetHwnd) ? "true" : "false"));
+        }
+
+        static void MinimizeWindowCmd(string titleFilter) {
+            IntPtr hDesk = EnsureInteractiveDesktop();
+            IntPtr targetHwnd;
+            string actualTitle;
+
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                return;
+            }
+
+            ShowWindow(targetHwnd, SW_SHOWMINIMIZED);
+            Console.WriteLine(string.Format("{{\"success\": true, \"title\": \"{0}\", \"handle\": \"{1}\", \"isMinimized\": {2}}}",
+                EscapeJson(actualTitle), targetHwnd, IsIconic(targetHwnd) ? "true" : "false"));
+        }
+
+        static void RestoreWindowCmd(string titleFilter) {
+            IntPtr hDesk = EnsureInteractiveDesktop();
+            IntPtr targetHwnd;
+            string actualTitle;
+
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                return;
+            }
+
+            ShowWindow(targetHwnd, SW_RESTORE);
+            ForceForegroundWindow(targetHwnd);
+            Console.WriteLine(string.Format("{{\"success\": true, \"title\": \"{0}\", \"handle\": \"{1}\", \"isMaximized\": {2}}}",
+                EscapeJson(actualTitle), targetHwnd, IsZoomed(targetHwnd) ? "true" : "false"));
         }
 
         static void FocusWindowCmd(string titleFilter) {

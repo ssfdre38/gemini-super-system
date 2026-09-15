@@ -55,6 +55,30 @@ namespace GeminiSuperDesktop {
             public int Bottom;
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        struct WINDOWPLACEMENT {
+            public int length;
+            public int flags;
+            public int showCmd;
+            public POINT ptMinPosition;
+            public POINT ptMaxPosition;
+            public RECT rcNormalPosition;
+        }
+
+        [DllImport("user32.dll")]
+        static extern bool IsIconic(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        static extern bool IsZoomed(IntPtr hWnd);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool GetWindowPlacement(IntPtr hWnd, ref WINDOWPLACEMENT lpwndpl);
+
+        const int SW_SHOWMAXIMIZED = 3;
+        const int SW_SHOW = 5;
+        const int SW_RESTORE = 9;
+        const int WPF_RESTORETOMAXIMIZED = 0x0002;
+
         delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
 
         [DllImport("user32.dll")]
@@ -623,7 +647,23 @@ namespace GeminiSuperDesktop {
                 try { AttachThreadInput(appThread, targetThread, true); } catch {}
             }
 
-            ShowWindow(hWnd, 9); // SW_RESTORE
+            bool wasMaximized = IsZoomed(hWnd);
+            WINDOWPLACEMENT wp = new WINDOWPLACEMENT();
+            wp.length = Marshal.SizeOf(typeof(WINDOWPLACEMENT));
+            if (GetWindowPlacement(hWnd, ref wp)) {
+                if (wp.showCmd == SW_SHOWMAXIMIZED || (wp.flags & WPF_RESTORETOMAXIMIZED) != 0) {
+                    wasMaximized = true;
+                }
+            }
+
+            if (wasMaximized) {
+                ShowWindow(hWnd, SW_SHOWMAXIMIZED);
+            } else if (IsIconic(hWnd)) {
+                ShowWindow(hWnd, SW_RESTORE);
+            } else {
+                ShowWindow(hWnd, SW_SHOW);
+            }
+
             BringWindowToTop(hWnd);
             SetForegroundWindow(hWnd);
             SetActiveWindow(hWnd);

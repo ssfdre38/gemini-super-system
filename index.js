@@ -791,8 +791,17 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     } else if (args.focus) {
       actionResult = await bridge.focus(args.titleFilter);
       actionDesc = `🎯 Focused window "${args.titleFilter}"`;
+    } else if (args.maximize) {
+      actionResult = await bridge.maximizeWindow(args.titleFilter);
+      actionDesc = `🗖 Maximized window "${args.titleFilter}"`;
+    } else if (args.minimize) {
+      actionResult = await bridge.minimizeWindow(args.titleFilter);
+      actionDesc = `🗕 Minimized window "${args.titleFilter}"`;
+    } else if (args.restore) {
+      actionResult = await bridge.restoreWindow(args.titleFilter);
+      actionDesc = `🗗 Restored window "${args.titleFilter}"`;
     } else {
-      actionResult = { success: false, error: "No action specified (provide element, text, click, drag, scroll, hotkey, keys, focus, recordMouseSec, or trainMouseFile)" };
+      actionResult = { success: false, error: "No action specified (provide element, text, click, drag, scroll, hotkey, keys, focus, maximize, minimize, restore, recordMouseSec, or trainMouseFile)" };
       actionDesc = "⚠️ No action specified";
     }
 
