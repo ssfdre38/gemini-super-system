@@ -202,17 +202,32 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
       },
       {
         name: "super_desktop_capture",
-        description: "Captures an on-demand high-resolution PNG snapshot of a native Windows desktop window by title filter (e.g. Task Manager, NetBird, qBittorrent, Blender).",
+        description: "Captures an on-demand high-resolution PNG snapshot of a native Windows desktop window by title filter. Supports delta-based perceptual hash diffing and 768px downscaling to cap vision token consumption to 258 tokens per frame and 0 tokens on static screens.",
         inputSchema: {
           type: "object",
           properties: {
             titleFilter: {
               type: "string",
-              description: "Substring of the window title to capture."
+              description: "Substring of the window title to capture (e.g. 'Chrome', 'Discord', 'Task Manager', 'screen')."
             },
             outputPath: {
               type: "string",
               description: "Optional custom absolute path to save the PNG snapshot."
+            },
+            deltaOnly: {
+              type: "boolean",
+              default: false,
+              description: "If true, diffs against previous frame using a 16x16 perceptual hash. Returns changed:false and 0 tokens if unchanged."
+            },
+            maxDim: {
+              type: "number",
+              default: 768,
+              description: "Maximum dimension to resize image to (defaults to 768 for 258-token Gemini vision tiling; 0 for native resolution)."
+            },
+            diffThreshold: {
+              type: "number",
+              default: 0.01,
+              description: "Perceptual difference threshold (0.01 = 1% difference) required to trigger a keyframe update."
             }
           },
           required: ["titleFilter"]
@@ -391,6 +406,49 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         inputSchema: {
           type: "object",
           properties: {}
+        }
+      },
+      {
+        name: "super_narrate",
+        description: "Emits real-time speech narration events to eliminate dead air during execution, streaming directly to voice companions (Haven, Hephaestus, Gemini Live, Mission Control).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            text: {
+              type: "string",
+              description: "Speech narration text to utter to the user while work is being executed."
+            },
+            phase: {
+              type: "string",
+              enum: ["starting", "progress", "complete", "ambient", "error"],
+              default: "progress",
+              description: "Execution phase of the narration cue."
+            },
+            metadata: {
+              type: "object",
+              description: "Optional metadata context associated with this narration."
+            }
+          },
+          required: ["text"]
+        }
+      },
+      {
+        name: "super_interrupt",
+        description: "Signals an immediate frame-level interruption across the fleet to halt active execution queues, cancel pending tasks, and silence audio buffers for zero-lag conversational turns.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            source: {
+              type: "string",
+              default: "agent",
+              description: "Source signaling the interruption (e.g. 'user_voice', 'agent', 'safety_monitor')."
+            },
+            reason: {
+              type: "string",
+              default: "Interruption requested",
+              description: "Reason for the interruption."
+            }
+          }
         }
       }
     ]
@@ -582,14 +640,56 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === "super_desktop_capture") {
     const bridge = getDesktopBridge();
-    const res = await bridge.captureWindow(args.titleFilter, args.outputPath);
+    const isDelta = args.deltaOnly || args.diffThreshold !== undefined;
+    const maxDim = args.maxDim !== undefined ? args.maxDim : (isDelta ? 768 : 0);
+    const res = isDelta
+      ? await bridge.deltaCapture(args.titleFilter, args.outputPath, maxDim, args.diffThreshold ?? 0.01)
+      : await bridge.captureWindow(args.titleFilter, args.outputPath, maxDim);
+
+    let outputText;
+    if (!res || !res.success) {
+      outputText = `⚠️ Failed to capture window: ${res?.error || "Unknown error"}`;
+    } else if (res.changed === false) {
+      outputText = `📸 Optic Keyframe Preserved (Static Frame):\n• Target: "${res.title}" (${res.width}x${res.height})\n• Perceptual Diff: ${res.diff} (Below Threshold)\n• Vision Token Burn: 0 tokens (Capped)\n• Cached Frame: ${res.path}`;
+    } else {
+      outputText = `📸 Optic Keyframe Ingested:\n• Target: "${res.title}" (${res.width}x${res.height}${res.nativeWidth ? `, native ${res.nativeWidth}x${res.nativeHeight}` : ""})\n• Method: ${res.method || "dxgi_hardware_duplication"}\n• Perceptual Diff: ${res.diff !== undefined ? res.diff : "N/A"}\n• Vision Token Cost: ~${res.estimatedTokens || 258} tokens\n• Saved to: ${res.path}`;
+    }
+
     return {
       content: [
         {
           type: "text",
-          text: res.success
-            ? `📸 Native Window Captured: "${res.title}" (${res.width}x${res.height})\nMethod: ${res.method || "dxgi_hardware_duplication"}\nSaved to: ${res.path}`
-            : `⚠️ Failed to capture window: ${res.error || "Unknown error"}`
+          text: outputText
+        }
+      ]
+    };
+  }
+
+  if (name === "super_narrate") {
+    const entry = orch.emitNarration(args.text, args.phase || "progress", args.metadata || {});
+    if (orch.dashboard) {
+      orch.dashboard.broadcast({ type: "narration", entry });
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎙️ Speech Narration Emitted [${entry.phase.toUpperCase()}]: "${entry.text}" (ID: ${entry.id})`
+        }
+      ]
+    };
+  }
+
+  if (name === "super_interrupt") {
+    const result = orch.signalInterruption(args.source || "agent", args.reason || "Interruption requested");
+    if (orch.dashboard) {
+      orch.dashboard.broadcast({ type: "interruption", interruption: result.interruption, cancelledCount: result.cancelledCount });
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ Fleet Interruption Signaled:\n• Source: ${result.interruption.source}\n• Reason: "${result.interruption.reason}"\n• Cancelled Pending Tasks: ${result.cancelledCount}\n• Timestamp: ${result.interruption.timestamp}`
         }
       ]
     };

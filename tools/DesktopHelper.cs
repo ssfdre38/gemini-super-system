@@ -111,7 +111,7 @@ namespace GeminiSuperDesktop {
             return Marshal.GetDelegateForFunctionPointer(funcPtr, typeof(T)) as T;
         }
 
-        public static bool CaptureRegion(int cropX, int cropY, int cropW, int cropH, string destPath) {
+        public static Bitmap CaptureBitmap(int cropX, int cropY, int cropW, int cropH) {
             IntPtr pFactory = IntPtr.Zero;
             IntPtr pAdapter = IntPtr.Zero;
             IntPtr pDevice = IntPtr.Zero;
@@ -126,35 +126,35 @@ namespace GeminiSuperDesktop {
             try {
                 Guid factoryGuid = IID_IDXGIFactory1;
                 int hr = CreateDXGIFactory1(ref factoryGuid, out pFactory);
-                if (hr != 0) return false;
+                if (hr != 0) return null;
 
                 var enumAdapters = GetVtable<EnumAdapters1Delegate>(pFactory, 7);
                 hr = enumAdapters(pFactory, 0, out pAdapter);
-                if (hr != 0) return false;
+                if (hr != 0) return null;
 
                 int fl;
                 hr = D3D11CreateDevice(pAdapter, 0, IntPtr.Zero, 0, IntPtr.Zero, 0, 7, out pDevice, out fl, out pContext);
-                if (hr != 0) return false;
+                if (hr != 0) return null;
 
                 var enumOutputs = GetVtable<EnumOutputsDelegate>(pAdapter, 7);
                 hr = enumOutputs(pAdapter, 0, out pOutput);
-                if (hr != 0) return false;
+                if (hr != 0) return null;
 
                 var qi = GetVtable<QueryInterfaceDelegate>(pOutput, 0);
                 Guid output1Guid = IID_IDXGIOutput1;
                 hr = qi(pOutput, ref output1Guid, out pOutput1);
-                if (hr != 0) return false;
+                if (hr != 0) return null;
 
                 var duplicateOutput = GetVtable<DuplicateOutputDelegate>(pOutput1, 22);
                 hr = duplicateOutput(pOutput1, pDevice, out pDuplication);
-                if (hr != 0) return false;
+                if (hr != 0) return null;
 
                 var acquireNextFrame = GetVtable<AcquireNextFrameDelegate>(pDuplication, 8);
                 var releaseFrame = GetVtable<ReleaseFrameDelegate>(pDuplication, 14);
                 byte[] frameInfo = new byte[64];
 
-                for (int attempt = 0; attempt < 8; attempt++) {
-                    hr = acquireNextFrame(pDuplication, 150, frameInfo, out pResource);
+                for (int attempt = 0; attempt < 3; attempt++) {
+                    hr = acquireNextFrame(pDuplication, 40, frameInfo, out pResource);
                     long lastPresent = BitConverter.ToInt64(frameInfo, 0);
                     uint accum = BitConverter.ToUInt32(frameInfo, 16);
 
@@ -173,17 +173,17 @@ namespace GeminiSuperDesktop {
                     Program.POINT pt;
                     Program.GetCursorPos(out pt);
                     Program.SetCursorPos(pt.x + 1, pt.y);
-                    Thread.Sleep(15);
+                    Thread.Sleep(5);
                     Program.SetCursorPos(pt.x, pt.y);
-                    Thread.Sleep(20);
+                    Thread.Sleep(5);
                 }
 
-                if (hr != 0 || pResource == IntPtr.Zero) return false;
+                if (hr != 0 || pResource == IntPtr.Zero) return null;
 
                 var resQi = GetVtable<QueryInterfaceDelegate>(pResource, 0);
                 Guid tex2dGuid = IID_ID3D11Texture2D;
                 hr = resQi(pResource, ref tex2dGuid, out pDesktopTexture);
-                if (hr != 0) return false;
+                if (hr != 0) return null;
 
                 var getDesc = GetVtable<GetTexture2DDescDelegate>(pDesktopTexture, 10);
                 D3D11_TEXTURE2D_DESC texDesc = new D3D11_TEXTURE2D_DESC();
@@ -201,7 +201,7 @@ namespace GeminiSuperDesktop {
 
                 var createTexture2D = GetVtable<CreateTexture2DDelegate>(pDevice, 5);
                 hr = createTexture2D(pDevice, ref stagingDesc, IntPtr.Zero, out pStagingTexture);
-                if (hr != 0) return false;
+                if (hr != 0) return null;
 
                 var copyResource = GetVtable<CopyResourceDelegate>(pContext, 47);
                 copyResource(pContext, pStagingTexture, pDesktopTexture);
@@ -209,16 +209,12 @@ namespace GeminiSuperDesktop {
                 var map = GetVtable<MapDelegate>(pContext, 14);
                 D3D11_MAPPED_SUBRESOURCE mapped = new D3D11_MAPPED_SUBRESOURCE();
                 hr = map(pContext, pStagingTexture, 0, 1 /* D3D11_MAP_READ */, 0, out mapped);
-                if (hr != 0) return false;
+                if (hr != 0) return null;
 
                 int texW = (int)texDesc.Width;
                 int texH = (int)texDesc.Height;
 
-                string outDir = Path.GetDirectoryName(destPath);
-                if (!string.IsNullOrEmpty(outDir) && !Directory.Exists(outDir)) {
-                    Directory.CreateDirectory(outDir);
-                }
-
+                Bitmap resultBmp = null;
                 using (var fullBmp = new Bitmap(texW, texH, (int)mapped.RowPitch, PixelFormat.Format32bppRgb, mapped.pData)) {
                     bool needCrop = (cropW > 0 && cropH > 0) && (cropW < texW || cropH < texH || cropX > 0 || cropY > 0);
                     if (needCrop) {
@@ -230,22 +226,18 @@ namespace GeminiSuperDesktop {
                         int actualH = Math.Max(1, endY - startY);
 
                         Rectangle cropRect = new Rectangle(startX, startY, actualW, actualH);
-                        using (Bitmap cropped = fullBmp.Clone(cropRect, PixelFormat.Format32bppRgb)) {
-                            cropped.Save(destPath, ImageFormat.Png);
-                        }
+                        resultBmp = fullBmp.Clone(cropRect, PixelFormat.Format32bppRgb);
                     } else {
-                        using (Bitmap finalBmp = new Bitmap(fullBmp)) {
-                            finalBmp.Save(destPath, ImageFormat.Png);
-                        }
+                        resultBmp = new Bitmap(fullBmp);
                     }
                 }
 
                 var unmap = GetVtable<UnmapDelegate>(pContext, 15);
                 unmap(pContext, pStagingTexture, 0);
 
-                return true;
+                return resultBmp;
             } catch {
-                return false;
+                return null;
             } finally {
                 if (pStagingTexture != IntPtr.Zero) {
                     try { GetVtable<ReleaseDelegate>(pStagingTexture, 2)(pStagingTexture); } catch {}
@@ -280,6 +272,22 @@ namespace GeminiSuperDesktop {
                 if (pFactory != IntPtr.Zero) {
                     try { GetVtable<ReleaseDelegate>(pFactory, 2)(pFactory); } catch {}
                 }
+            }
+        }
+
+        public static bool CaptureRegion(int cropX, int cropY, int cropW, int cropH, string destPath) {
+            try {
+                using (Bitmap bmp = CaptureBitmap(cropX, cropY, cropW, cropH)) {
+                    if (bmp == null) return false;
+                    string outDir = Path.GetDirectoryName(destPath);
+                    if (!string.IsNullOrEmpty(outDir) && !Directory.Exists(outDir)) {
+                        Directory.CreateDirectory(outDir);
+                    }
+                    bmp.Save(destPath, ImageFormat.Png);
+                    return true;
+                }
+            } catch {
+                return false;
             }
         }
     }
@@ -649,7 +657,7 @@ namespace GeminiSuperDesktop {
             }
 
             if (args.Length == 0) {
-                Console.WriteLine("{\"error\": \"Usage: desktop_helper [active | list | info | focus | type | paste | click_and_type | click | doubleclick | rightclick | drag | scroll | hotkey | capture | listchildren | scan | elements | findelement | clickelement]\"}");
+                Console.WriteLine("{\"error\": \"Usage: desktop_helper [active | list | info | focus | type | paste | click_and_type | click | doubleclick | rightclick | drag | scroll | hotkey | capture | deltacapture | listchildren | scan | elements | findelement | clickelement]\"}");
                 return;
             }
 
@@ -710,7 +718,12 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "hotkey" && args.Length >= 3) {
                 HotkeyWindow(args[1], args[2]);
             } else if (cmd == "capture" && args.Length >= 3) {
-                CaptureWindow(args[1], args[2]);
+                int maxDim = args.Length >= 4 ? int.Parse(args[3]) : 0;
+                CaptureWindow(args[1], args[2], maxDim);
+            } else if (cmd == "deltacapture" && args.Length >= 3) {
+                int maxDim = args.Length >= 4 ? int.Parse(args[3]) : 768;
+                double diffThresh = args.Length >= 5 ? double.Parse(args[4], System.Globalization.CultureInfo.InvariantCulture) : 0.01;
+                DeltaCaptureWindow(args[1], args[2], maxDim, diffThresh);
             } else if (cmd == "listchildren" && args.Length >= 2) {
                 ListChildWindows(args[1]);
             } else if (cmd == "scan" && args.Length >= 2) {
@@ -1464,7 +1477,134 @@ namespace GeminiSuperDesktop {
             }
         }
 
-        static void CaptureWindow(string titleFilter, string destPath) {
+        static Bitmap AcquireWindowBitmap(IntPtr targetHwnd, RECT r, out string captureMethod) {
+            captureMethod = "dxgi_hardware_duplication";
+            int w = r.Right - r.Left;
+            int h = r.Bottom - r.Top;
+            if (w <= 0 || h <= 0) return null;
+
+            // Tier 1: Hardware DirectX 11 Desktop Duplication (sub-2ms VRAM direct)
+            try {
+                Bitmap dxBmp = DxgiCaptureEngine.CaptureBitmap(r.Left, r.Top, w, h);
+                if (dxBmp != null) {
+                    return dxBmp;
+                }
+            } catch (Exception ex) {
+                Console.Error.WriteLine("DXGI Tier 1 fallback: " + ex.Message);
+            }
+
+            // Tier 2 & Tier 3 Fallbacks: Direct GDI or PrintWindow
+            try {
+                Bitmap bmp = new Bitmap(w, h, PixelFormat.Format32bppRgb);
+                using (var g = Graphics.FromImage(bmp)) {
+                    bool capturedDirect = false;
+                    try {
+                        int screenX = GetSystemMetrics(76);
+                        int screenY = GetSystemMetrics(77);
+                        int screenW = GetSystemMetrics(78);
+                        int screenH = GetSystemMetrics(79);
+                        if (screenW <= 0 || screenH <= 0) {
+                            screenX = 0; screenY = 0;
+                            screenW = GetSystemMetrics(0);
+                            screenH = GetSystemMetrics(1);
+                        }
+
+                        int srcX = Math.Max(screenX, r.Left);
+                        int srcY = Math.Max(screenY, r.Top);
+                        int destX = Math.Max(0, srcX - r.Left);
+                        int destY = Math.Max(0, srcY - r.Top);
+                        int right = Math.Min(screenX + screenW, r.Right);
+                        int bottom = Math.Min(screenY + screenH, r.Bottom);
+                        int copyW = Math.Max(0, right - srcX);
+                        int copyH = Math.Max(0, bottom - srcY);
+
+                        if (copyW > 0 && copyH > 0) {
+                            g.CopyFromScreen(srcX, srcY, destX, destY, new Size(copyW, copyH), CopyPixelOperation.SourceCopy);
+                            capturedDirect = true;
+                            captureMethod = "direct_gdi";
+                        }
+                    } catch {}
+
+                    if (!capturedDirect && targetHwnd != IntPtr.Zero) {
+                        IntPtr hdc = g.GetHdc();
+                        bool pwOk = PrintWindow(targetHwnd, hdc, 2); // PW_RENDERFULLCONTENT
+                        g.ReleaseHdc(hdc);
+                        if (pwOk) {
+                            captureMethod = "printwindow";
+                        } else {
+                            g.CopyFromScreen(r.Left, r.Top, 0, 0, new Size(w, h), CopyPixelOperation.SourceCopy);
+                            captureMethod = "copy_screen_fallback";
+                        }
+                    }
+                }
+                return bmp;
+            } catch (Exception ex) {
+                Console.Error.WriteLine("GDI Fallback error: " + ex.Message);
+                return null;
+            }
+        }
+
+        static byte[] ComputePerceptualHash(Bitmap src) {
+            byte[] hash = new byte[256];
+            using (Bitmap thumb = new Bitmap(16, 16, PixelFormat.Format24bppRgb)) {
+                using (Graphics g = Graphics.FromImage(thumb)) {
+                    g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.Bilinear;
+                    g.DrawImage(src, 0, 0, 16, 16);
+                }
+                int idx = 0;
+                for (int y = 0; y < 16; y++) {
+                    for (int x = 0; x < 16; x++) {
+                        Color c = thumb.GetPixel(x, y);
+                        byte lum = (byte)((c.R * 299 + c.G * 587 + c.B * 114) / 1000);
+                        hash[idx++] = lum;
+                    }
+                }
+            }
+            return hash;
+        }
+
+        static double ComputeHashDiff(byte[] h1, byte[] h2) {
+            if (h1 == null || h2 == null || h1.Length != h2.Length) return 1.0;
+            long totalDiff = 0;
+            for (int i = 0; i < h1.Length; i++) {
+                totalDiff += Math.Abs((int)h1[i] - (int)h2[i]);
+            }
+            return (double)totalDiff / (h1.Length * 255.0);
+        }
+
+        static Bitmap ScaleBitmapPreserveAspect(Bitmap src, int maxDim) {
+            if (maxDim <= 0 || (src.Width <= maxDim && src.Height <= maxDim)) {
+                return new Bitmap(src);
+            }
+            int targetW, targetH;
+            if (src.Width >= src.Height) {
+                targetW = maxDim;
+                targetH = Math.Max(1, (int)Math.Round((double)src.Height * maxDim / src.Width));
+            } else {
+                targetH = maxDim;
+                targetW = Math.Max(1, (int)Math.Round((double)src.Width * maxDim / src.Height));
+            }
+            Bitmap scaled = new Bitmap(targetW, targetH, PixelFormat.Format24bppRgb);
+            using (Graphics g = Graphics.FromImage(scaled)) {
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                g.DrawImage(src, 0, 0, targetW, targetH);
+            }
+            return scaled;
+        }
+
+        static string SanitizeOpticsKey(string input) {
+            if (string.IsNullOrEmpty(input)) return "screen";
+            StringBuilder sb = new StringBuilder();
+            foreach (char c in input) {
+                if (char.IsLetterOrDigit(c) || c == '_' || c == '-') sb.Append(c);
+                else sb.Append('_');
+            }
+            return sb.ToString().ToLowerInvariant();
+        }
+
+        static void CaptureWindow(string titleFilter, string destPath, int maxDim) {
             IntPtr hDesk = EnsureInteractiveDesktop();
             IntPtr targetHwnd = IntPtr.Zero;
             string actualTitle = "Desktop";
@@ -1499,83 +1639,114 @@ namespace GeminiSuperDesktop {
                 return;
             }
 
-            string captureMethod = "dxgi_hardware_duplication";
-            bool captured = false;
-
-            // Tier 1: Hardware DirectX 11 Desktop Duplication (sub-2ms VRAM direct)
-            try {
-                captured = DxgiCaptureEngine.CaptureRegion(r.Left, r.Top, w, h, destPath);
-            } catch (Exception ex) {
-                Console.Error.WriteLine("DXGI Tier 1 fallback: " + ex.Message);
-                captured = false;
-            }
-
-            // Tier 2 & Tier 3 Fallbacks if DXGI unavailable or unsupported in environment
-            if (!captured) {
-                try {
-                    using (var bmp = new Bitmap(w, h)) {
-                        using (var g = Graphics.FromImage(bmp)) {
-                            bool capturedDirect = false;
-                            try {
-                                int screenX = GetSystemMetrics(76);
-                                int screenY = GetSystemMetrics(77);
-                                int screenW = GetSystemMetrics(78);
-                                int screenH = GetSystemMetrics(79);
-                                if (screenW <= 0 || screenH <= 0) {
-                                    screenX = 0; screenY = 0;
-                                    screenW = GetSystemMetrics(0);
-                                    screenH = GetSystemMetrics(1);
-                                }
-
-                                int srcX = Math.Max(screenX, r.Left);
-                                int srcY = Math.Max(screenY, r.Top);
-                                int destX = Math.Max(0, srcX - r.Left);
-                                int destY = Math.Max(0, srcY - r.Top);
-                                int right = Math.Min(screenX + screenW, r.Right);
-                                int bottom = Math.Min(screenY + screenH, r.Bottom);
-                                int copyW = Math.Max(0, right - srcX);
-                                int copyH = Math.Max(0, bottom - srcY);
-
-                                if (copyW > 0 && copyH > 0) {
-                                    g.CopyFromScreen(srcX, srcY, destX, destY, new Size(copyW, copyH), CopyPixelOperation.SourceCopy);
-                                    capturedDirect = true;
-                                    captureMethod = "direct_gdi";
-                                }
-                            } catch {}
-
-                            if (!capturedDirect && targetHwnd != IntPtr.Zero) {
-                                IntPtr hdc = g.GetHdc();
-                                bool pwOk = PrintWindow(targetHwnd, hdc, 2); // PW_RENDERFULLCONTENT
-                                g.ReleaseHdc(hdc);
-                                if (pwOk) {
-                                    captureMethod = "printwindow";
-                                } else {
-                                    g.CopyFromScreen(r.Left, r.Top, 0, 0, new Size(w, h), CopyPixelOperation.SourceCopy);
-                                    captureMethod = "copy_screen_fallback";
-                                }
-                            }
-                        }
-
-                        string dir = Path.GetDirectoryName(destPath);
-                        if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) {
-                            Directory.CreateDirectory(dir);
-                        }
-                        bmp.Save(destPath, ImageFormat.Png);
-                        captured = true;
-                    }
-                } catch (Exception ex) {
-                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            string captureMethod;
+            using (Bitmap rawBmp = AcquireWindowBitmap(targetHwnd, r, out captureMethod)) {
+                if (rawBmp == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"All 3 capture tiers failed\"}");
                     return;
+                }
+
+                using (Bitmap finalBmp = maxDim > 0 ? ScaleBitmapPreserveAspect(rawBmp, maxDim) : new Bitmap(rawBmp)) {
+                    string dir = Path.GetDirectoryName(destPath);
+                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) {
+                        Directory.CreateDirectory(dir);
+                    }
+                    finalBmp.Save(destPath, ImageFormat.Png);
+
+                    string escTitle = EscapeJson(actualTitle);
+                    string escPath = destPath.Replace("\\", "/");
+                    Console.WriteLine(string.Format("{{\"success\": true, \"title\": \"{0}\", \"width\": {1}, \"height\": {2}, \"nativeWidth\": {3}, \"nativeHeight\": {4}, \"method\": \"{5}\", \"fore\": \"{6}\", \"target\": \"{7}\", \"path\": \"{8}\"}}",
+                        escTitle, finalBmp.Width, finalBmp.Height, w, h, captureMethod, GetForegroundWindow(), targetHwnd, escPath));
+                }
+            }
+        }
+
+        static void DeltaCaptureWindow(string titleFilter, string destPath, int maxDim, double diffThreshold) {
+            IntPtr hDesk = EnsureInteractiveDesktop();
+            IntPtr targetHwnd = IntPtr.Zero;
+            string actualTitle = "Desktop";
+            bool fullDesktop = string.IsNullOrEmpty(titleFilter) ||
+                               titleFilter.Equals("desktop", StringComparison.OrdinalIgnoreCase) ||
+                               titleFilter.Equals("screen", StringComparison.OrdinalIgnoreCase);
+
+            RECT r = new RECT();
+            if (!fullDesktop) {
+                if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                    return;
+                }
+                ForceForegroundWindow(targetHwnd);
+                System.Threading.Thread.Sleep(60);
+                GetWindowRect(targetHwnd, out r);
+            } else {
+                r.Left = 0;
+                r.Top = 0;
+                r.Right = GetSystemMetrics(78); // SM_CXVIRTUALSCREEN
+                r.Bottom = GetSystemMetrics(79); // SM_CYVIRTUALSCREEN
+                if (r.Right <= 0 || r.Bottom <= 0) {
+                    r.Right = GetSystemMetrics(0);
+                    r.Bottom = GetSystemMetrics(1);
                 }
             }
 
-            if (captured) {
-                string escTitle = EscapeJson(actualTitle);
-                string escPath = destPath.Replace("\\", "/");
-                Console.WriteLine(string.Format("{{\"success\": true, \"title\": \"{0}\", \"width\": {1}, \"height\": {2}, \"method\": \"{3}\", \"fore\": \"{4}\", \"target\": \"{5}\", \"path\": \"{6}\"}}",
-                    escTitle, w, h, captureMethod, GetForegroundWindow(), targetHwnd, escPath));
-            } else {
-                Console.WriteLine("{\"success\": false, \"error\": \"All 3 capture tiers failed\"}");
+            int w = r.Right - r.Left;
+            int h = r.Bottom - r.Top;
+            if (w <= 0 || h <= 0) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Invalid window geometry\"}");
+                return;
+            }
+
+            string captureMethod;
+            using (Bitmap rawBmp = AcquireWindowBitmap(targetHwnd, r, out captureMethod)) {
+                if (rawBmp == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"All 3 capture tiers failed\"}");
+                    return;
+                }
+
+                byte[] newHash = ComputePerceptualHash(rawBmp);
+                string hashFile = Path.Combine(Path.GetTempPath(), "gemini_optics_" + SanitizeOpticsKey(titleFilter) + ".hash");
+                double diff = 1.0;
+                bool hasOld = false;
+
+                if (File.Exists(hashFile)) {
+                    try {
+                        byte[] oldHash = File.ReadAllBytes(hashFile);
+                        if (oldHash.Length == newHash.Length) {
+                            diff = ComputeHashDiff(newHash, oldHash);
+                            hasOld = true;
+                        }
+                    } catch {}
+                }
+
+                if (hasOld && diff < diffThreshold) {
+                    string escT = EscapeJson(actualTitle);
+                    string escP = destPath.Replace("\\", "/");
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"changed\": false, \"diff\": {0}, \"estimatedTokens\": 0, \"title\": \"{1}\", \"width\": {2}, \"height\": {3}, \"method\": \"{4}\", \"path\": \"{5}\"}}",
+                        diff.ToString("F4", System.Globalization.CultureInfo.InvariantCulture),
+                        escT, w, h, captureMethod, escP));
+                    return;
+                }
+
+                try {
+                    File.WriteAllBytes(hashFile, newHash);
+                } catch {}
+
+                int targetMax = maxDim > 0 ? maxDim : 768;
+                using (Bitmap scaledBmp = ScaleBitmapPreserveAspect(rawBmp, targetMax)) {
+                    string dir = Path.GetDirectoryName(destPath);
+                    if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) {
+                        Directory.CreateDirectory(dir);
+                    }
+                    scaledBmp.Save(destPath, ImageFormat.Png);
+
+                    string escTitle = EscapeJson(actualTitle);
+                    string escPath = destPath.Replace("\\", "/");
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"changed\": true, \"diff\": {0}, \"estimatedTokens\": 258, \"title\": \"{1}\", \"width\": {2}, \"height\": {3}, \"nativeWidth\": {4}, \"nativeHeight\": {5}, \"method\": \"{6}\", \"fore\": \"{7}\", \"target\": \"{8}\", \"path\": \"{9}\"}}",
+                        diff.ToString("F4", System.Globalization.CultureInfo.InvariantCulture),
+                        escTitle, scaledBmp.Width, scaledBmp.Height, w, h, captureMethod, GetForegroundWindow(), targetHwnd, escPath));
+                }
             }
         }
 
