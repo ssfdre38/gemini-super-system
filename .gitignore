@@ -34,3 +34,12 @@ desktop.ini
 # Test outputs
 test-output/
 coverage/
+
+# Credentials & Environment Variables (Private)
+.env
+.env.*
+*.key
+*.pem
+*.secret
+*.credential
+credentials.json

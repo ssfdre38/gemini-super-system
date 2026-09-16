@@ -12,7 +12,8 @@
     "cli": "node index.js --cli",
     "test": "node test/run-tests.js",
     "lint": "node --check index.js lib/*.js test/*.js scripts/*.js",
-    "build:sea": "node scripts/build_standalone.js"
+    "build:sea": "node scripts/build_standalone.js",
+    "deploy:site": "python scripts/deploy_site.py"
   },
   "repository": {
     "type": "git",
