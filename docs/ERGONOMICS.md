@@ -56,15 +56,20 @@ When reading code, inspecting logs, or scanning documents, human operators do no
 
 ---
 
-## 📊 Personalized Motor Profile (`data/daniel_profile.json`)
+## 📊 Personalized Reference Profile (`data/daniel_profile.json`)
 
-Through interactive telemetry calibration, the engine fits its physical constants directly from the operator's actual hand movements:
+Rather than forcing every developer to start from cold, robotic scratch, **Daniel Elliott's personal kinematic profile serves as the default, pre-calibrated reference baseline** for the entire Gemini Super System (mirrored directly as [`data/human_profile.json`](file:///C:/Users/admin/source/gemini-super-system/data/human_profile.json)):
 
-| Parameter | Fitted Value | Description |
+> *"My profile is the default baseline for others to build on top of. That way, anyone cloning or deploying the system has a solid, pre-calibrated foundation out of the box and doesn't have to start from scratch."*  
+> — **Daniel Elliott**
+
+### Fitted Baseline Telemetry Constants
+
+| Parameter | Baseline Value | Description |
 | :--- | :--- | :--- |
 | **Fitts's Law Intercept ($A$)** | `20.00 ms` | Initial neuromotor impulse reaction time |
 | **Fitts's Law Slope ($B$)** | `113.71 ms/bit` | Hand movement deceleration rate across target distance |
-| **Path Curvature ($\\kappa$)** | `0.1211` | Natural arc factor between endpoints |
+| **Path Curvature ($\\kappa$)** | `0.1211` | Natural wrist arc factor between endpoints (~12% curvature) |
 | **Click Dwell Mean** | `180.00 ms` | Average duration left mouse switch is held depressed |
 | **Click Dwell Variance ($\\sigma$)** | `50.00 ms` | Standard deviation in human finger release timing |
 | **Micro-Jitter ($\\sigma$)** | `1.20 px` | Natural physiological tremor over long strokes |
@@ -73,6 +78,23 @@ Through interactive telemetry calibration, the engine fits its physical constant
 | **Wheel Delta per Click** | `120 units` | Standard Win32 hardware detent notch (`WHEEL_DELTA`) |
 | **Single Scroll Dwell** | `280.00 ms` | Saccadic eye fixation pause between single notches |
 | **Kinetic Wheel Decay** | `1.1500` | Logarithmic deceleration across continuous bursts |
+
+---
+
+## 🛠️ Building Your Own Profile on Top of the Baseline
+
+Users and developers can either use Daniel's baseline immediately with zero setup, or fine-tune the engine to match their own specific biomechanics, DPI settings, or specialized input devices (e.g. trackballs, vertical mice):
+
+```powershell
+# 1. Run interactive recording (move, click, and scroll naturally)
+.\tools\mouse_trainer.exe record 30 data\my_telemetry_raw.jsonl
+
+# 2. Fit your personal parameters into a custom profile
+.\tools\mouse_trainer.exe train data\my_telemetry_raw.jsonl data\my_profile.json
+
+# 3. Layer or activate as your active profile
+copy /Y data\my_profile.json data\human_profile.json
+```
 
 ---
 

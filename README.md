@@ -196,23 +196,27 @@ The compiled standalone binary (`tools/desktop_helper.exe`) can be run directly 
 
 ## 🦾 Biomechanical Human Kinematic Engine (`mouse_trainer.exe`)
 
-> *"It's not about bypassing human checks or bot detection—it's about making the agent's movements fluid and legible when working alongside a person, without violently transporting the window or page around."* — **Daniel Elliott**
+> *"It's not about bypassing human checks or bot detection—it's about making the agent's movements fluid and legible when working alongside a person, without violently transporting the window or page around... My profile is the default baseline for others to build on top of so they have a solid starting point out of the box and don't have to start from scratch."* — **Daniel Elliott**
 
-Eliminates robotic coordinate teleportation, synthetic input heuristics, and visual screen whiplash. Simulates real human motor dynamics powered by **Fitts's Law**, cubic Bézier wrist-arc curvature, Flash & Hogan minimum-jerk polynomials, calibrated single scroll clicks, and inertial kinetic scroll decay. See the full architectural specification in [`docs/ERGONOMICS.md`](file:///C:/Users/admin/source/gemini-super-system/docs/ERGONOMICS.md).
+Eliminates robotic coordinate teleportation, synthetic input heuristics, and visual screen whiplash. Simulates real human motor dynamics powered by **Fitts's Law**, cubic Bézier wrist-arc curvature, Flash & Hogan minimum-jerk polynomials, calibrated single scroll clicks (1 notch = 120 delta = 3 lines = 60px), and inertial kinetic scroll decay.
+
+### 🌟 Turnkey Reference Baseline (`data/human_profile.json`)
+The repository ships with **Daniel Elliott's calibrated motor telemetry** pre-packaged as the default baseline ([`data/human_profile.json`](file:///C:/Users/admin/source/gemini-super-system/data/human_profile.json)):
+* **Zero Cold Start**: Autonomous cursor navigation and reading scrolling feel immediately human out of the box.
+* **Extensible & Customizable**: Developers can layer their own biometric telemetry on top of Daniel's profile at any time:
 
 ```powershell
-# 1. Record real human telemetry via hybrid RDP-resilient station hook
-.\tools\mouse_trainer.exe record 45 data\daniel_raw.jsonl
-
-# 2. Train and fit Fitts's Law + click dwell + wheel decay parameters
-.\tools\mouse_trainer.exe train data\daniel_raw.jsonl data\daniel_profile.json
-
-# 3. Kinematic cursor glide to target window coordinates with natural wrist arc
+# 1. Use the pre-calibrated baseline immediately (no setup needed)
 .\tools\mouse_trainer.exe winmove data\human_profile.json Discord 500 500 left
+.\tools\mouse_trainer.exe winscroll data\human_profile.json Discord -120  # discrete single click (3 lines)
 
-# 4. Discrete single scroll clicks or inertial kinetic scroll decay inside target container
-.\tools\mouse_trainer.exe winscroll data\human_profile.json Discord -120
+# 2. Or record custom telemetry to build your own personal profile on top
+.\tools\mouse_trainer.exe record 30 data\my_raw.jsonl
+.\tools\mouse_trainer.exe train data\my_raw.jsonl data\my_profile.json
+copy /Y data\my_profile.json data\human_profile.json
 ```
+
+See the full architectural specification and mathematical derivation in [`docs/ERGONOMICS.md`](file:///C:/Users/admin/source/gemini-super-system/docs/ERGONOMICS.md).
 
 ---
 
