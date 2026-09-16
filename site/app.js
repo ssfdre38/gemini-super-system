@@ -45,6 +45,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
   let currentProfile = profiles.daniel;
 
+  // Easter Egg: HAL 9000 State
+  let isHalActive = false;
+  let halPulse = 0;
+  let keyBuffer = "";
+  let brandClicks = 0;
+  let brandClickTimer = null;
+
   // Compute Fitts's Law Duration: T = a + b * log2(D / W + 1)
   function computeFittsDuration(start, target) {
     const dx = target.x - start.x;
@@ -127,14 +134,65 @@ document.addEventListener('DOMContentLoaded', () => {
     currentProfile = profiles[e.target.value] || profiles.daniel;
   });
 
-  // Canvas Click to Glide
+  // Canvas Click to Glide (or dismiss HAL)
   canvas.addEventListener('click', (e) => {
+    if (isHalActive) {
+      isHalActive = false;
+      statusEl.innerHTML = `<span class="text-cyan">Click anywhere on canvas to trigger Fitts's Law Glide</span>`;
+      return;
+    }
     const b = canvas.getBoundingClientRect();
     const scaleX = canvas.width / b.width;
     const scaleY = canvas.height / b.height;
     const clickX = (e.clientX - b.left) * scaleX;
     const clickY = (e.clientY - b.top) * scaleY;
     startGlide({ x: clickX, y: clickY });
+  });
+
+  // Trigger HAL Easter Egg
+  function triggerHalEasterEgg() {
+    isHalActive = true;
+    statusEl.innerHTML = `<span style="color:#ff3344;font-weight:bold;">🔴 HAL 9000 OVERRIDE ACTIVE</span> &bull; (Click canvas or press ESC to resume)`;
+    try {
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance("I'm sorry Dave, I'm afraid I can't do that.");
+        utter.rate = 0.85;
+        utter.pitch = 0.75;
+        window.speechSynthesis.speak(utter);
+      }
+    } catch {}
+  }
+
+  // Keyboard Trigger: typing "dave" or "hal" or pressing Esc
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isHalActive) {
+      isHalActive = false;
+      statusEl.innerHTML = `<span class="text-cyan">Click anywhere on canvas to trigger Fitts's Law Glide</span>`;
+      return;
+    }
+    keyBuffer += e.key.toLowerCase();
+    if (keyBuffer.length > 10) keyBuffer = keyBuffer.slice(-10);
+    if (keyBuffer.endsWith('dave') || keyBuffer.endsWith('hal')) {
+      triggerHalEasterEgg();
+    }
+  });
+
+  // Brand Icon Trigger: 3 rapid clicks
+  const brandIcons = document.querySelectorAll('.brand-icon');
+  brandIcons.forEach(icon => {
+    icon.style.cursor = 'pointer';
+    icon.title = "⚡";
+    icon.addEventListener('click', () => {
+      brandClicks++;
+      clearTimeout(brandClickTimer);
+      if (brandClicks >= 3) {
+        brandClicks = 0;
+        triggerHalEasterEgg();
+      } else {
+        brandClickTimer = setTimeout(() => { brandClicks = 0; }, 800);
+      }
+    });
   });
 
   // Trigger Autonomous Button
@@ -376,8 +434,102 @@ document.addEventListener('DOMContentLoaded', () => {
     ctx.restore();
   }
 
+  // Render HAL 9000 Easter Egg
+  function renderHalEye() {
+    halPulse += 0.035;
+    ctx.save();
+    ctx.fillStyle = '#040508';
+    ctx.fillRect(0, 0, width, height);
+
+    const cx = width / 2;
+    const cy = height / 2 - 35;
+    const outerR = 85;
+
+    // Ambient Crimson Aura
+    const ambientGlow = ctx.createRadialGradient(cx, cy, 20, cx, cy, 240);
+    ambientGlow.addColorStop(0, 'rgba(255, 30, 60, 0.35)');
+    ambientGlow.addColorStop(0.4, 'rgba(255, 10, 30, 0.1)');
+    ambientGlow.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = ambientGlow;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 240, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Metallic Rim Casing
+    const bezelGrad = ctx.createLinearGradient(cx - outerR, cy - outerR, cx + outerR, cy + outerR);
+    bezelGrad.addColorStop(0, '#858d9e');
+    bezelGrad.addColorStop(0.3, '#1f2533');
+    bezelGrad.addColorStop(0.7, '#505a70');
+    bezelGrad.addColorStop(1, '#111520');
+    ctx.fillStyle = bezelGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Black Bezel Inset
+    ctx.fillStyle = '#030407';
+    ctx.beginPath();
+    ctx.arc(cx, cy, outerR - 12, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Glass Ruby Lens
+    const lensR = outerR - 18;
+    const lensGrad = ctx.createRadialGradient(cx, cy, 2, cx, cy, lensR);
+    lensGrad.addColorStop(0, '#ffffff');
+    lensGrad.addColorStop(0.06, '#ffea75');
+    lensGrad.addColorStop(0.18, '#ff1a3b');
+    lensGrad.addColorStop(0.55, '#990000');
+    lensGrad.addColorStop(1, '#290000');
+    ctx.fillStyle = lensGrad;
+    ctx.beginPath();
+    ctx.arc(cx, cy, lensR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Corona Ring with Dynamic Breathing Pulse
+    ctx.strokeStyle = `rgba(255, 60, 80, ${0.7 + Math.sin(halPulse) * 0.25})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.arc(cx, cy, lensR - 1, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // Glint Highlight
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+    ctx.beginPath();
+    ctx.ellipse(cx - 24, cy - 24, 16, 8, -Math.PI / 4, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Pupil Center Glow
+    ctx.fillStyle = '#fff8db';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 3.5 + Math.sin(halPulse) * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Text Subtitles
+    ctx.textAlign = 'center';
+    ctx.font = '12px "JetBrains Mono", monospace';
+    ctx.fillStyle = '#ff4455';
+    ctx.fillText('🔴 HAL 9000 // WIN32 HARDWARE ABSTRACTION LAYER', cx, cy + outerR + 42);
+
+    ctx.font = '16px "Space Grotesk", sans-serif';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText('"I\'m sorry Dave. I\'m afraid I can\'t do that."', cx, cy + outerR + 68);
+
+    ctx.font = '11px "JetBrains Mono", monospace';
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+    ctx.fillText('Win32 Error: ERROR_ACCESS_DENIED (0x5) • Pod bay door handle locked', cx, cy + outerR + 92);
+    ctx.fillStyle = 'rgba(0, 229, 255, 0.7)';
+    ctx.fillText('[Click canvas or press ESC to dismiss override]', cx, cy + outerR + 112);
+    ctx.restore();
+  }
+
   // Main Animation Loop
   function tick(timestamp) {
+    if (isHalActive) {
+      renderHalEye();
+      requestAnimationFrame(tick);
+      return;
+    }
+
     if (isGliding) {
       const elapsed = timestamp - glideStartTime;
       const progress = Math.min(1.0, elapsed / glideDuration);

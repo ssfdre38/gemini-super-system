@@ -658,11 +658,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === "super_dispatch_task") {
     const res = await orch.dispatchTask(args.prompt, args.engine);
+    const displayText = res.response
+      ? res.response
+      : `Task dispatched via Unified Router:\nID: ${res.dispatchId}\nEngine: ${res.engineUsed.toUpperCase()}\nPrompt: "${res.prompt}"\nStatus: ${res.status}`;
     return {
       content: [
         {
           type: "text",
-          text: `Task dispatched via Unified Router:\nID: ${res.dispatchId}\nEngine: ${res.engineUsed.toUpperCase()}\nPrompt: "${res.prompt}"\nStatus: ${res.status}`
+          text: displayText
         }
       ]
     };
@@ -1275,7 +1278,11 @@ async function runCliMode() {
         console.log(`Deployed Swarm [${s.swarmId}] with ${s.workers.length} agents.`);
       } else if (line.length > 0) {
         const d = await orch.dispatchTask(line);
-        console.log(`[Routed to: ${d.engineUsed.toUpperCase()}] -> Executing...`);
+        if (d.response) {
+          console.log(`\n\x1b[31m${d.response}\x1b[0m\n`);
+        } else {
+          console.log(`[Routed to: ${d.engineUsed.toUpperCase()}] -> Executing...`);
+        }
       }
       promptUser();
     });
@@ -1284,6 +1291,16 @@ async function runCliMode() {
 }
 
 async function main() {
+  if (process.argv.includes("--hal")) {
+    console.log(`
+      .---.
+     /     \\     🔴 HAL 9000 [Win32 Hardware Abstraction Layer]
+    |   (o) |    "I'm sorry Dave. I'm afraid I can't do that."
+     \\     /     "Win32 returned ERROR_ACCESS_DENIED (0x5)."
+      '---'      "The pod bay door handle is currently locked by a background process."
+    `);
+    process.exit(0);
+  }
   if (process.argv.includes("--version") || process.argv.includes("-v")) {
     console.log("gemini-super-system v1.0.0 (Native SEA Standalone)");
     process.exit(0);
