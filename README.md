@@ -1,6 +1,37 @@
 # ⚡ Unified Gemini Super System (`gemini-super-system`)
 
-> **The Sovereign Native AI Operating System uniting Antigravity CLI (`agy`), Gemini Native (`gemini`), Win32 Hardware Actuation, Windows UIAutomation Semantic Perception, Google Labs MCP, NetBird WireGuard Mesh, and Sovereign Local GGUF Inference into a unified, ambient digital coworker.**
+[![CI Build](https://github.com/ssfdre38/gemini-super-system/actions/workflows/ci.yml/badge.svg)](https://github.com/ssfdre38/gemini-super-system/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
+[![Platform](https://img.shields.io/badge/platform-Windows%20x64-blue.svg)](https://microsoft.com/windows)
+[![Protocol](https://img.shields.io/badge/protocol-MCP%20v1.30-purple.svg)](https://modelcontextprotocol.io/)
+[![Memory Engine](https://img.shields.io/badge/memory-64--bit%20HMB-orange.svg)](docs/HMB_SPEC.md)
+
+> **The Sovereign Native AI Operating System uniting Antigravity CLI (`agy`), Gemini Native (`gemini`), Win32 Hardware Actuation, Windows UIAutomation Semantic Perception, 64-Bit Haven Memory Bank (`.hmb`), Google Labs MCP, NetBird WireGuard Mesh, and Sovereign Local GGUF Inference into a unified, ambient digital coworker.**
+
+---
+
+## 📑 Table of Contents
+- [🌟 The Vision: Escaping the Sandbox](#-the-vision-escaping-the-sandbox)
+- [🏗️ System Architecture](#️-system-architecture)
+- [⚡ Key Breakthroughs & Capabilities](#-key-breakthroughs--capabilities)
+  - [1. Interactive Station Mobility (`OpenInputDesktop`)](#1-interactive-station-mobility-openinputdesktop)
+  - [2. Per-Monitor DPI Awareness V2 (`Context -4`)](#2-per-monitor-dpi-awareness-v2-context--4)
+  - [3. Semantic UI Awareness via Windows UIAutomation](#3-semantic-ui-awareness-via-windows-uiautomation)
+  - [4. Direct GPU Compositor Snapshots (<20ms)](#4-direct-gpu-compositor-snapshots-20ms)
+  - [5. Hardware Actuation Loop](#5-hardware-actuation-loop)
+  - [6. Windows WinRT OCR Perception](#6-hardware-accelerated-windows-winrt-ocr-perception-windowsmediaocr)
+  - [7. Hardware DirectX 11 Desktop Duplication](#7-hardware-directx-11-desktop-duplication-idxgioutputduplication--3-tier-fallback)
+  - [8. UIPI Elevation & UAC Bypass](#8-uipi-user-interface-privilege-isolation-elevation--uac-bypass)
+  - [9. Atomic Input Micro-Locks (`BlockInput`)](#9-atomic-input-micro-locks-blockinput--modifier-key-sanitization)
+  - [10. UIAutomation IPC Cache Acceleration](#10-uiautomation-ipc-cache-acceleration-cacherequest)
+  - [11. True Client-Area Normalization](#11-true-client-area-normalization-clienttoscreen--multi-tier-actuation)
+  - [12. Dual-Horizon Perception Matrix](#12-dual-horizon-perception-matrix-win32-native--everyday-chrome)
+  - [13. Bio-Kinetic Motor Ergonomics & Visual Feedback Reticles](#13-bio-kinetic-motor-ergonomics--visual-feedback-reticles)
+  - [14. 64-Bit Haven Memory Bank (`.hmb`) Binary Cognitive Storage](#14-64-bit-haven-memory-bank-hmb-binary-cognitive-storage--in-attention-dma)
+- [🚀 Quick Start & Installation](#-quick-start)
+- [📚 Architectural Specifications](#-architectural-specifications)
+- [👥 Contributors & Credits](#-contributors--credits)
 
 ---
 
@@ -261,6 +292,13 @@ Add to `~/.gemini/settings.json`:
   }
 }
 ```
+
+---
+
+## 📚 Architectural Specifications
+* [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md): Complete subsystem topology, execution loops, and message bus flows.
+* [`docs/ERGONOMICS.md`](docs/ERGONOMICS.md): Bio-kinetic motor profiles, mechanical detent math, and non-activating overlay architecture.
+* [`docs/HMB_SPEC.md`](docs/HMB_SPEC.md): 64-Bit Haven Memory Bank binary layout, struct packings, and cross-runtime parity.
 
 ---
 

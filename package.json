@@ -1,15 +1,48 @@
 {
   "name": "gemini-super-system",
   "version": "1.0.0",
-  "description": "",
+  "description": "Sovereign native AI operating system uniting Win32 hardware actuation, Windows UIAutomation semantic perception, 64-bit Haven Memory Bank (.hmb), Google Labs MCP, and local GGUF inference.",
   "main": "index.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+  "bin": {
+    "gemini-super": "./index.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "scripts": {
+    "start": "node index.js",
+    "dashboard": "node index.js --dashboard",
+    "cli": "node index.js --cli",
+    "test": "node test/run-tests.js",
+    "lint": "node --check index.js lib/*.js test/*.js scripts/*.js",
+    "build:sea": "node scripts/build_standalone.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ssfdre38/gemini-super-system.git"
+  },
+  "keywords": [
+    "ai",
+    "mcp",
+    "model-context-protocol",
+    "gemini",
+    "antigravity",
+    "win32",
+    "automation",
+    "ui-automation",
+    "ocr",
+    "memory-bank",
+    "hmb",
+    "ergonomics",
+    "fitts-law"
+  ],
+  "author": "Daniel Elliott <ssfdre38@gmail.com> (https://github.com/ssfdre38)",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/ssfdre38/gemini-super-system/issues"
+  },
+  "homepage": "https://github.com/ssfdre38/gemini-super-system#readme",
   "type": "commonjs",
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0"
   }
