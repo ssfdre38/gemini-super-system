@@ -54,6 +54,29 @@ When reading code, inspecting logs, or scanning documents, human operators do no
 * Physical mouse switches require mechanical depression and spring return. Human click dwell times naturally range between 80ms and 180ms.
 * By honoring real click dwell distributions, web applications, menus, and context toolbars register inputs reliably without race conditions or dropped event handlers.
 
+### 5. Translucent Visual Reticles & Bi-Directional Click Feedback
+> *"It's also a way to give visual cues to both the user and the agent, rather than just random mouse movements and guessing where you clicked."*  
+> — **Daniel Elliott**
+
+In standard desktop automation, clicks are invisible. Even with humanized cursor motion, the human partner cannot distinguish whether the cursor is casually hovering or actively triggering an input. Furthermore, multimodal vision models (like Gemini) taking subsequent screen snapshots have no visual ground truth to verify whether a click actually landed on the intended button or drifted off-target.
+
+Gemini Super System introduces **non-activating, click-through Win32 visual overlays**:
+* **Pre-Flight Destination Beacon (`ShowTargetBeacon`)**:
+  * As the cursor begins its minimum-jerk glide, a subtle translucent cyan target reticle illuminates the destination coordinate for the duration of the transit.
+  * The human operator immediately understands the agent's intent *before* the cursor arrives.
+* **Impact Click Ripple (`ShowClickRipple`)**:
+  * An expanding radial pulse wave (radius $6\text{px} \to 34\text{px}$) radiates outward at the exact millisecond of switch depression, fading over $240\text{ms}$.
+  * **Color-Coded Feedback**:
+    * **Left Click**: Electric Cyan (`Color.Cyan`)
+    * **Right Click**: Amber Gold (`Color.Gold`)
+    * **Middle Click**: Lime Green (`Color.LimeGreen`)
+* **Zero-Interference Win32 Architecture**:
+  * Enforces `WS_EX_TRANSPARENT (0x20)`: 100% click-through—the overlay never intercepts, delays, or absorbs mouse messages.
+  * Enforces `WS_EX_NOACTIVATE (0x08000000)`: Never steals window focus or deactivates the target application.
+  * Enforces `WS_EX_TOOLWINDOW (0x80)` & `WS_EX_TOPMOST (0x08)`: Floating z-order priority without cluttering Alt-Tab or the Windows taskbar.
+* **Visual Ground Truth for Multimodal Vision**:
+  * Screen snapshots ingested by Gemini's vision sensors directly capture the glowing ripple halo centered over the targeted element, providing mathematically verifiable ground truth that the action succeeded.
+
 ---
 
 ## 📊 Personalized Reference Profile (`data/daniel_profile.json`)

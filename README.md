@@ -198,19 +198,24 @@ The compiled standalone binary (`tools/desktop_helper.exe`) can be run directly 
 
 > *"It's not about bypassing human checks or bot detection—it's about making the agent's movements fluid and legible when working alongside a person, without violently transporting the window or page around... My profile is the default baseline for others to build on top of so they have a solid starting point out of the box and don't have to start from scratch."* — **Daniel Elliott**
 
-Eliminates robotic coordinate teleportation, synthetic input heuristics, and visual screen whiplash. Simulates real human motor dynamics powered by **Fitts's Law**, cubic Bézier wrist-arc curvature, Flash & Hogan minimum-jerk polynomials, calibrated single scroll clicks (1 notch = 120 delta = 3 lines = 60px), and inertial kinetic scroll decay.
+Eliminates robotic coordinate teleportation, synthetic input heuristics, and visual screen whiplash. Simulates real human motor dynamics powered by **Fitts's Law**, cubic Bézier wrist-arc curvature, Flash & Hogan minimum-jerk polynomials, calibrated single scroll clicks (1 notch = 120 delta = 3 lines = 60px), inertial kinetic scroll decay, and **translucent non-activating visual target beacons & click ripples** (`WS_EX_TRANSPARENT`).
 
 ### 🌟 Turnkey Reference Baseline (`data/human_profile.json`)
 The repository ships with **Daniel Elliott's calibrated motor telemetry** pre-packaged as the default baseline ([`data/human_profile.json`](file:///C:/Users/admin/source/gemini-super-system/data/human_profile.json)):
 * **Zero Cold Start**: Autonomous cursor navigation and reading scrolling feel immediately human out of the box.
+* **Bi-Directional Visual Ground Truth**: Emits non-activating destination beacons during transit and expanding color-coded click ripples on impact, giving both the human operator and multimodal vision models unambiguous visual feedback.
 * **Extensible & Customizable**: Developers can layer their own biometric telemetry on top of Daniel's profile at any time:
 
 ```powershell
-# 1. Use the pre-calibrated baseline immediately (no setup needed)
+# 1. Use the pre-calibrated baseline immediately (with visual beacons & ripples)
 .\tools\mouse_trainer.exe winmove data\human_profile.json Discord 500 500 left
 .\tools\mouse_trainer.exe winscroll data\human_profile.json Discord -120  # discrete single click (3 lines)
 
-# 2. Or record custom telemetry to build your own personal profile on top
+# 2. Test visual feedback overlays directly
+.\tools\mouse_trainer.exe beacon 500 500 400  # destination reticle
+.\tools\mouse_trainer.exe ripple 500 500 left # expanding cyan click pulse
+
+# 3. Or record custom telemetry to build your own personal profile on top
 .\tools\mouse_trainer.exe record 30 data\my_raw.jsonl
 .\tools\mouse_trainer.exe train data\my_raw.jsonl data\my_profile.json
 copy /Y data\my_profile.json data\human_profile.json

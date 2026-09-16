@@ -698,6 +698,11 @@ namespace GeminiSuperDesktop {
             double jitterFactor = 1.0 + (_rng.NextDouble() * 0.24 - 0.12);
             double totalDurationMs = Math.Max(120.0, Math.Min(800.0, baseDuration * jitterFactor));
 
+            // Show a brief translucent target beacon at destination so human partner and visual OCR see intent
+            if (!string.IsNullOrEmpty(clickButton)) {
+                ShowTargetBeacon(toX, toY, (int)totalDurationMs + 80);
+            }
+
             // 2. Synthesize Cubic Bézier Control Points with human wrist arc
             double curvature = Math.Max(0.03, SampleGaussian(prof.MeanCurvature, prof.CurvatureStdDev));
             int arcDirection = _rng.NextDouble() > 0.5 ? 1 : -1;
@@ -799,7 +804,194 @@ namespace GeminiSuperDesktop {
                 scrolledTotal, remainingTicks, totalLines, curInterval.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)));
         }
 
+        #region Translucent Target Reticle & Click Ripple Overlay
+        class ClickRippleOverlay : Form {
+            int _centerX;
+            int _centerY;
+            Color _ringColor;
+            int _frame = 0;
+            const int MAX_FRAMES = 14;
+            System.Windows.Forms.Timer _animTimer;
+
+            public ClickRippleOverlay(int x, int y, Color color) {
+                _centerX = x;
+                _centerY = y;
+                _ringColor = color;
+
+                this.FormBorderStyle = FormBorderStyle.None;
+                this.ShowInTaskbar = false;
+                this.StartPosition = FormStartPosition.Manual;
+                this.Size = new Size(80, 80);
+                this.Location = new Point(x - 40, y - 40);
+                this.BackColor = Color.Magenta;
+                this.TransparencyKey = Color.Magenta;
+                this.TopMost = true;
+                this.DoubleBuffered = true;
+
+                _animTimer = new System.Windows.Forms.Timer();
+                _animTimer.Interval = 16;
+                _animTimer.Tick += delegate {
+                    _frame++;
+                    if (_frame >= MAX_FRAMES) {
+                        _animTimer.Stop();
+                        this.Close();
+                    } else {
+                        this.Invalidate();
+                    }
+                };
+            }
+
+            protected override CreateParams CreateParams {
+                get {
+                    CreateParams cp = base.CreateParams;
+                    cp.ExStyle |= 0x00000020; // WS_EX_TRANSPARENT (clicks pass straight through)
+                    cp.ExStyle |= 0x00080000; // WS_EX_LAYERED
+                    cp.ExStyle |= 0x08000000; // WS_EX_NOACTIVATE (never takes focus)
+                    cp.ExStyle |= 0x00000008; // WS_EX_TOPMOST
+                    cp.ExStyle |= 0x00000080; // WS_EX_TOOLWINDOW
+                    return cp;
+                }
+            }
+
+            protected override void OnPaint(PaintEventArgs e) {
+                base.OnPaint(e);
+                Graphics g = e.Graphics;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+                float progress = (float)_frame / MAX_FRAMES;
+                int radius = (int)(6 + progress * 28);
+                int alpha = (int)(255 * (1.0f - progress));
+                if (alpha < 0) alpha = 0;
+
+                Color c = Color.FromArgb(Math.Max(0, Math.Min(255, alpha)), _ringColor);
+                using (Pen pen = new Pen(c, 2.5f)) {
+                    g.DrawEllipse(pen, 40 - radius, 40 - radius, radius * 2, radius * 2);
+                }
+
+                int coreRadius = (int)(4 * (1.0f - progress * 0.6f));
+                if (coreRadius > 0) {
+                    using (Brush b = new SolidBrush(c)) {
+                        g.FillEllipse(b, 40 - coreRadius, 40 - coreRadius, coreRadius * 2, coreRadius * 2);
+                    }
+                }
+            }
+
+            protected override void OnShown(EventArgs e) {
+                base.OnShown(e);
+                _animTimer.Start();
+            }
+        }
+
+        class TargetBeaconOverlay : Form {
+            int _centerX;
+            int _centerY;
+            Color _beaconColor;
+            int _durationMs;
+            int _elapsed = 0;
+            System.Windows.Forms.Timer _timer;
+
+            public TargetBeaconOverlay(int x, int y, Color color, int durationMs) {
+                _centerX = x;
+                _centerY = y;
+                _beaconColor = color;
+                _durationMs = durationMs;
+
+                this.FormBorderStyle = FormBorderStyle.None;
+                this.ShowInTaskbar = false;
+                this.StartPosition = FormStartPosition.Manual;
+                this.Size = new Size(60, 60);
+                this.Location = new Point(x - 30, y - 30);
+                this.BackColor = Color.Magenta;
+                this.TransparencyKey = Color.Magenta;
+                this.TopMost = true;
+                this.DoubleBuffered = true;
+
+                _timer = new System.Windows.Forms.Timer();
+                _timer.Interval = 20;
+                _timer.Tick += delegate {
+                    _elapsed += 20;
+                    if (_elapsed >= _durationMs) {
+                        _timer.Stop();
+                        this.Close();
+                    } else {
+                        this.Invalidate();
+                    }
+                };
+            }
+
+            protected override CreateParams CreateParams {
+                get {
+                    CreateParams cp = base.CreateParams;
+                    cp.ExStyle |= 0x00000020; // WS_EX_TRANSPARENT
+                    cp.ExStyle |= 0x00080000; // WS_EX_LAYERED
+                    cp.ExStyle |= 0x08000000; // WS_EX_NOACTIVATE
+                    cp.ExStyle |= 0x00000008; // WS_EX_TOPMOST
+                    cp.ExStyle |= 0x00000080; // WS_EX_TOOLWINDOW
+                    return cp;
+                }
+            }
+
+            protected override void OnPaint(PaintEventArgs e) {
+                base.OnPaint(e);
+                Graphics g = e.Graphics;
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+
+                double phase = (_elapsed % 600) / 600.0;
+                int r = (int)(10 + phase * 16);
+                int alpha = (int)(220 * (1.0 - phase));
+                if (alpha < 0) alpha = 0;
+
+                using (Pen pen = new Pen(Color.FromArgb(alpha, _beaconColor), 2.0f)) {
+                    g.DrawEllipse(pen, 30 - r, 30 - r, r * 2, r * 2);
+                }
+                using (Brush b = new SolidBrush(Color.FromArgb(200, _beaconColor))) {
+                    g.FillEllipse(b, 27, 27, 6, 6);
+                }
+            }
+
+            protected override void OnShown(EventArgs e) {
+                base.OnShown(e);
+                _timer.Start();
+            }
+        }
+
+        public static void ShowClickRipple(int x, int y, string button = null) {
+            try {
+                Color c = Color.Cyan;
+                if (button != null) {
+                    string b = button.ToLowerInvariant().Trim();
+                    if (b == "right") c = Color.Gold;
+                    else if (b == "middle") c = Color.LimeGreen;
+                }
+
+                Thread t = new Thread(() => {
+                    EnsureInteractiveDesktop();
+                    Application.Run(new ClickRippleOverlay(x, y, c));
+                });
+                t.SetApartmentState(ApartmentState.STA);
+                t.IsBackground = true;
+                t.Start();
+            } catch {}
+        }
+
+        public static void ShowTargetBeacon(int x, int y, int durationMs = 500) {
+            try {
+                Thread t = new Thread(() => {
+                    EnsureInteractiveDesktop();
+                    Application.Run(new TargetBeaconOverlay(x, y, Color.Cyan, durationMs));
+                });
+                t.SetApartmentState(ApartmentState.STA);
+                t.IsBackground = true;
+                t.Start();
+            } catch {}
+        }
+        #endregion
+
         static void PerformClick(string button, HumanKinematicProfile prof) {
+            POINT cur;
+            GetCursorPos(out cur);
+            ShowClickRipple(cur.x, cur.y, button);
+
             string b = button.ToLowerInvariant().Trim();
             uint downFlag = MOUSEEVENTF_LEFTDOWN;
             uint upFlag = MOUSEEVENTF_LEFTUP;
@@ -1198,6 +1390,20 @@ namespace GeminiSuperDesktop {
 
                     HumanKinematicProfile prof = LoadProfile(profPath);
                     HumanDrag(pFrom.x, pFrom.y, pTo.x, pTo.y, prof);
+                } else if (cmd == "ripple" && args.Length >= 3) {
+                    int rx = int.Parse(args[1]);
+                    int ry = int.Parse(args[2]);
+                    string btn = args.Length >= 4 ? args[3] : "left";
+                    ShowClickRipple(rx, ry, btn);
+                    Thread.Sleep(300);
+                    Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"ripple\", \"x\": {0}, \"y\": {1}, \"button\": \"{2}\"}}", rx, ry, btn));
+                } else if (cmd == "beacon" && args.Length >= 3) {
+                    int bx = int.Parse(args[1]);
+                    int by = int.Parse(args[2]);
+                    int dur = args.Length >= 4 ? int.Parse(args[3]) : 500;
+                    ShowTargetBeacon(bx, by, dur);
+                    Thread.Sleep(dur + 50);
+                    Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"beacon\", \"x\": {0}, \"y\": {1}, \"durationMs\": {2}}}", bx, by, dur));
                 } else {
                     Console.WriteLine("{\"error\": \"Invalid arguments for command: " + cmd + "\"}");
                 }
