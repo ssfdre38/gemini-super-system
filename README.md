@@ -196,20 +196,22 @@ The compiled standalone binary (`tools/desktop_helper.exe`) can be run directly 
 
 ## 🦾 Biomechanical Human Kinematic Engine (`mouse_trainer.exe`)
 
-Eliminates robotic coordinate teleportation, synthetic input heuristics, and anti-bot flags. Simulates real human motor dynamics powered by **Fitts's Law**, cubic Bézier wrist-arc curvature, Flash & Hogan minimum-jerk polynomials, and inertial kinetic scroll decay.
+> *"It's not about bypassing human checks or bot detection—it's about making the agent's movements fluid and legible when working alongside a person, without violently transporting the window or page around."* — **Daniel Elliott**
+
+Eliminates robotic coordinate teleportation, synthetic input heuristics, and visual screen whiplash. Simulates real human motor dynamics powered by **Fitts's Law**, cubic Bézier wrist-arc curvature, Flash & Hogan minimum-jerk polynomials, calibrated single scroll clicks, and inertial kinetic scroll decay. See the full architectural specification in [`docs/ERGONOMICS.md`](file:///C:/Users/admin/source/gemini-super-system/docs/ERGONOMICS.md).
 
 ```powershell
-# 1. Record 15 seconds of real human telemetry (WH_MOUSE_LL low-level hook)
-.\tools\mouse_trainer.exe record 15 data\daniel_telemetry.jsonl
+# 1. Record real human telemetry via hybrid RDP-resilient station hook
+.\tools\mouse_trainer.exe record 45 data\daniel_raw.jsonl
 
 # 2. Train and fit Fitts's Law + click dwell + wheel decay parameters
-.\tools\mouse_trainer.exe train data\daniel_telemetry.jsonl data\human_profile.json
+.\tools\mouse_trainer.exe train data\daniel_raw.jsonl data\daniel_profile.json
 
 # 3. Kinematic cursor glide to target window coordinates with natural wrist arc
 .\tools\mouse_trainer.exe winmove data\human_profile.json Discord 500 500 left
 
-# 4. Inertial kinetic scroll decay inside target window container
-.\tools\mouse_trainer.exe winscroll data\human_profile.json Discord -480
+# 4. Discrete single scroll clicks or inertial kinetic scroll decay inside target container
+.\tools\mouse_trainer.exe winscroll data\human_profile.json Discord -120
 ```
 
 ---

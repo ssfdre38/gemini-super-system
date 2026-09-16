@@ -224,22 +224,24 @@ namespace GeminiSuperDesktop {
 
         class TelemetrySinkWindow : Form {
             public TelemetrySinkWindow() {
-                this.WindowState = FormWindowState.Minimized;
-                this.ShowInTaskbar = false;
                 this.FormBorderStyle = FormBorderStyle.None;
-                this.Size = new Size(10, 10);
-            }
-
-            protected override void OnHandleCreated(EventArgs e) {
-                base.OnHandleCreated(e);
+                this.ShowInTaskbar = false;
+                this.StartPosition = FormStartPosition.Manual;
+                this.Location = new Point(-2000, -2000);
+                this.Size = new Size(16, 16);
+                this.Opacity = 0.01;
+                IntPtr h = this.Handle;
                 try {
                     RAWINPUTDEVICE[] rid = new RAWINPUTDEVICE[1];
                     rid[0].usUsagePage = 0x01; // Generic Desktop Controls
                     rid[0].usUsage = 0x02;     // Mouse
                     rid[0].dwFlags = 0x00000100; // RIDEV_INPUTSINK
-                    rid[0].hwndTarget = this.Handle;
-                    RegisterRawInputDevices(rid, 1, Marshal.SizeOf(typeof(RAWINPUTDEVICE)));
-                } catch {}
+                    rid[0].hwndTarget = h;
+                    bool reg = RegisterRawInputDevices(rid, 1, Marshal.SizeOf(typeof(RAWINPUTDEVICE)));
+                    Console.Error.WriteLine(string.Format("🟢 [RawInput] Sink registered to HWND {0}: {1}", h, reg));
+                } catch (Exception ex) {
+                    Console.Error.WriteLine("🔴 [RawInput] Registration error: " + ex.Message);
+                }
             }
 
             protected override void WndProc(ref Message m) {
@@ -251,17 +253,20 @@ namespace GeminiSuperDesktop {
                             IntPtr raw = Marshal.AllocHGlobal((int)dwSize);
                             if (GetRawInputData(m.LParam, 0x10000003, raw, ref dwSize, (uint)(IntPtr.Size == 8 ? 24 : 16)) == dwSize) {
                                 int headerSize = IntPtr.Size == 8 ? 24 : 16;
-                                ushort btnFlags = (ushort)Marshal.ReadInt16(raw, headerSize + 4);
-                                short btnData = Marshal.ReadInt16(raw, headerSize + 6);
-                                if ((btnFlags & 0x0400) != 0) { // RI_MOUSE_WHEEL
-                                    double t = _recordSw.Elapsed.TotalMilliseconds;
-                                    POINT cur;
-                                    GetCursorPos(out cur);
-                                    lock (_lockObj) {
-                                        _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"wheel\",\"delta\":{1},\"x\":{2},\"y\":{3}}}", t, btnData, cur.x, cur.y));
-                                        _wheelCount++;
-                                        _eventCount++;
-                                        _lastHookEventMs = (long)t;
+                                uint dwType = (uint)Marshal.ReadInt32(raw, 0);
+                                if (dwType == 0) { // RIM_TYPEMOUSE
+                                    ushort btnFlags = (ushort)Marshal.ReadInt16(raw, headerSize + 4);
+                                    short btnData = (short)Marshal.ReadInt16(raw, headerSize + 6);
+                                    if ((btnFlags & 0x0400) != 0) { // RI_MOUSE_WHEEL
+                                        double t = _recordSw.Elapsed.TotalMilliseconds;
+                                        POINT cur;
+                                        GetCursorPos(out cur);
+                                        lock (_lockObj) {
+                                            _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"wheel\",\"delta\":{1},\"x\":{2},\"y\":{3}}}", t, btnData, cur.x, cur.y));
+                                            _wheelCount++;
+                                            _eventCount++;
+                                            _lastHookEventMs = (long)t;
+                                        }
                                     }
                                 }
                             }
@@ -274,9 +279,8 @@ namespace GeminiSuperDesktop {
         }
 
         public static void RunRecord(int durationSec, string outputPath) {
-            EnsureInteractiveDesktop();
-            _proc = HookCallback;
-            _recordSw = new Stopwatch();
+            IntPtr hInp = OpenInputDesktop(0, false, 0x01FF);
+            Console.Error.WriteLine(string.Format("🟢 [InputDesktop] OpenInputDesktop: {0}", hInp));
 
             string dir = Path.GetDirectoryName(outputPath);
             if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) {
@@ -285,115 +289,137 @@ namespace GeminiSuperDesktop {
 
             _recordWriter = new StreamWriter(outputPath, false, Encoding.UTF8);
             _recordWriter.AutoFlush = true;
-            _recordSw.Start();
+            _recordSw = new Stopwatch();
             _recording = true;
+            _proc = HookCallback;
 
-            try {
-                _hookID = SetWindowsHookEx(WH_MOUSE_LL, _proc, IntPtr.Zero, 0);
-            } catch {}
-
-            Thread poller = new Thread(() => {
-                EnsureInteractiveDesktop();
-                POINT lastPt = new POINT { x = -1, y = -1 };
-                bool lastLDown = false;
-                bool lastRDown = false;
-                long lDownTime = 0;
-                long rDownTime = 0;
-
-                while (_recording) {
-                    try {
-                        double t = _recordSw.Elapsed.TotalMilliseconds;
-                        POINT cur;
-                        if (GetCursorPos(out cur)) {
-                            if (cur.x != lastPt.x || cur.y != lastPt.y) {
-                                lastPt = cur;
-                                lock (_lockObj) {
-                                    if (t - _lastHookEventMs > 40) {
-                                        _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"move\",\"x\":{1},\"y\":{2}}}", t, cur.x, cur.y));
-                                        _moveCount++;
-                                        _eventCount++;
-                                    }
-                                }
-                            }
-                        }
-
-                        bool curLDown = (GetAsyncKeyState(1) & 0x8000) != 0;
-                        if (curLDown != lastLDown) {
-                            lastLDown = curLDown;
-                            if (curLDown) {
-                                lDownTime = (long)t;
-                                lock (_lockObj) {
-                                    if (t - _lastHookEventMs > 40) {
-                                        _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"down\",\"button\":\"left\",\"x\":{1},\"y\":{2}}}", t, cur.x, cur.y));
-                                        _clickCount++;
-                                        _eventCount++;
-                                    }
-                                }
-                            } else {
-                                long dwell = lDownTime > 0 ? (long)t - lDownTime : 80;
-                                lock (_lockObj) {
-                                    if (t - _lastHookEventMs > 40) {
-                                        _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"up\",\"button\":\"left\",\"x\":{1},\"y\":{2},\"dwellMs\":{3}}}", t, cur.x, cur.y, dwell));
-                                        _eventCount++;
-                                    }
-                                }
-                            }
-                        }
-
-                        bool curRDown = (GetAsyncKeyState(2) & 0x8000) != 0;
-                        if (curRDown != lastRDown) {
-                            lastRDown = curRDown;
-                            if (curRDown) {
-                                rDownTime = (long)t;
-                                lock (_lockObj) {
-                                    if (t - _lastHookEventMs > 40) {
-                                        _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"down\",\"button\":\"right\",\"x\":{1},\"y\":{2}}}", t, cur.x, cur.y));
-                                        _clickCount++;
-                                        _eventCount++;
-                                    }
-                                }
-                            } else {
-                                long dwell = rDownTime > 0 ? (long)t - rDownTime : 80;
-                                lock (_lockObj) {
-                                    if (t - _lastHookEventMs > 40) {
-                                        _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"up\",\"button\":\"right\",\"x\":{1},\"y\":{2},\"dwellMs\":{3}}}", t, cur.x, cur.y, dwell));
-                                        _eventCount++;
-                                    }
-                                }
-                            }
-                        }
-                    } catch {}
-                    Thread.Sleep(8);
+            Thread recordThread = new Thread(() => {
+                if (hInp != IntPtr.Zero) {
+                    bool set = SetThreadDesktop(hInp);
+                    Console.Error.WriteLine(string.Format("🟢 [RecordThread] SetThreadDesktop({0}): {1}", hInp, set));
                 }
-            });
-            poller.IsBackground = true;
-            poller.Start();
 
-            Console.Error.WriteLine(string.Format("🟢 [Mouse Trainer] High-resolution hybrid hook + RawInput + 125Hz poller active. Recording for {0}s...", durationSec));
-            Console.Error.WriteLine(string.Format("   Saving telemetry stream to: {0}", outputPath));
+                _recordSw.Start();
 
-            System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
-            timer.Interval = durationSec * 1000;
-            timer.Tick += delegate {
-                timer.Stop();
-                _recording = false;
-                if (_hookID != IntPtr.Zero) {
-                    try { UnhookWindowsHookEx(_hookID); } catch {}
-                    _hookID = IntPtr.Zero;
-                }
-                _recordSw.Stop();
-                lock (_lockObj) {
-                    if (_recordWriter != null) {
-                        _recordWriter.Flush();
-                        _recordWriter.Close();
-                        _recordWriter = null;
+                try {
+                    using (Process curProcess = Process.GetCurrentProcess())
+                    using (ProcessModule curModule = curProcess.MainModule) {
+                        _hookID = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(curModule.ModuleName), 0);
+                        Console.Error.WriteLine(string.Format("🟢 [Hook] SetWindowsHookEx ({0}): {1} Error: {2}", curModule.ModuleName, _hookID, Marshal.GetLastWin32Error()));
                     }
+                } catch (Exception ex) {
+                    Console.Error.WriteLine("🔴 [Hook] Exception: " + ex.Message);
                 }
-                Application.Exit();
-            };
-            timer.Start();
 
-            Application.Run(new TelemetrySinkWindow());
+                Thread poller = new Thread(() => {
+                    if (hInp != IntPtr.Zero) {
+                        SetThreadDesktop(hInp);
+                    }
+                    POINT lastPt = new POINT { x = -1, y = -1 };
+                    bool lastLDown = false;
+                    bool lastRDown = false;
+                    long lDownTime = 0;
+                    long rDownTime = 0;
+
+                    while (_recording) {
+                        try {
+                            double t = _recordSw.Elapsed.TotalMilliseconds;
+                            POINT cur;
+                            if (GetCursorPos(out cur)) {
+                                if (cur.x != lastPt.x || cur.y != lastPt.y) {
+                                    lastPt = cur;
+                                    lock (_lockObj) {
+                                        if (t - _lastHookEventMs > 40) {
+                                            _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"move\",\"x\":{1},\"y\":{2}}}", t, cur.x, cur.y));
+                                            _moveCount++;
+                                            _eventCount++;
+                                        }
+                                    }
+                                }
+                            }
+
+                            bool curLDown = (GetAsyncKeyState(1) & 0x8000) != 0;
+                            if (curLDown != lastLDown) {
+                                lastLDown = curLDown;
+                                if (curLDown) {
+                                    lDownTime = (long)t;
+                                    lock (_lockObj) {
+                                        if (t - _lastHookEventMs > 40) {
+                                            _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"down\",\"button\":\"left\",\"x\":{1},\"y\":{2}}}", t, cur.x, cur.y));
+                                            _clickCount++;
+                                            _eventCount++;
+                                        }
+                                    }
+                                } else {
+                                    long dwell = lDownTime > 0 ? (long)t - lDownTime : 80;
+                                    lock (_lockObj) {
+                                        if (t - _lastHookEventMs > 40) {
+                                            _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"up\",\"button\":\"left\",\"x\":{1},\"y\":{2},\"dwellMs\":{3}}}", t, cur.x, cur.y, dwell));
+                                            _eventCount++;
+                                        }
+                                    }
+                                }
+                            }
+
+                            bool curRDown = (GetAsyncKeyState(2) & 0x8000) != 0;
+                            if (curRDown != lastRDown) {
+                                lastRDown = curRDown;
+                                if (curRDown) {
+                                    rDownTime = (long)t;
+                                    lock (_lockObj) {
+                                        if (t - _lastHookEventMs > 40) {
+                                            _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"down\",\"button\":\"right\",\"x\":{1},\"y\":{2}}}", t, cur.x, cur.y));
+                                            _clickCount++;
+                                            _eventCount++;
+                                        }
+                                    }
+                                } else {
+                                    long dwell = rDownTime > 0 ? (long)t - rDownTime : 80;
+                                    lock (_lockObj) {
+                                        if (t - _lastHookEventMs > 40) {
+                                            _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"up\",\"button\":\"right\",\"x\":{1},\"y\":{2},\"dwellMs\":{3}}}", t, cur.x, cur.y, dwell));
+                                            _eventCount++;
+                                        }
+                                    }
+                                }
+                            }
+                        } catch {}
+                        Thread.Sleep(8);
+                    }
+                });
+                poller.IsBackground = true;
+                poller.Start();
+
+                Console.Error.WriteLine(string.Format("🟢 [Mouse Trainer] High-resolution hybrid recording for {0}s on interactive desktop...", durationSec));
+                Console.Error.WriteLine(string.Format("   Saving telemetry stream to: {0}", outputPath));
+
+                System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
+                timer.Interval = durationSec * 1000;
+                timer.Tick += delegate {
+                    timer.Stop();
+                    _recording = false;
+                    if (_hookID != IntPtr.Zero) {
+                        try { UnhookWindowsHookEx(_hookID); } catch {}
+                        _hookID = IntPtr.Zero;
+                    }
+                    _recordSw.Stop();
+                    lock (_lockObj) {
+                        if (_recordWriter != null) {
+                            _recordWriter.Flush();
+                            _recordWriter.Close();
+                            _recordWriter = null;
+                        }
+                    }
+                    Application.ExitThread();
+                };
+                timer.Start();
+
+                Application.Run(new TelemetrySinkWindow());
+            });
+
+            recordThread.SetApartmentState(ApartmentState.STA);
+            recordThread.Start();
+            recordThread.Join();
 
             Console.WriteLine(string.Format("{{\"success\": true, \"durationSec\": {0}, \"events\": {1}, \"moves\": {2}, \"clicks\": {3}, \"wheels\": {4}, \"path\": \"{5}\"}}",
                 durationSec, _eventCount, _moveCount, _clickCount, _wheelCount, outputPath.Replace("\\", "/")));
@@ -441,6 +467,7 @@ namespace GeminiSuperDesktop {
                             _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"wheel\",\"delta\":{1},\"x\":{2},\"y\":{3}}}", t, delta, x, y));
                             _wheelCount++;
                             _eventCount++;
+                            Console.Error.WriteLine(string.Format("   🟢 [Hook Wheel] delta={0} at ({1}, {2})", delta, x, y));
                         }
 
                         if (_eventCount % 50 == 0) {
@@ -474,6 +501,10 @@ namespace GeminiSuperDesktop {
             public double ClickDwellStdDev = 18.0;
             public double WheelIntervalMs = 28.0;
             public double WheelDecayFactor = 1.15;
+            public int LinesPerWheelClick = 3;
+            public int PixelsPerLine = 20;
+            public int WheelDeltaPerClick = 120;
+            public double SingleScrollDwellMs = 280.0;
             public int SampleStrokesCount = 0;
             public int SampleClicksCount = 0;
             public int SampleWheelsCount = 0;
@@ -735,25 +766,37 @@ namespace GeminiSuperDesktop {
                 Thread.Sleep(50);
             }
 
+            int notchDelta = prof.WheelDeltaPerClick > 0 ? prof.WheelDeltaPerClick : 120;
             int direction = targetDelta >= 0 ? 1 : -1;
-            int remainingTicks = Math.Abs(targetDelta) / 120;
+            int remainingTicks = Math.Abs(targetDelta) / notchDelta;
             if (remainingTicks == 0) remainingTicks = 1;
+
+            if (remainingTicks == 1) {
+                // Discrete Single Scroll Click: 1 notch = 3 lines
+                uint wheelVal = unchecked((uint)(direction * notchDelta));
+                mouse_event(MOUSEEVENTF_WHEEL, 0, 0, wheelVal, UIntPtr.Zero);
+                Thread.Sleep((int)Math.Max(50, Math.Round(prof.SingleScrollDwellMs)));
+                Console.WriteLine(string.Format("{{\"success\": true, \"mode\": \"single_click\", \"lines\": {0}, \"delta\": {1}}}",
+                    direction * prof.LinesPerWheelClick, direction * notchDelta));
+                return;
+            }
 
             double curInterval = prof.WheelIntervalMs;
             int scrolledTotal = 0;
 
             for (int i = 0; i < remainingTicks; i++) {
-                uint wheelVal = unchecked((uint)(direction * 120));
+                uint wheelVal = unchecked((uint)(direction * notchDelta));
                 mouse_event(MOUSEEVENTF_WHEEL, 0, 0, wheelVal, UIntPtr.Zero);
-                scrolledTotal += (direction * 120);
+                scrolledTotal += (direction * notchDelta);
 
                 Thread.Sleep((int)Math.Max(12, Math.Round(curInterval)));
                 curInterval *= prof.WheelDecayFactor;
                 if (curInterval > 160.0) curInterval = 160.0;
             }
 
-            Console.WriteLine(string.Format("{{\"success\": true, \"scrolled\": {0}, \"ticks\": {1}, \"finalIntervalMs\": {2}}}",
-                scrolledTotal, remainingTicks, curInterval.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)));
+            int totalLines = (scrolledTotal / notchDelta) * prof.LinesPerWheelClick;
+            Console.WriteLine(string.Format("{{\"success\": true, \"mode\": \"burst_scroll\", \"scrolled\": {0}, \"ticks\": {1}, \"lines\": {2}, \"finalIntervalMs\": {3}}}",
+                scrolledTotal, remainingTicks, totalLines, curInterval.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)));
         }
 
         static void PerformClick(string button, HumanKinematicProfile prof) {
@@ -943,6 +986,10 @@ namespace GeminiSuperDesktop {
             sb.AppendLine(string.Format("  \"ClickDwellStdDev\": {0:F2},", p.ClickDwellStdDev));
             sb.AppendLine(string.Format("  \"WheelIntervalMs\": {0:F2},", p.WheelIntervalMs));
             sb.AppendLine(string.Format("  \"WheelDecayFactor\": {0:F4},", p.WheelDecayFactor));
+            sb.AppendLine(string.Format("  \"LinesPerWheelClick\": {0},", p.LinesPerWheelClick));
+            sb.AppendLine(string.Format("  \"PixelsPerLine\": {0},", p.PixelsPerLine));
+            sb.AppendLine(string.Format("  \"WheelDeltaPerClick\": {0},", p.WheelDeltaPerClick));
+            sb.AppendLine(string.Format("  \"SingleScrollDwellMs\": {0:F2},", p.SingleScrollDwellMs));
             sb.AppendLine(string.Format("  \"SampleStrokesCount\": {0},", p.SampleStrokesCount));
             sb.AppendLine(string.Format("  \"SampleClicksCount\": {0},", p.SampleClicksCount));
             sb.AppendLine(string.Format("  \"SampleWheelsCount\": {0},", p.SampleWheelsCount));
@@ -965,6 +1012,10 @@ namespace GeminiSuperDesktop {
             p.ClickDwellStdDev = ExtractJsonDouble(content, "ClickDwellStdDev", p.ClickDwellStdDev);
             p.WheelIntervalMs = ExtractJsonDouble(content, "WheelIntervalMs", p.WheelIntervalMs);
             p.WheelDecayFactor = ExtractJsonDouble(content, "WheelDecayFactor", p.WheelDecayFactor);
+            p.LinesPerWheelClick = ExtractJsonInt(content, "LinesPerWheelClick", p.LinesPerWheelClick);
+            p.PixelsPerLine = ExtractJsonInt(content, "PixelsPerLine", p.PixelsPerLine);
+            p.WheelDeltaPerClick = ExtractJsonInt(content, "WheelDeltaPerClick", p.WheelDeltaPerClick);
+            p.SingleScrollDwellMs = ExtractJsonDouble(content, "SingleScrollDwellMs", p.SingleScrollDwellMs);
             p.SampleStrokesCount = ExtractJsonInt(content, "SampleStrokesCount", 0);
             p.SampleClicksCount = ExtractJsonInt(content, "SampleClicksCount", 0);
             p.SampleWheelsCount = ExtractJsonInt(content, "SampleWheelsCount", 0);

@@ -1,4 +1,4 @@
-﻿{
+{
   "FittsA": 20.0000,
   "FittsB": 113.7065,
   "MeanCurvature": 0.1211,
@@ -8,6 +8,10 @@
   "ClickDwellStdDev": 50.00,
   "WheelIntervalMs": 28.00,
   "WheelDecayFactor": 1.1500,
+  "LinesPerWheelClick": 3,
+  "PixelsPerLine": 20,
+  "WheelDeltaPerClick": 120,
+  "SingleScrollDwellMs": 280.00,
   "SampleStrokesCount": 49,
   "SampleClicksCount": 9,
   "SampleWheelsCount": 0,
