@@ -105,6 +105,58 @@ namespace GeminiSuperDesktop {
         [DllImport("user32.dll")]
         static extern bool SetThreadDesktop(IntPtr hDesktop);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern IntPtr OpenWindowStation(string lpszWinSta, bool fInherit, uint dwDesiredAccess);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool SetProcessWindowStation(IntPtr hWinSta);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern IntPtr OpenDesktop(string lpszDesktop, uint dwFlags, bool fInherit, uint dwDesiredAccess);
+
+        [DllImport("user32.dll")]
+        static extern short GetAsyncKeyState(int vKey);
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct RAWINPUTDEVICE {
+            public ushort usUsagePage;
+            public ushort usUsage;
+            public uint dwFlags;
+            public IntPtr hwndTarget;
+        }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool RegisterRawInputDevices([MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 1)] RAWINPUTDEVICE[] pRawInputDevices, int uiNumDevices, int cbSize);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern uint GetRawInputData(IntPtr hRawInput, uint uiCommand, IntPtr pData, ref uint pcbSize, uint cbSizeHeader);
+
+        [DllImport("user32.dll")]
+        static extern bool SetProcessDPIAware();
+
+        public static IntPtr EnsureInteractiveDesktop() {
+            try {
+                IntPtr hInp = OpenInputDesktop(0, false, 0x01FF);
+                if (hInp != IntPtr.Zero) {
+                    SetThreadDesktop(hInp);
+                    return hInp;
+                }
+            } catch {}
+
+            try {
+                IntPtr hWinsta = OpenWindowStation("winsta0", false, 0x037F);
+                if (hWinsta != IntPtr.Zero) {
+                    SetProcessWindowStation(hWinsta);
+                }
+                IntPtr hDesk = OpenDesktop("Default", 0, false, 0x01FF);
+                if (hDesk != IntPtr.Zero) {
+                    SetThreadDesktop(hDesk);
+                    return hDesk;
+                }
+            } catch {}
+            return IntPtr.Zero;
+        }
+
         [DllImport("user32.dll")]
         static extern bool EnumDesktopWindows(IntPtr hDesktop, EnumWindowsProc lpfn, IntPtr lParam);
 
@@ -159,6 +211,7 @@ namespace GeminiSuperDesktop {
         static LowLevelMouseProc _proc;
         static StreamWriter _recordWriter;
         static Stopwatch _recordSw;
+        static readonly object _lockObj = new object();
         static int _lastX = -1;
         static int _lastY = -1;
         static long _lastDownTimeMs = -1;
@@ -166,8 +219,62 @@ namespace GeminiSuperDesktop {
         static int _moveCount = 0;
         static int _clickCount = 0;
         static int _wheelCount = 0;
+        static volatile bool _recording = false;
+        static long _lastHookEventMs = 0;
+
+        class TelemetrySinkWindow : Form {
+            public TelemetrySinkWindow() {
+                this.WindowState = FormWindowState.Minimized;
+                this.ShowInTaskbar = false;
+                this.FormBorderStyle = FormBorderStyle.None;
+                this.Size = new Size(10, 10);
+            }
+
+            protected override void OnHandleCreated(EventArgs e) {
+                base.OnHandleCreated(e);
+                try {
+                    RAWINPUTDEVICE[] rid = new RAWINPUTDEVICE[1];
+                    rid[0].usUsagePage = 0x01; // Generic Desktop Controls
+                    rid[0].usUsage = 0x02;     // Mouse
+                    rid[0].dwFlags = 0x00000100; // RIDEV_INPUTSINK
+                    rid[0].hwndTarget = this.Handle;
+                    RegisterRawInputDevices(rid, 1, Marshal.SizeOf(typeof(RAWINPUTDEVICE)));
+                } catch {}
+            }
+
+            protected override void WndProc(ref Message m) {
+                if (m.Msg == 0x00FF && _recording && _recordWriter != null) { // WM_INPUT
+                    try {
+                        uint dwSize = 0;
+                        GetRawInputData(m.LParam, 0x10000003, IntPtr.Zero, ref dwSize, (uint)(IntPtr.Size == 8 ? 24 : 16));
+                        if (dwSize > 0) {
+                            IntPtr raw = Marshal.AllocHGlobal((int)dwSize);
+                            if (GetRawInputData(m.LParam, 0x10000003, raw, ref dwSize, (uint)(IntPtr.Size == 8 ? 24 : 16)) == dwSize) {
+                                int headerSize = IntPtr.Size == 8 ? 24 : 16;
+                                ushort btnFlags = (ushort)Marshal.ReadInt16(raw, headerSize + 4);
+                                short btnData = Marshal.ReadInt16(raw, headerSize + 6);
+                                if ((btnFlags & 0x0400) != 0) { // RI_MOUSE_WHEEL
+                                    double t = _recordSw.Elapsed.TotalMilliseconds;
+                                    POINT cur;
+                                    GetCursorPos(out cur);
+                                    lock (_lockObj) {
+                                        _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"wheel\",\"delta\":{1},\"x\":{2},\"y\":{3}}}", t, btnData, cur.x, cur.y));
+                                        _wheelCount++;
+                                        _eventCount++;
+                                        _lastHookEventMs = (long)t;
+                                    }
+                                }
+                            }
+                            Marshal.FreeHGlobal(raw);
+                        }
+                    } catch {}
+                }
+                base.WndProc(ref m);
+            }
+        }
 
         public static void RunRecord(int durationSec, string outputPath) {
+            EnsureInteractiveDesktop();
             _proc = HookCallback;
             _recordSw = new Stopwatch();
 
@@ -177,85 +284,170 @@ namespace GeminiSuperDesktop {
             }
 
             _recordWriter = new StreamWriter(outputPath, false, Encoding.UTF8);
+            _recordWriter.AutoFlush = true;
             _recordSw.Start();
+            _recording = true;
 
-            using (Process curProcess = Process.GetCurrentProcess())
-            using (ProcessModule curModule = curProcess.MainModule) {
-                _hookID = SetWindowsHookEx(WH_MOUSE_LL, _proc, GetModuleHandle(curModule.ModuleName), 0);
-            }
+            try {
+                _hookID = SetWindowsHookEx(WH_MOUSE_LL, _proc, IntPtr.Zero, 0);
+            } catch {}
 
-            if (_hookID == IntPtr.Zero) {
-                Console.WriteLine("{\"success\": false, \"error\": \"Failed to install low-level mouse hook\"}");
-                return;
-            }
+            Thread poller = new Thread(() => {
+                EnsureInteractiveDesktop();
+                POINT lastPt = new POINT { x = -1, y = -1 };
+                bool lastLDown = false;
+                bool lastRDown = false;
+                long lDownTime = 0;
+                long rDownTime = 0;
 
-            Console.Error.WriteLine(string.Format("🟢 [Mouse Trainer] Hook installed. Recording human mouse telemetry for {0} seconds...", durationSec));
+                while (_recording) {
+                    try {
+                        double t = _recordSw.Elapsed.TotalMilliseconds;
+                        POINT cur;
+                        if (GetCursorPos(out cur)) {
+                            if (cur.x != lastPt.x || cur.y != lastPt.y) {
+                                lastPt = cur;
+                                lock (_lockObj) {
+                                    if (t - _lastHookEventMs > 40) {
+                                        _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"move\",\"x\":{1},\"y\":{2}}}", t, cur.x, cur.y));
+                                        _moveCount++;
+                                        _eventCount++;
+                                    }
+                                }
+                            }
+                        }
+
+                        bool curLDown = (GetAsyncKeyState(1) & 0x8000) != 0;
+                        if (curLDown != lastLDown) {
+                            lastLDown = curLDown;
+                            if (curLDown) {
+                                lDownTime = (long)t;
+                                lock (_lockObj) {
+                                    if (t - _lastHookEventMs > 40) {
+                                        _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"down\",\"button\":\"left\",\"x\":{1},\"y\":{2}}}", t, cur.x, cur.y));
+                                        _clickCount++;
+                                        _eventCount++;
+                                    }
+                                }
+                            } else {
+                                long dwell = lDownTime > 0 ? (long)t - lDownTime : 80;
+                                lock (_lockObj) {
+                                    if (t - _lastHookEventMs > 40) {
+                                        _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"up\",\"button\":\"left\",\"x\":{1},\"y\":{2},\"dwellMs\":{3}}}", t, cur.x, cur.y, dwell));
+                                        _eventCount++;
+                                    }
+                                }
+                            }
+                        }
+
+                        bool curRDown = (GetAsyncKeyState(2) & 0x8000) != 0;
+                        if (curRDown != lastRDown) {
+                            lastRDown = curRDown;
+                            if (curRDown) {
+                                rDownTime = (long)t;
+                                lock (_lockObj) {
+                                    if (t - _lastHookEventMs > 40) {
+                                        _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"down\",\"button\":\"right\",\"x\":{1},\"y\":{2}}}", t, cur.x, cur.y));
+                                        _clickCount++;
+                                        _eventCount++;
+                                    }
+                                }
+                            } else {
+                                long dwell = rDownTime > 0 ? (long)t - rDownTime : 80;
+                                lock (_lockObj) {
+                                    if (t - _lastHookEventMs > 40) {
+                                        _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"up\",\"button\":\"right\",\"x\":{1},\"y\":{2},\"dwellMs\":{3}}}", t, cur.x, cur.y, dwell));
+                                        _eventCount++;
+                                    }
+                                }
+                            }
+                        }
+                    } catch {}
+                    Thread.Sleep(8);
+                }
+            });
+            poller.IsBackground = true;
+            poller.Start();
+
+            Console.Error.WriteLine(string.Format("🟢 [Mouse Trainer] High-resolution hybrid hook + RawInput + 125Hz poller active. Recording for {0}s...", durationSec));
             Console.Error.WriteLine(string.Format("   Saving telemetry stream to: {0}", outputPath));
 
             System.Windows.Forms.Timer timer = new System.Windows.Forms.Timer();
             timer.Interval = durationSec * 1000;
             timer.Tick += delegate {
                 timer.Stop();
-                UnhookWindowsHookEx(_hookID);
+                _recording = false;
+                if (_hookID != IntPtr.Zero) {
+                    try { UnhookWindowsHookEx(_hookID); } catch {}
+                    _hookID = IntPtr.Zero;
+                }
                 _recordSw.Stop();
-                if (_recordWriter != null) {
-                    _recordWriter.Flush();
-                    _recordWriter.Close();
+                lock (_lockObj) {
+                    if (_recordWriter != null) {
+                        _recordWriter.Flush();
+                        _recordWriter.Close();
+                        _recordWriter = null;
+                    }
                 }
                 Application.Exit();
             };
             timer.Start();
 
-            Application.Run();
+            Application.Run(new TelemetrySinkWindow());
 
             Console.WriteLine(string.Format("{{\"success\": true, \"durationSec\": {0}, \"events\": {1}, \"moves\": {2}, \"clicks\": {3}, \"wheels\": {4}, \"path\": \"{5}\"}}",
                 durationSec, _eventCount, _moveCount, _clickCount, _wheelCount, outputPath.Replace("\\", "/")));
         }
 
         static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
-            if (nCode >= 0 && _recordWriter != null) {
-                MSLLHOOKSTRUCT hookStruct = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
-                double t = _recordSw.Elapsed.TotalMilliseconds;
-                int x = hookStruct.pt.x;
-                int y = hookStruct.pt.y;
-                int msg = wParam.ToInt32();
+            if (nCode >= 0 && _recording && _recordWriter != null) {
+                try {
+                    MSLLHOOKSTRUCT hookStruct = (MSLLHOOKSTRUCT)Marshal.PtrToStructure(lParam, typeof(MSLLHOOKSTRUCT));
+                    double t = _recordSw.Elapsed.TotalMilliseconds;
+                    int x = hookStruct.pt.x;
+                    int y = hookStruct.pt.y;
+                    int msg = wParam.ToInt32();
 
-                if (msg == WM_MOUSEMOVE) {
-                    if (x != _lastX || y != _lastY) {
-                        _lastX = x;
-                        _lastY = y;
-                        _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"move\",\"x\":{1},\"y\":{2}}}", t, x, y));
-                        _moveCount++;
-                        _eventCount++;
+                    lock (_lockObj) {
+                        _lastHookEventMs = (long)t;
+                        if (msg == WM_MOUSEMOVE) {
+                            if (x != _lastX || y != _lastY) {
+                                _lastX = x;
+                                _lastY = y;
+                                _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"move\",\"x\":{1},\"y\":{2}}}", t, x, y));
+                                _moveCount++;
+                                _eventCount++;
+                            }
+                        } else if (msg == WM_LBUTTONDOWN) {
+                            _lastDownTimeMs = (long)t;
+                            _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"down\",\"button\":\"left\",\"x\":{1},\"y\":{2}}}", t, x, y));
+                            _clickCount++;
+                            _eventCount++;
+                        } else if (msg == WM_LBUTTONUP) {
+                            long dwell = _lastDownTimeMs > 0 ? (long)t - _lastDownTimeMs : 80;
+                            _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"up\",\"button\":\"left\",\"x\":{1},\"y\":{2},\"dwellMs\":{3}}}", t, x, y, dwell));
+                            _eventCount++;
+                        } else if (msg == WM_RBUTTONDOWN) {
+                            _lastDownTimeMs = (long)t;
+                            _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"down\",\"button\":\"right\",\"x\":{1},\"y\":{2}}}", t, x, y));
+                            _clickCount++;
+                            _eventCount++;
+                        } else if (msg == WM_RBUTTONUP) {
+                            long dwell = _lastDownTimeMs > 0 ? (long)t - _lastDownTimeMs : 80;
+                            _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"up\",\"button\":\"right\",\"x\":{1},\"y\":{2},\"dwellMs\":{3}}}", t, x, y, dwell));
+                            _eventCount++;
+                        } else if (msg == WM_MOUSEWHEEL) {
+                            short delta = (short)((hookStruct.mouseData >> 16) & 0xffff);
+                            _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"wheel\",\"delta\":{1},\"x\":{2},\"y\":{3}}}", t, delta, x, y));
+                            _wheelCount++;
+                            _eventCount++;
+                        }
+
+                        if (_eventCount % 50 == 0) {
+                            _recordWriter.Flush();
+                        }
                     }
-                } else if (msg == WM_LBUTTONDOWN) {
-                    _lastDownTimeMs = (long)t;
-                    _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"down\",\"button\":\"left\",\"x\":{1},\"y\":{2}}}", t, x, y));
-                    _clickCount++;
-                    _eventCount++;
-                } else if (msg == WM_LBUTTONUP) {
-                    long dwell = _lastDownTimeMs > 0 ? (long)t - _lastDownTimeMs : 80;
-                    _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"up\",\"button\":\"left\",\"x\":{1},\"y\":{2},\"dwellMs\":{3}}}", t, x, y, dwell));
-                    _eventCount++;
-                } else if (msg == WM_RBUTTONDOWN) {
-                    _lastDownTimeMs = (long)t;
-                    _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"down\",\"button\":\"right\",\"x\":{1},\"y\":{2}}}", t, x, y));
-                    _clickCount++;
-                    _eventCount++;
-                } else if (msg == WM_RBUTTONUP) {
-                    long dwell = _lastDownTimeMs > 0 ? (long)t - _lastDownTimeMs : 80;
-                    _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"up\",\"button\":\"right\",\"x\":{1},\"y\":{2},\"dwellMs\":{3}}}", t, x, y, dwell));
-                    _eventCount++;
-                } else if (msg == WM_MOUSEWHEEL) {
-                    short delta = (short)((hookStruct.mouseData >> 16) & 0xffff);
-                    _recordWriter.WriteLine(string.Format("{{\"t\":{0:F2},\"type\":\"wheel\",\"delta\":{1},\"x\":{2},\"y\":{3}}}", t, delta, x, y));
-                    _wheelCount++;
-                    _eventCount++;
-                }
-
-                if (_eventCount % 50 == 0) {
-                    _recordWriter.Flush();
-                }
+                } catch {}
             }
             return CallNextHookEx(_hookID, nCode, wParam, lParam);
         }
@@ -618,16 +810,6 @@ namespace GeminiSuperDesktop {
                 fromX, fromY, toX, toY));
         }
 
-        static IntPtr EnsureInteractiveDesktop() {
-            try {
-                IntPtr hInp = OpenInputDesktop(0, false, 0x01FF);
-                if (hInp != IntPtr.Zero) {
-                    SetThreadDesktop(hInp);
-                    return hInp;
-                }
-            } catch {}
-            return IntPtr.Zero;
-        }
 
         static bool ForceForegroundWindow(IntPtr hWnd) {
             if (hWnd == IntPtr.Zero) return false;
@@ -821,7 +1003,11 @@ namespace GeminiSuperDesktop {
         #endregion
 
         #region CLI Entry Point
+        [STAThread]
         public static void Main(string[] args) {
+            EnsureInteractiveDesktop();
+            try { SetProcessDPIAware(); } catch {}
+
             if (args.Length == 0) {
                 Console.WriteLine("{\"error\": \"Usage: mouse_trainer [record <seconds> <out.jsonl> | train <in.jsonl> <out.json> | move <profile.json> <x> <y> [button] | scroll <profile.json> <delta> [x y]]\"}");
                 return;
