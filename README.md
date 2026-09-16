@@ -223,6 +223,19 @@ copy /Y data\my_profile.json data\human_profile.json
 
 See the full architectural specification and mathematical derivation in [`docs/ERGONOMICS.md`](file:///C:/Users/admin/source/gemini-super-system/docs/ERGONOMICS.md).
 
+### 14. 64-Bit Haven Memory Bank (`.hmb`) Binary Cognitive Storage & In-Attention DMA
+Cloud-based and external vector databases (Pinecone, Chroma, Qdrant) introduce network latency, serialization overhead, and fragmentation. Ported directly from [`haven-cpp`](file:///C:/Users/admin/source/haven-cpp), Gemini Super System incorporates the native **64-Bit Haven Memory Bank (`.hmb`)** binary cognitive engine:
+- **100% Bitwise Compatibility**: Exactly matches `haven-cpp`'s `HmbHeader64` (136 bytes), `HmbRecord64` (84 bytes), 64-bit FNV-1a domain hashing, and contiguous UTF-8 string blob layout.
+- **Zero-Seek HDD Hardening**: Memory records, contiguous 128-dimensional float matrices, and text strings are packed in-memory and committed in a single contiguous sequential write block, completely eliminating mechanical arm chatter and seek thrashing on spinning hard drives.
+- **AVX-Style 128-Dim Semantic Retrieval**: Employs deterministic high-entropy semantic harmonic phase projections and dense vector cosine similarity scaled by affective salience:
+  $$\text{Score} = (\text{Sim}_{\text{cosine}} \times 0.75 + \text{Score}_{\text{lexical}}) \times \text{Weight} \times (0.8 + 0.2 \times \text{EmotionalSalience})$$
+- **Cross-Engine Interoperability**: Seamlessly imports, reads, updates, and writes shared memory vaults between `haven-cpp` (e.g., `aura_vault.hmb`) and Gemini Super System (`data/gemini_vault.hmb`), creating a unified cognitive memory bank across local models and cloud orchestration.
+- **Native MCP Memory Tools**:
+  - `super_remember`: Persists new cognitive memory anchors across sessions.
+  - `super_recall`: Searches top-K memory anchors via vector similarity and lexical grounding, automatically tracking recall frequencies.
+  - `super_list_memories`: Summarizes vault statistics, category distributions, and anchor catalogs.
+  - `super_sync_vault`: Synchronizes memory vaults bidirectionally with `haven-cpp`.
+
 ---
 
 ## 🚀 Quick Start

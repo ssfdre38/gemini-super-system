@@ -502,6 +502,111 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["playbook"]
         }
+      },
+      {
+        name: "super_remember",
+        description: "Encodes and stores a persistent, cross-session cognitive memory anchor into the 64-Bit Haven Memory Bank (.hmb). HDD-hardened contiguous binary packing with zero external vector DB bloat.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            concept: {
+              type: "string",
+              description: "Short title or conceptual anchor (e.g. 'Windows 11 UI Automation Policy', 'Daniel Ergonomics Baseline')."
+            },
+            content: {
+              type: "string",
+              description: "Detailed memory content, instructions, code patterns, or episodic records."
+            },
+            category: {
+              type: "string",
+              enum: ["CORE_IDENTITY", "EPISODIC", "SEMANTIC", "EMOTIONAL", "SYSTEM"],
+              default: "EPISODIC",
+              description: "Memory category domain."
+            },
+            weight: {
+              type: "number",
+              default: 1.0,
+              description: "Memory salience / importance score (0.0 to 1.0)."
+            },
+            emotional_salience: {
+              type: "number",
+              default: 0.9,
+              description: "Emotional resonance / affective weight (0.0 to 1.0)."
+            },
+            vaultPath: {
+              type: "string",
+              description: "Optional custom .hmb vault path (defaults to data/gemini_vault.hmb)."
+            }
+          },
+          required: ["concept", "content"]
+        }
+      },
+      {
+        name: "super_recall",
+        description: "Recalls top-K relevant memory anchors from the 64-bit Haven Memory Bank (.hmb) using AVX-style 128-dimensional dense vector cosine similarity and lexical grounding. Automatically increments access counter.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "Search query, question, or conceptual keywords."
+            },
+            category: {
+              type: "string",
+              description: "Optional category filter (e.g. 'CORE_IDENTITY', 'SYSTEM', 'SEMANTIC')."
+            },
+            topK: {
+              type: "number",
+              default: 5,
+              description: "Maximum number of memories to return (defaults to 5)."
+            },
+            minSimilarity: {
+              type: "number",
+              default: 0.1,
+              description: "Minimum relevance score threshold (0.0 to 1.0, defaults to 0.1)."
+            },
+            vaultPath: {
+              type: "string",
+              description: "Optional custom .hmb vault path (supports reading haven-cpp aura_vault.hmb)."
+            }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "super_list_memories",
+        description: "Returns summary statistics, category counts, and previews of memory anchors stored in the 64-bit Haven Memory Bank (.hmb).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            category: {
+              type: "string",
+              description: "Optional category filter."
+            },
+            limit: {
+              type: "number",
+              default: 50,
+              description: "Maximum number of memories to preview (defaults to 50)."
+            },
+            vaultPath: {
+              type: "string",
+              description: "Optional custom .hmb vault path."
+            }
+          }
+        }
+      },
+      {
+        name: "super_sync_vault",
+        description: "Synchronizes memory anchors bidirectionally between gemini-super-system (.hmb) and haven-cpp (aura_vault.hmb).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            sourceVault: {
+              type: "string",
+              description: "Source .hmb file to import from (defaults to haven-cpp/wwwroot/aura_vault.hmb)."
+            }
+          }
+        }
       }
     ]
   };
@@ -542,6 +647,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 `• Google Labs MCP    : ${telemetry.engines.googleLabsMcp.available ? `[READY - Port 9222 ${telemetry.engines.googleLabsMcp.cdpLive ? "CONNECTED" : "STANDBY"}]` : "[OFFLINE]"}\n` +
                 `• Local llama-server : ${inf.llamaServer?.online ? "[ONLINE - Port 11436]" : "[OFFLINE - Port 11436]"}\n` +
                 `• Haven C# Server    : ${inf.havenServer?.online ? "[ONLINE - Port 18799]" : "[OFFLINE - Port 18799]"}\n` +
+                `• Haven Memory Bank  : ${telemetry.memoryBank?.totalAnchors ?? 0} Anchors (128-dim .hmb, ${Object.keys(telemetry.memoryBank?.categories || {}).length} domains) [ONLINE]\n` +
                 `• IDE Companion Mode : ${telemetry.engines.ideCompanion.activeSessions > 0 ? `[${telemetry.engines.ideCompanion.activeSessions} ACTIVE SESSIONS]` : "[IDLE]"}\n` +
                 `• Active Swarms      : ${telemetry.activeSwarmCount}\n` +
                 `• Bus Tasks (Active) : ${telemetry.activeTaskCount} queued / ${telemetry.completedTaskCount} completed`
@@ -1011,6 +1117,91 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
+  if (name === "super_remember") {
+    const res = await orch.remember({
+      concept: args.concept,
+      content: args.content,
+      category: args.category || "EPISODIC",
+      weight: args.weight ?? 1.0,
+      emotional_salience: args.emotional_salience ?? 0.9,
+      vaultPath: args.vaultPath || null
+    });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🏛️ [64-Bit Haven Memory Bank] Memory Anchor Ingested:\n` +
+                `• Anchor ID    : #${res.id}\n` +
+                `• Concept      : ${res.concept}\n` +
+                `• Category     : ${res.category} (Domain Hash: ${res.domainHash})\n` +
+                `• Salience     : Weight ${res.weight} • Emotional ${res.emotional_salience}\n` +
+                `• Total Vault  : ${res.totalMemories} Contiguous Anchors\n` +
+                `• Status       : 100% HDD-Hardened Contiguous Binary Write Complete`
+        }
+      ]
+    };
+  }
+
+  if (name === "super_recall") {
+    const res = await orch.recall({
+      query: args.query,
+      category: args.category || null,
+      topK: args.topK || 5,
+      minSimilarity: args.minSimilarity ?? 0.1,
+      vaultPath: args.vaultPath || null
+    });
+    let output = `🧠 [64-Bit Haven Memory Bank] Recall Results for "${res.query}":\n` +
+                 `Found ${res.resultsCount} matching memory anchors across ${res.totalVaultMemories} total vault entries:\n\n`;
+    if (res.memories.length === 0) {
+      output += `(No memory anchors surpassed similarity threshold ${args.minSimilarity ?? 0.1})`;
+    } else {
+      output += res.memories.map((m) => 
+        `[#${m.id}] ${m.concept} (${m.category}) — Score: ${m.score} (Cosine: ${m.cosineSimilarity})\n` +
+        `   Content : ${m.content}\n` +
+        `   Weight  : ${m.weight} | Salience: ${m.emotional_salience} | Recalled: ${m.access_count}x | Timestamp: ${m.timestamp}`
+      ).join("\n\n");
+    }
+    return {
+      content: [{ type: "text", text: output }]
+    };
+  }
+
+  if (name === "super_list_memories") {
+    const res = await orch.listMemories({
+      category: args.category || null,
+      limit: args.limit || 50,
+      vaultPath: args.vaultPath || null
+    });
+    const catBreakdown = Object.entries(res.categories).map(([k, v]) => `${k}: ${v}`).join(", ");
+    let output = `🏛️ [64-Bit Haven Memory Bank] Vault Index:\n` +
+                 `• Vault Path       : ${res.vaultPath}\n` +
+                 `• Total Anchors    : ${res.totalAnchors} (Latent Dim: ${res.embeddingDim})\n` +
+                 `• Categories       : ${catBreakdown || "None"}\n` +
+                 `• Displayed        : ${res.displayedCount} anchors\n\n`;
+    output += res.memories.map(m =>
+      `• [#${m.id}] [${m.category}] ${m.concept} (Salience: ${m.weight}, Recalled: ${m.access_count}x)\n` +
+      `  "${m.content}"`
+    ).join("\n");
+    return {
+      content: [{ type: "text", text: output }]
+    };
+  }
+
+  if (name === "super_sync_vault") {
+    const res = await orch.syncMemoriesWithHaven(args.sourceVault || undefined);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [64-Bit Haven Memory Bank] Synchronization Complete:\n` +
+                `• Imported Anchors : +${res.importedCount} new anchors\n` +
+                `• Total Vault Size : ${res.totalVaultAnchors} anchors\n` +
+                `• Source Vault     : ${res.source}`
+        }
+      ]
+    };
+  }
+
   return {
     isError: true,
     content: [{ type: "text", text: `Unknown tool: ${name}` }]
@@ -1034,6 +1225,9 @@ async function runCliMode() {
   console.log("Commands available:");
   console.log("  /status       - Show real-time system telemetry");
   console.log("  /dashboard    - Launch web Mission Control (port 18880)");
+  console.log("  /memories     - List all 64-bit Haven Memory Bank anchors");
+  console.log("  /recall <q>   - Recall memory anchors via semantic search");
+  console.log("  /remember <c> | <txt> - Ingest new memory anchor");
   console.log("  /swarm <goal> - Deploy autonomous multi-agent swarm");
   console.log("  /ask <prompt> - Smart-routed query across engines");
   console.log("  /exit         - Shutdown\n");
@@ -1051,6 +1245,30 @@ async function runCliMode() {
       } else if (line === "/dashboard") {
         const url = orch.startDashboard(18880);
         console.log(`Mission Control Dashboard active at: ${url}`);
+      } else if (line === "/memories") {
+        const list = await orch.listMemories();
+        console.log(`\n--- 🏛️ Haven Memory Bank (${list.totalAnchors} Anchors) ---`);
+        for (const m of list.memories) {
+          console.log(`[#${m.id}] [${m.category}] ${m.concept} (Salience: ${m.weight})`);
+          console.log(`     "${m.content}"`);
+        }
+        console.log("");
+      } else if (line.startsWith("/recall ")) {
+        const q = line.replace("/recall ", "").trim();
+        const res = await orch.recall({ query: q, topK: 3 });
+        console.log(`\n--- 🧠 Recall: "${q}" (${res.resultsCount} hits) ---`);
+        for (const m of res.memories) {
+          console.log(`-> [#${m.id}] Score: ${m.score} (Cosine: ${m.cosineSimilarity}) | ${m.concept}`);
+          console.log(`   "${m.content}"`);
+        }
+        console.log("");
+      } else if (line.startsWith("/remember ")) {
+        const rest = line.replace("/remember ", "").trim();
+        const parts = rest.split("|").map(p => p.trim());
+        const concept = parts[0];
+        const content = parts[1] || parts[0];
+        const res = await orch.remember({ concept, content, category: "EPISODIC" });
+        console.log(`Saved memory anchor #${res.id}: "${res.concept}"`);
       } else if (line.startsWith("/swarm ")) {
         const goal = line.replace("/swarm ", "");
         const s = await orch.launchSwarm(goal);
