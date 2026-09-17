@@ -8,6 +8,8 @@
   },
   "scripts": {
     "start": "node index.js",
+    "daemon": "node index.js --daemon",
+    "all": "node index.js --all",
     "dashboard": "node index.js --dashboard",
     "cli": "node index.js --cli",
     "tray": "powershell -Sta -WindowStyle Hidden -ExecutionPolicy Bypass -File tools/gemini_tray.ps1",

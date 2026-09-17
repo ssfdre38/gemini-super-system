@@ -12,6 +12,21 @@ function getOrchestrator() {
   return orchestrator;
 }
 
+const { GeminiSupervisor } = require("./lib/supervisor.js");
+let supervisor = null;
+function getSupervisor(options = {}) {
+  if (!supervisor) {
+    supervisor = new GeminiSupervisor(getOrchestrator(), {
+      port: 18880,
+      enableDashboard: true,
+      enableAppWatcher: true,
+      enableTray: options.enableTray || false,
+      tools: SYSTEM_TOOLS
+    });
+  }
+  return supervisor;
+}
+
 const { getDesktopBridge } = require("./lib/desktop-bridge.js");
 
 const server = new Server(
@@ -26,9 +41,7 @@ const server = new Server(
   }
 );
 
-server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return {
-    tools: [
+const SYSTEM_TOOLS = [
       {
         name: "super_telemetry",
         description: "Returns health, version, binary paths, and active connection status for AGY, Gemini CLI, Swarms, Google Labs MCP, and IDE companions.",
@@ -654,7 +667,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           }
         }
       }
-    ]
+];
+
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return {
+    tools: SYSTEM_TOOLS
   };
 });
 
@@ -1418,6 +1435,8 @@ async function main() {
   if (process.argv.includes("--help") || process.argv.includes("-h")) {
     console.log("Gemini Super System - Native MCP & CLI Engine");
     console.log("Usage: gemini-super [options]");
+    console.log("  --daemon    Bootstrap unified background daemon (MCP + Dashboard + App Watcher)");
+    console.log("  --all       Bootstrap entire ambient ecosystem (Daemon + Tray + HUD Launcher)");
     console.log("  --cli       Launch interactive terminal console");
     console.log("  --dashboard Launch Mission Control dashboard on port 18880");
     console.log("  --tray      Spawn native Windows System Tray companion daemon");
@@ -1425,8 +1444,45 @@ async function main() {
     console.log("  --watch     Run ambient foreground app-switch watcher daemon");
     console.log("  --version   Show version information");
     console.log("  --help      Show this help message");
-    console.log("  (default)   Run as Model Context Protocol (MCP) server over stdio");
+    console.log("  (default)   Unified MCP Server over stdio with auto-booted dashboard & watcher");
     process.exit(0);
+  }
+  if (process.argv.includes("--all")) {
+    console.log("⚡ Bootstrapping Complete Sovereign Gemini Super Ecosystem...");
+    const sup = getSupervisor({ enableTray: true });
+    await sup.boot();
+    const { spawn } = require("child_process");
+    const launcherScript = path.join(__dirname, "tools", "floating_launcher.ps1");
+    const ps = spawn("powershell", ["-Sta", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", launcherScript], {
+      detached: true,
+      stdio: "ignore"
+    });
+    ps.unref();
+    console.log("\n=======================================================");
+    console.log("   ⚡ GEMINI SUPER SYSTEM // FULL FLEET ONLINE");
+    console.log("   • Mission Control : http://127.0.0.1:18880");
+    console.log("   • Ambient Watcher : ACTIVE (1000ms polling)");
+    console.log("   • System Tray     : RUNNING (GDI+ Vector Badge)");
+    console.log("   • Command Reticle : SUMMONED (Alt+Space / WPF HUD)");
+    console.log("=======================================================\n");
+    console.log("Press Ctrl+C to terminate fleet daemon.");
+    setInterval(() => {}, 60000);
+    return;
+  }
+  if (process.argv.includes("--daemon")) {
+    const sup = getSupervisor({
+      enableTray: process.argv.includes("--tray")
+    });
+    await sup.boot();
+    console.log("\n=======================================================");
+    console.log("   ⚡ GEMINI SUPER SYSTEM // UNIFIED DAEMON ACTIVE");
+    console.log("   • Mission Control : http://127.0.0.1:18880");
+    console.log("   • Ambient Watcher : ACTIVE (1000ms polling)");
+    console.log("   • Memory Bank     : 64-Bit HMB Contiguous Binary");
+    console.log("=======================================================\n");
+    console.log("Press Ctrl+C to terminate daemon.");
+    setInterval(() => {}, 60000);
+    return;
   }
   if (process.argv.includes("--tray")) {
     const { spawn } = require("child_process");
@@ -1472,9 +1528,14 @@ async function main() {
     console.log(`Mission Control Dashboard active at: ${url}`);
     setInterval(() => {}, 60000);
   } else {
+    // Default: Run as unified MCP Server over Stdio
+    const sup = getSupervisor({
+      enableTray: process.argv.includes("--tray") || process.argv.includes("--all")
+    });
+    await sup.boot();
     const transport = new StdioServerTransport();
     await server.connect(transport);
-    console.error("Gemini Super System MCP Server running over Stdio");
+    console.error("[MCP] Gemini Super System Unified MCP Server running over Stdio");
   }
 }
 

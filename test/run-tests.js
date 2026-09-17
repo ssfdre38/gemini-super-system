@@ -224,6 +224,63 @@ async function run() {
     assert(trayContent.includes("NotifyIcon"), "Tray script should instantiate NotifyIcon");
   });
 
+  // Suite 6: Unified Supervisor & Schema Sync
+  console.log("\n\x1b[1m[Suite 6: Unified Supervisor & Schema Sync]\x1b[0m");
+
+  it("GeminiSupervisor manages component lifecycle and reports valid status", async () => {
+    const { GeminiSupervisor } = require("../lib/supervisor.js");
+    const mockOrchestrator = {
+      initialize: async () => {},
+      startDashboard: () => "http://127.0.0.1:18880",
+      startAppWatcher: () => {},
+      getActiveApp: () => ({ name: "test_process", title: "Test Window" }),
+      hmb: { memories: [1, 2, 3] },
+      dashboard: { server: true, stop: () => {} },
+      appWatcher: { isRunning: true, stop: () => { mockOrchestrator.appWatcher.isRunning = false; } }
+    };
+
+    const sup = new GeminiSupervisor(mockOrchestrator, {
+      port: 18880,
+      enableDashboard: true,
+      enableAppWatcher: true,
+      enableTray: false
+    });
+
+    assert.strictEqual(sup.isBooted, false);
+    const initialStatus = sup.getStatus();
+    assert.strictEqual(initialStatus.isBooted, false);
+
+    await sup.boot();
+    assert.strictEqual(sup.isBooted, true);
+    const bootedStatus = sup.getStatus();
+    assert.strictEqual(bootedStatus.isBooted, true);
+    assert.strictEqual(bootedStatus.memoryAnchors, 3);
+    assert.strictEqual(bootedStatus.appWatcher, "RUNNING");
+
+    sup.shutdown();
+    assert.strictEqual(sup.isBooted, false);
+  });
+
+  it("Schema Sync validates tool definitions and returns valid sync metrics", () => {
+    const { syncMcpSchemas } = require("../lib/schema-sync.js");
+    const mockTools = [
+      {
+        name: "test_tool",
+        description: "A test tool",
+        inputSchema: { type: "object", properties: { q: { type: "string" } } }
+      }
+    ];
+
+    // Using test directory as target
+    const testTarget = path.join(__dirname, "temp_schemas");
+    const res = syncMcpSchemas(mockTools, testTarget);
+    assert.strictEqual(res.totalTools, 1);
+    assert(fs.existsSync(path.join(testTarget, "test_tool.json")));
+
+    // Cleanup
+    fs.rmSync(testTarget, { recursive: true, force: true });
+  });
+
   console.log("\n=======================================================");
   console.log(`   TEST RESULTS: ${passedTests}/${totalTests} PASSED (${failedTests} FAILED)`);
   console.log("=======================================================\n");
