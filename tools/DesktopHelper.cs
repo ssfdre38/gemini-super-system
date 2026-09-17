@@ -550,7 +550,7 @@ namespace GeminiSuperDesktop {
             var sb = new StringBuilder();
             foreach (char c in s) {
                 if (c == '\\') sb.Append(@"\\");
-                else if (c == '"') sb.Append(@"""");
+                else if (c == '"') sb.Append("\\\"");
                 else if (c == '\r') sb.Append(@"\r");
                 else if (c == '\n') sb.Append(@"\n");
                 else if (c == '\t') sb.Append(@"\t");
