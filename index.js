@@ -607,6 +607,52 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             }
           }
         }
+      },
+      {
+        name: "super_get_active_app",
+        description: "Returns the foreground active application window (process, title, HWND, dimensions) and pre-warmed semantically linked memory anchors from the 64-bit Haven Memory Bank (.hmb).",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_watch_app",
+        description: "Controls the ambient background application switcher watcher daemon. Starts or stops polling active window transitions and auto-recalling contextual memory anchors.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["start", "stop", "status"],
+              default: "status",
+              description: "Action to perform on ambient app watcher daemon."
+            },
+            intervalMs: {
+              type: "number",
+              default: 1000,
+              description: "Polling interval in milliseconds (defaults to 1000ms)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_get_memory_galaxy",
+        description: "Computes and returns a 2D Semantic Memory Galaxy graph (nodes, 128-dim cosine coordinates, domain clusters, synaptic links) for visualization in dashboards and companion HUDs.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            category: {
+              type: "string",
+              description: "Optional category filter."
+            },
+            limit: {
+              type: "number",
+              default: 100,
+              description: "Maximum number of memories to include in the galaxy graph (defaults to 100)."
+            }
+          }
+        }
       }
     ]
   };
@@ -1205,6 +1251,70 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
+  if (name === "super_get_active_app") {
+    const active = await orch.checkActiveApp();
+    let text = `🖥️ [Ambient App-Switch Awareness] Active Window Context:\n` +
+               `• Process        : ${active.process}\n` +
+               `• Title          : ${active.title}\n` +
+               `• Handle (HWND)  : ${active.handle || "N/A"}\n` +
+               `• PID            : ${active.pid || "N/A"}\n` +
+               `• Minimized      : ${active.isMinimized ? "Yes" : "No"}\n` +
+               `• Maximized      : ${active.isMaximized ? "Yes" : "No"}\n` +
+               `• Switched At    : ${active.switchedAt}\n\n`;
+    if (active.relevantMemories && active.relevantMemories.length > 0) {
+      text += `🧠 [Pre-Warmed .hmb Memory Anchors (${active.relevantMemories.length})]:\n` +
+        active.relevantMemories.map(m => `• [#${m.id}] [${m.category}] ${m.concept} (Score: ${m.score})`).join("\n");
+    } else {
+      text += `🧠 No pre-warmed memory anchors triggered for this context.`;
+    }
+    return {
+      content: [{ type: "text", text }]
+    };
+  }
+
+  if (name === "super_watch_app") {
+    const action = args.action || "status";
+    let res;
+    if (action === "start") {
+      res = orch.startAppWatcher(args.intervalMs || 1000);
+    } else if (action === "stop") {
+      res = orch.stopAppWatcher();
+    } else {
+      res = {
+        isRunning: orch.appWatcher.isRunning,
+        intervalMs: orch.appWatcher.pollIntervalMs,
+        activeContext: orch.getActiveApp()
+      };
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛰️ [Ambient App Watcher Daemon] Action "${action}" executed:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_get_memory_galaxy") {
+    const galaxy = await orch.getGalaxyMap({
+      category: args.category || null,
+      limit: args.limit || 100
+    });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🌌 [2D Semantic Memory Galaxy Graph]:\n` +
+                `• Total Nodes    : ${galaxy.nodes.length}\n` +
+                `• Synaptic Links : ${galaxy.links.length}\n` +
+                `• Clusters       : ${galaxy.clusters.map(c => `${c.category} (${c.count})`).join(", ")}\n` +
+                `• Graph Data JSON:\n` + JSON.stringify(galaxy, null, 2)
+        }
+      ]
+    };
+  }
+
   return {
     isError: true,
     content: [{ type: "text", text: `Unknown tool: ${name}` }]
@@ -1309,10 +1419,49 @@ async function main() {
     console.log("Gemini Super System - Native MCP & CLI Engine");
     console.log("Usage: gemini-super [options]");
     console.log("  --cli       Launch interactive terminal console");
+    console.log("  --dashboard Launch Mission Control dashboard on port 18880");
+    console.log("  --tray      Spawn native Windows System Tray companion daemon");
+    console.log("  --launcher  Summon global floating command bar HUD");
+    console.log("  --watch     Run ambient foreground app-switch watcher daemon");
     console.log("  --version   Show version information");
     console.log("  --help      Show this help message");
     console.log("  (default)   Run as Model Context Protocol (MCP) server over stdio");
     process.exit(0);
+  }
+  if (process.argv.includes("--tray")) {
+    const { spawn } = require("child_process");
+    const trayScript = path.join(__dirname, "tools", "gemini_tray.ps1");
+    console.log("⚡ Launching Gemini Super System Tray Companion...");
+    const ps = spawn("powershell", ["-Sta", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", trayScript], {
+      detached: true,
+      stdio: "ignore"
+    });
+    ps.unref();
+    console.log("System tray companion running in background.");
+    process.exit(0);
+  }
+  if (process.argv.includes("--launcher")) {
+    const { spawn } = require("child_process");
+    const launcherScript = path.join(__dirname, "tools", "floating_launcher.ps1");
+    console.log("⚡ Summoning Global Floating Command Bar HUD...");
+    const ps = spawn("powershell", ["-Sta", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", launcherScript], {
+      detached: true,
+      stdio: "ignore"
+    });
+    ps.unref();
+    process.exit(0);
+  }
+  if (process.argv.includes("--watch")) {
+    const orch = getOrchestrator();
+    await orch.initialize();
+    console.log("\n=======================================================");
+    console.log("   🛰️ GEMINI SUPER SYSTEM // AMBIENT APP WATCHER");
+    console.log("   Zero-Seek Memory Grounding on Window Transitions");
+    console.log("=======================================================\n");
+    orch.startAppWatcher(1000);
+    console.log("Ambient daemon active. Tracking foreground applications...");
+    setInterval(() => {}, 60000);
+    return;
   }
   if (process.argv.includes("--cli")) {
     await runCliMode();

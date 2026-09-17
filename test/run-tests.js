@@ -117,6 +117,18 @@ async function run() {
     if (fs.existsSync(testVault)) fs.unlinkSync(testVault);
   });
 
+  await itAsync("2D Semantic Memory Galaxy Map produces spring-force layout", async () => {
+    const engine = new HmbEngine();
+    await engine.initialize();
+    const galaxy = await engine.getGalaxyMap({ limit: 20 });
+    assert(galaxy.nodes.length > 0, "Galaxy should contain nodes");
+    assert(Array.isArray(galaxy.links), "Galaxy should contain synaptic links array");
+    assert(Array.isArray(galaxy.clusters), "Galaxy should contain clusters");
+    const firstNode = galaxy.nodes[0];
+    assert(typeof firstNode.x === "number" && typeof firstNode.y === "number", "Nodes should have 2D coordinates");
+    assert(firstNode.category, "Node should have a category domain");
+  });
+
   // Suite 2: Shared Bus & State Persistence
   console.log("\n\x1b[1m[Suite 2: Universal Bus & Event Stream]\x1b[0m");
 
@@ -183,6 +195,33 @@ async function run() {
   it("CLI handles --help flag with exit code 0", () => {
     const out = execSync('node index.js --help', { cwd: path.resolve(__dirname, ".."), encoding: "utf8" });
     assert(out.includes("Usage: gemini-super"), `Unexpected help output: ${out}`);
+  });
+
+  // Suite 5: Ambient App Watcher & Native Companions
+  console.log("\n\x1b[1m[Suite 5: Ambient App Watcher & Native Companions]\x1b[0m");
+
+  it("AppWatcher initializes with default context and handles state lifecycle", () => {
+    const { AppWatcher } = require("../lib/app-watcher.js");
+    const watcher = new AppWatcher(null, 500);
+    assert.strictEqual(watcher.isRunning, false);
+    const ctx = watcher.getContext();
+    assert(ctx.process !== undefined, "Context should specify process");
+    assert(Array.isArray(ctx.relevantMemories), "Context should have relevantMemories array");
+    watcher.start();
+    assert.strictEqual(watcher.isRunning, true);
+    watcher.stop();
+    assert.strictEqual(watcher.isRunning, false);
+  });
+
+  it("Floating launcher and System Tray companion scripts exist and are valid", () => {
+    const launcherPath = path.join(__dirname, "..", "tools", "floating_launcher.ps1");
+    const trayPath = path.join(__dirname, "..", "tools", "gemini_tray.ps1");
+    assert(fs.existsSync(launcherPath), "floating_launcher.ps1 must exist");
+    assert(fs.existsSync(trayPath), "gemini_tray.ps1 must exist");
+    const launcherContent = fs.readFileSync(launcherPath, "utf8");
+    const trayContent = fs.readFileSync(trayPath, "utf8");
+    assert(launcherContent.includes("Gemini Super Reticle Launcher"), "Launcher should have proper XAML definition");
+    assert(trayContent.includes("NotifyIcon"), "Tray script should instantiate NotifyIcon");
   });
 
   console.log("\n=======================================================");

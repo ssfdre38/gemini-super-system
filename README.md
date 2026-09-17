@@ -29,6 +29,10 @@
   - [12. Dual-Horizon Perception Matrix](#12-dual-horizon-perception-matrix-win32-native--everyday-chrome)
   - [13. Bio-Kinetic Motor Ergonomics & Visual Feedback Reticles](#13-bio-kinetic-motor-ergonomics--visual-feedback-reticles)
   - [14. 64-Bit Haven Memory Bank (`.hmb`) Binary Cognitive Storage](#14-64-bit-haven-memory-bank-hmb-binary-cognitive-storage--in-attention-dma)
+  - [15. 2D Semantic Memory Galaxy Visualizer](#15-2d-semantic-memory-galaxy-visualizer-spring-force-clustering)
+  - [16. Ambient Window & App-Switch Awareness Hook](#16-ambient-window--app-switch-awareness-hook)
+  - [17. Translucent Obsidian Floating Command HUD (WPF)](#17-translucent-obsidian-floating-command-hud-wpf)
+  - [18. Native Windows System Tray Companion Daemon](#18-native-windows-system-tray-companion-daemon)
 - [🚀 Quick Start & Installation](#-quick-start)
 - [📚 Architectural Specifications](#-architectural-specifications)
 - [👥 Contributors & Credits](#-contributors--credits)
@@ -267,6 +271,37 @@ Cloud-based and external vector databases (Pinecone, Chroma, Qdrant) introduce n
   - `super_list_memories`: Summarizes vault statistics, category distributions, and anchor catalogs.
   - `super_sync_vault`: Synchronizes memory vaults bidirectionally with `haven-cpp`.
 
+### 15. 2D Semantic Memory Galaxy Visualizer (Spring-Force Clustering)
+Memory is not a static flat list—it is a live cognitive topography.
+- **Spring-Force Semantic Topology**: Projects 128-dimensional dense latent vectors into a dynamic 2D canvas galaxy (`lib/hmb-engine.js`). Nodes repel via Coulomb electrostatics while semantic cosine affinity ($\text{Sim} \ge 0.28$) forms elastic synaptic springs, organically clustering memories by domain (`CORE_IDENTITY`, `SYSTEM`, `EPISODIC`, `SEMANTIC`, `EMOTIONAL`).
+- **Interactive Mission Control Galaxy (`:18880`)**: Live HTML5 Canvas with glowing synaptic filaments, mouse hover cards, and one-click cognitive recall.
+- **Native Tool**: `super_get_memory_galaxy` exposes graph vertices, edges, and cluster telemetry.
+
+### 16. Ambient Window & App-Switch Awareness Hook
+Eliminates context-switching lag through proactive ambient perception.
+- **Foreground Event Interception**: Actively tracks active application transitions via `desktop_helper.exe active` with sub-10ms overhead.
+- **Cognitive Pre-Warming**: The moment you switch from VS Code to Discord, Chrome, or Windows Terminal, the daemon automatically queries `.hmb` for relevant memory anchors and injects context into the active session with zero manual prompting.
+- **Universal Bus Broadcasting**: Emits non-intrusive `APP_SWITCH` narration cues to speech companions (Zero Dead Air).
+- **Native Tools**: `super_get_active_app`, `super_watch_app`. CLI: `node index.js --watch`.
+
+### 17. Translucent Obsidian Floating Command HUD (WPF)
+A global Spotlight/Raycast-style command palette engineered with zero external npm dependencies:
+- **Obsidian Glass Reticle**: Borderless, semi-transparent XAML window with rounded cyan glowing borders and hardware drop shadow (`tools/floating_launcher.ps1`).
+- **Instant Dispatch**: Type natural language prompts, questions, or slash commands (`Enter` to route via `/api/dispatch` or memory recall, `Esc` to dismiss).
+- **Non-Activating Topmost Layer**: Sits elevated above full-screen editors and games without stealing primary input focus until invoked.
+- **Invocation**: `npm run launcher` or `node index.js --launcher`.
+
+### 18. Native Windows System Tray Companion Daemon
+A persistent, lightweight notification daemon living in the Windows notification area:
+- **Procedural High-DPI Vector Icon**: Generates a crisp, dark obsidian badge with an anti-aliased cyan lightning bolt directly via GDI+ at runtime (`tools/gemini_tray.ps1`).
+- **Fast-Action Context Menu**:
+  - `🌌 Mission Control Dashboard (:18880)`
+  - `🚀 Floating Command Launcher (HUD)`
+  - `🧠 2D Semantic Memory Galaxy`
+  - `🌐 Live Showcase (geminiss.barrersoftware.com)`
+  - `🛑 Emergency Frame Interruption` (instantly halts queues and silences voice buffers)
+- **Invocation**: `npm run tray` or `node index.js --tray`.
+
 ---
 
 ## 🚀 Quick Start
@@ -274,11 +309,24 @@ Cloud-based and external vector databases (Pinecone, Chroma, Qdrant) introduce n
 ### 1. Web Mission Control Dashboard
 Launch the dashboard on port `18880`:
 ```bash
-node index.js --dashboard
+npm run dashboard
+# or: node index.js --dashboard
 ```
-Open `http://localhost:18880` to view live CPU/RAM telemetry, active windows, swarm execution, and the shared bus.
+Open `http://localhost:18880` to view live CPU/RAM telemetry, active windows, swarm execution, the 2D Semantic Galaxy Map, and the shared bus.
 
-### 2. Connect to Antigravity CLI / Gemini MCP
+### 2. Windows Native Companions
+```bash
+# Spawn Native System Tray Companion (Zero-dependency background tray icon)
+npm run tray
+
+# Summon Global Floating Command Bar HUD
+npm run launcher
+
+# Run Ambient App-Switch Watcher in terminal
+npm run watch
+```
+
+### 3. Connect to Antigravity CLI / Gemini MCP
 Add to `~/.gemini/settings.json`:
 ```json
 {
