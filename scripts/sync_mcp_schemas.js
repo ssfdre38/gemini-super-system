@@ -5,10 +5,15 @@ const path = require("path");
 const indexPath = path.resolve(__dirname, "..", "index.js");
 const indexContent = fs.readFileSync(indexPath, "utf8");
 
-// Extract the tools array between "tools: [" and the matching closing "]"
-const startIdx = indexContent.indexOf("tools: [");
+// Extract the tools array between SYSTEM_TOOLS / "tools: [" and the matching closing "]"
+let startIdx = indexContent.indexOf("const SYSTEM_TOOLS = [");
+let arrayPrefix = "const SYSTEM_TOOLS = ";
 if (startIdx === -1) {
-  console.error("Could not find 'tools: [' in index.js");
+  startIdx = indexContent.indexOf("tools: [");
+  arrayPrefix = "tools: ";
+}
+if (startIdx === -1) {
+  console.error("Could not find SYSTEM_TOOLS or 'tools: [' in index.js");
   process.exit(1);
 }
 
@@ -16,7 +21,7 @@ if (startIdx === -1) {
 const endIdx = indexContent.indexOf("server.setRequestHandler(CallToolRequestSchema", startIdx);
 const toolsCode = indexContent.substring(startIdx, endIdx);
 const lastClosingBracket = toolsCode.lastIndexOf("]");
-const cleanArrayCode = toolsCode.substring("tools: ".length, lastClosingBracket + 1);
+const cleanArrayCode = toolsCode.substring(arrayPrefix.length, lastClosingBracket + 1);
 
 // Safely evaluate tools array in sandbox function
 let tools = [];

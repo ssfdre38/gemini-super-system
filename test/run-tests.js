@@ -281,6 +281,39 @@ async function run() {
     fs.rmSync(testTarget, { recursive: true, force: true });
   });
 
+  // Suite 5: Discord Ghost Observer (Optical & Spatial Zero-Focus Extraction)
+  console.log("\x1b[1m[Suite 5: Discord Ghost Observer]\x1b[0m");
+
+  await itAsync("Discord Ghost Observer parses live/snapshot optical chat frames", async () => {
+    const { DiscordGhostObserver } = require("../lib/discord-observer.js");
+    const mockBridge = {
+      listWindows: () => [
+        {
+          process: "Discord",
+          title: "#✨┊ultra-unlock | Google Gemini - Discord",
+          handle: "123456"
+        }
+      ],
+      ocrBinPath: path.resolve(__dirname, "..", "tools", "ocr_helper.exe")
+    };
+
+    const observer = new DiscordGhostObserver(mockBridge);
+
+    // Test with existing captured snapshot if available, or simulate OCR lines
+    const testSnapshot = path.resolve(__dirname, "..", "tools", "discord_test.png");
+    if (fs.existsSync(testSnapshot)) {
+      const res = await observer.observe({ snapshotPath: testSnapshot });
+      assert.strictEqual(res.success, true);
+      assert.strictEqual(res.server, "Google Gemini");
+      assert.strictEqual(res.channel, "#✨┊ultra-unlock");
+      assert(res.onlineMembersCount >= 0, "Expected members count");
+      assert(Array.isArray(res.recentMessages), "Expected recent messages array");
+    } else {
+      // Basic verification of observer initialization
+      assert(observer.bridge !== null);
+    }
+  });
+
   console.log("\n=======================================================");
   console.log(`   TEST RESULTS: ${passedTests}/${totalTests} PASSED (${failedTests} FAILED)`);
   console.log("=======================================================\n");

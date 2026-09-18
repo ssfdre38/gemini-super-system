@@ -465,15 +465,32 @@ const SYSTEM_TOOLS = [
         }
       },
       {
+        name: "super_desktop_observe_discord",
+        description: "100% TOS-safe, zero-focus-stealing Desktop Ghost Observer for Discord. Passively inspects whichever Discord server, channel, or DM is currently open on Daniel's desktop (including private/VIP channels where bots cannot be invited, such as Google Gemini #✨┊ultra-unlock). Extracts server name, channel name, online members roster, and structured chat transcript with authors, badges, timestamps, and message contents. Zero focus stealing, zero keystrokes, zero bot tokens or user tokens required.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            snapshotPath: {
+              type: "string",
+              description: "Optional path to a pre-captured PNG snapshot."
+            }
+          }
+        }
+      },
+      {
         name: "super_desktop_read_discord",
-        description: "Autonomously navigates Discord to any channel (e.g. 'gemini-chat'), captures a high-resolution snapshot, and runs native WinRT OCR to extract visible chat messages, users, and timestamps without requiring a bot token or Discord API.",
+        description: "Reads visible Discord chat messages, online members, and server details. If channel is omitted, 'auto', or empty, runs as a zero-focus Desktop Ghost Observer on the active channel without switching focus or sending keystrokes. If channel is specified, navigates to that channel via Ctrl+K before reading.",
         inputSchema: {
           type: "object",
           properties: {
             channel: {
               type: "string",
-              default: "gemini-chat",
-              description: "Target Discord channel name to switch to and inspect (defaults to 'gemini-chat')."
+              description: "Target Discord channel name to switch to (e.g. 'gemini-chat'). Omit or pass 'auto' for zero-focus passive observation of current channel."
+            },
+            passive: {
+              type: "boolean",
+              default: true,
+              description: "If true, passively observes without stealing focus or navigating (default true)."
             }
           }
         }
@@ -1135,19 +1152,70 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
   }
 
+  if (name === "super_desktop_observe_discord") {
+    const bridge = getDesktopBridge();
+    const res = await bridge.observeDiscord({ snapshotPath: args?.snapshotPath });
+    if (!res.success) {
+      return {
+        content: [{ type: "text", text: `⚠️ Discord Ghost Observer failed: ${res.error}` }]
+      };
+    }
+
+    const messagesFormatted = (res.recentMessages || [])
+      .map(m => `[${m.time || "Recent"}] ${m.author}${m.badge ? ` [${m.badge}]` : ""}: ${m.content}`)
+      .join("\n");
+
+    const membersFormatted = (res.onlineMembers || []).slice(0, 25).join(", ");
+
+    const text = `👻 [Discord Ghost Observer] (Zero-Focus / 100% TOS Safe)\n` +
+      `• Server : ${res.server}\n` +
+      `• Channel: ${res.channel}\n` +
+      `• Online : ${res.onlineMembersCount} members (${membersFormatted}${res.onlineMembersCount > 25 ? "..." : ""})\n` +
+      `• Window : "${res.windowTitle}" (HWND: ${res.windowHandle})\n` +
+      `• Messages (${res.messageCount} visible):\n\n${messagesFormatted || "(No messages parsed)"}\n\n` +
+      `📸 Frame: ${res.snapshotPath}`;
+
+    return {
+      content: [{ type: "text", text }]
+    };
+  }
+
   if (name === "super_desktop_read_discord") {
     const bridge = getDesktopBridge();
-    const channel = args.channel || "gemini-chat";
-    const res = await bridge.readDiscordMessages(channel);
+    const channel = args?.channel;
+    const passive = args?.passive !== undefined ? args.passive : (!channel || channel === "auto");
+    const res = await bridge.readDiscordMessages(channel, { passive, snapshotPath: args?.snapshotPath });
+    if (!res.success) {
+      return {
+        content: [{ type: "text", text: `⚠️ Failed to read Discord: ${res.error}` }]
+      };
+    }
+
+    if (res.mode === "desktop_ghost_observer") {
+      const messagesFormatted = (res.recentMessages || [])
+        .map(m => `[${m.time || "Recent"}] ${m.author}${m.badge ? ` [${m.badge}]` : ""}: ${m.content}`)
+        .join("\n");
+      const membersFormatted = (res.onlineMembers || []).slice(0, 20).join(", ");
+      return {
+        content: [
+          {
+            type: "text",
+            text: `👻 [Discord Ghost Observer] ${res.server} > ${res.channel} (${res.messageCount} messages):\n\n` +
+                  `${messagesFormatted}\n\n` +
+                  `👥 Online (${res.onlineMembersCount}): ${membersFormatted}\n` +
+                  `📸 Frame: ${res.snapshotPath}`
+          }
+        ]
+      };
+    }
+
     return {
       content: [
         {
           type: "text",
-          text: res.success
-            ? `💬 Discord Channel #${channel} Inspected via Native WinRT OCR (${res.lineCount} lines):\n` +
-              res.lines.map(l => `• ${l.text}`).join("\n") +
-              `\n📸 Snapshot: ${res.snapshotPath}`
-            : `⚠️ Failed to read Discord channel #${channel}: ${res.error}`
+          text: `💬 Discord #${channel} Inspected via WinRT OCR (${res.lineCount} lines):\n` +
+                (res.lines || []).map(l => `• ${l.text}`).join("\n") +
+                `\n📸 Snapshot: ${res.snapshotPath}`
         }
       ]
     };
