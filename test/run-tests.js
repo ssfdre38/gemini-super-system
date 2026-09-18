@@ -314,6 +314,51 @@ async function run() {
     }
   });
 
+  // Suite 6: Voice Synthesizer, Hardware Vitals & Event Watcher
+  console.log("\x1b[1m[Suite 6: Voice Synthesizer, Hardware Vitals & Event Watcher]\x1b[0m");
+
+  await itAsync("Voice Synthesizer discovers installed Windows TTS voices", async () => {
+    const { getVoiceSynthesizer } = require("../lib/voice-synthesizer.js");
+    const synth = getVoiceSynthesizer();
+    const res = await synth.listVoices();
+    assert.strictEqual(res.success, true);
+    assert(res.count > 0, "Expected at least one installed Windows TTS voice");
+    assert(Array.isArray(res.voices), "Expected voices array");
+  });
+
+  await itAsync("Hardware Vitals retrieves real-time CPU and AI workload telemetry", async () => {
+    const { getHardwareVitals } = require("../lib/hardware-vitals.js");
+    const vitals = await getHardwareVitals().getVitals();
+    assert.strictEqual(vitals.success, true);
+    assert(vitals.cpu && vitals.cpu.logicalCores > 0, "Expected CPU logical cores");
+    assert(vitals.memory && parseFloat(vitals.memory.totalGb) > 0, "Expected positive RAM total");
+    assert(vitals.aiWorkloads !== undefined, "Expected AI workloads map");
+  });
+
+  it("Discord VIP Event Watcher manages start, status, and stop lifecycle", () => {
+    const { DiscordEventWatcher } = require("../lib/discord-watcher.js");
+    const mockBridge = { observeDiscord: async () => ({ success: true, recentMessages: [] }) };
+    const watcher = new DiscordEventWatcher(mockBridge, { intervalSec: 30 });
+
+    assert.strictEqual(watcher.isRunning, false);
+    const startRes = watcher.start(30);
+    assert.strictEqual(startRes.success, true);
+    assert.strictEqual(watcher.isRunning, true);
+
+    const status = watcher.getStatus();
+    assert.strictEqual(status.running, true);
+
+    const stopRes = watcher.stop();
+    assert.strictEqual(stopRes.success, true);
+    assert.strictEqual(watcher.isRunning, false);
+  });
+
+  it("Gemini Desktop Bridge exposes unified executeAction method", () => {
+    const { getDesktopBridge } = require("../lib/desktop-bridge.js");
+    const bridge = getDesktopBridge();
+    assert.strictEqual(typeof bridge.executeAction, "function");
+  });
+
   console.log("\n=======================================================");
   console.log(`   TEST RESULTS: ${passedTests}/${totalTests} PASSED (${failedTests} FAILED)`);
   console.log("=======================================================\n");

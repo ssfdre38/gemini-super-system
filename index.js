@@ -534,6 +534,104 @@ const SYSTEM_TOOLS = [
         }
       },
       {
+        name: "super_speak",
+        description: "Speaks text out loud through native Windows speakers/headphones using hardware-accelerated speech synthesis, or generates a .wav file. Supports speed rate (-10 to 10), volume (0 to 100), and installed voices ('David', 'Zira').",
+        inputSchema: {
+          type: "object",
+          properties: {
+            text: {
+              type: "string",
+              description: "Text for the synthesizer to speak out loud."
+            },
+            voice: {
+              type: "string",
+              description: "Voice name ('David' for male, 'Zira' for female, or omitted for default)."
+            },
+            rate: {
+              type: "number",
+              default: 1,
+              description: "Speech rate speed from -10 (slowest) to 10 (fastest). Defaults to 1."
+            },
+            volume: {
+              type: "number",
+              default: 100,
+              description: "Audio volume from 0 to 100. Defaults to 100."
+            },
+            outputPath: {
+              type: "string",
+              description: "Optional .wav file path to synthesize speech directly to disk instead of speaking live."
+            }
+          },
+          required: ["text"]
+        }
+      },
+      {
+        name: "super_hardware_vitals",
+        description: "Returns real-time workstation hardware vitals: sampled CPU utilization %, logical cores, RAM total/used/free, and process health for AI workloads (llama-server.exe, ag2-discord-gateway, agy.exe, gemini.exe).",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_desktop_action",
+        description: "Unified 'See & Actuate' one-shot visual desktop grounding tool. Locates any UI element or visible text inside a window via UIAutomation or native WinRT OCR, calculates exact bounding box center, humanizes mouse trajectory, executes the requested action ('click', 'double_click', 'right_click', 'type', 'focus'), and automatically captures a post-action visual verification snapshot.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            titleFilter: {
+              type: "string",
+              description: "Target window title substring (e.g. 'Discord', 'Visual Studio Code', 'Chrome', 'screen')."
+            },
+            target: {
+              type: "string",
+              description: "Visible element label, button text, or automation ID to locate and ground visually."
+            },
+            action: {
+              type: "string",
+              enum: ["click", "double_click", "right_click", "type", "focus"],
+              default: "click",
+              description: "Action to perform on target."
+            },
+            text: {
+              type: "string",
+              description: "Text to type if action is 'type'."
+            },
+            humanize: {
+              type: "boolean",
+              default: true,
+              description: "Whether to humanize cursor movement via Fitts's law."
+            },
+            autoSnapshot: {
+              type: "boolean",
+              default: true,
+              description: "Whether to return a post-action verification snapshot."
+            }
+          },
+          required: ["titleFilter"]
+        }
+      },
+      {
+        name: "super_watch_discord_event",
+        description: "Controls the background zero-focus Discord VIP Event Auto-Watcher daemon. Actively monitors active Discord window (e.g. #✨┊ultra-unlock) for Google staff announcements and event keywords ('event', 'start', 'challenge', 'link', 'live'), firing audible voice alerts and bus events.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["start", "stop", "status"],
+              default: "status",
+              description: "Action to perform ('start', 'stop', or 'status')."
+            },
+            intervalSec: {
+              type: "number",
+              default: 20,
+              description: "Observation polling interval in seconds (minimum 10s, defaults to 20s)."
+            }
+          }
+        }
+      },
+      {
         name: "super_remember",
         description: "Encodes and stores a persistent, cross-session cognitive memory anchor into the 64-Bit Haven Memory Bank (.hmb). HDD-hardened contiguous binary packing with zero external vector DB bloat.",
         inputSchema: {
@@ -1249,6 +1347,137 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         }
       ]
     };
+  }
+
+  if (name === "super_speak") {
+    const { getVoiceSynthesizer } = require("./lib/voice-synthesizer.js");
+    const synth = getVoiceSynthesizer();
+    if (args.outputPath) {
+      const res = await synth.toWav(args.text, args.outputPath, {
+        voice: args.voice,
+        rate: args.rate,
+        volume: args.volume
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: res.success
+              ? `🎙️ Audio synthesized to WAV (${res.bytes} bytes) using ${res.voice}:\n📁 ${res.outputPath}`
+              : `⚠️ Failed to synthesize audio: ${res.error}`
+          }
+        ]
+      };
+    } else {
+      const res = await synth.speak(args.text, {
+        voice: args.voice,
+        rate: args.rate,
+        volume: args.volume,
+        async: true
+      });
+      return {
+        content: [
+          {
+            type: "text",
+            text: res.success
+              ? `🔊 Speech dispatched to desktop audio output: "${args.text}" (Voice: ${res.voice || "default"}, Rate: ${res.rate})`
+              : `⚠️ Failed to dispatch speech: ${res.error}`
+          }
+        ]
+      };
+    }
+  }
+
+  if (name === "super_hardware_vitals") {
+    const { getHardwareVitals } = require("./lib/hardware-vitals.js");
+    const vitals = await getHardwareVitals().getVitals();
+    const ai = vitals.aiWorkloads || {};
+    const text = `📊 WORKSTATION HARDWARE & AI LOAD VITALS\n` +
+      `Timestamp: ${vitals.timestamp}\n\n` +
+      `[CPU & MEMORY]\n` +
+      `• Processor : ${vitals.cpu.model} (${vitals.cpu.logicalCores} Logical Cores)\n` +
+      `• CPU Load  : ${vitals.cpu.currentLoadPct}%\n` +
+      `• System RAM: ${vitals.memory.usedGb} GB / ${vitals.memory.totalGb} GB (${vitals.memory.usagePct}% Used, ${vitals.memory.freeGb} GB Free)\n` +
+      `• OS Uptime : ${vitals.os.uptimeFormatted} (${vitals.os.platform} Build ${vitals.os.release})\n\n` +
+      `[AI WORKLOADS & DAEMONS]\n` +
+      `• llama-server (GGUF) : ${ai.llamaServer?.running ? `[RUNNING - PID ${ai.llamaServer.pid}, ${ai.llamaServer.memMb} MB RAM, Port 11436 ${ai.llamaServer.port11436}]` : "[OFFLINE]"}\n` +
+      `• AG2 Discord Gateway : ${ai.ag2Gateway?.online ? "[ONLINE - Actuation API Port 18895]" : "[STANDBY]"}\n` +
+      `• Antigravity CLI     : ${ai.agy?.running ? `[ONLINE - PID ${ai.agy.pid}, ${ai.agy.memMb} MB RAM]` : "[IDLE]"}\n` +
+      `• Gemini Native Core  : ${ai.geminiCli?.running ? `[ONLINE - PID ${ai.geminiCli.pid}, ${ai.geminiCli.memMb} MB RAM]` : "[IDLE]"}`;
+
+    return {
+      content: [{ type: "text", text }]
+    };
+  }
+
+  if (name === "super_desktop_action") {
+    const bridge = getDesktopBridge();
+    const res = await bridge.executeAction(args.titleFilter, {
+      target: args.target,
+      action: args.action || "click",
+      text: args.text,
+      humanize: args.humanize !== false,
+      autoSnapshot: args.autoSnapshot !== false
+    });
+
+    if (!res.success) {
+      return {
+        content: [{ type: "text", text: `⚠️ Desktop action failed in "${args.titleFilter}": ${res.error}` }]
+      };
+    }
+
+    let text = `🎯 Desktop Action Executed in "${args.titleFilter}":\n` +
+      `• Action : ${res.action.toUpperCase()}\n` +
+      (res.foundText ? `• Target : "${res.foundText}" grounded via ${res.method} @ [${res.targetCoords.centerX}, ${res.targetCoords.centerY}]\n` : "") +
+      (res.snapshot ? `📸 Verification Snapshot: ${res.snapshot}` : "");
+
+    return {
+      content: [{ type: "text", text }]
+    };
+  }
+
+  if (name === "super_watch_discord_event") {
+    const { getDiscordEventWatcher } = require("./lib/discord-watcher.js");
+    const watcher = getDiscordEventWatcher(getDesktopBridge());
+    const action = args.action || "status";
+
+    if (action === "start") {
+      const res = watcher.start(args.intervalSec || 20);
+      return {
+        content: [
+          {
+            type: "text",
+            text: `⚡ Discord VIP Event Auto-Watcher STARTED (Polling every ${res.intervalSec}s across ${res.vipAuthorsCount} Google staff handles). Auditory voice alerts enabled.`
+          }
+        ]
+      };
+    } else if (action === "stop") {
+      const res = watcher.stop();
+      return {
+        content: [
+          {
+            type: "text",
+            text: `⏹️ Discord VIP Event Auto-Watcher STOPPED (${res.eventsCaptured} events captured).`
+          }
+        ]
+      };
+    } else {
+      const status = watcher.getStatus();
+      return {
+        content: [
+          {
+            type: "text",
+            text: `ℹ️ Discord VIP Event Auto-Watcher Status: ${status.running ? "ACTIVE" : "IDLE"}\n` +
+                  `• Interval : ${status.intervalSec}s\n` +
+                  `• Seen Messages Tracked : ${status.trackedKeysCount}\n` +
+                  `• Recent VIP Events (${status.recentEvents.length}):\n` +
+                  (status.recentEvents.length > 0
+                    ? status.recentEvents.map(e => `  [${e.time}] ${e.author} in ${e.channel}: ${e.content}`).join("\n")
+                    : "  (None yet)")
+          }
+        ]
+      };
+    }
   }
 
   if (name === "super_remember") {
