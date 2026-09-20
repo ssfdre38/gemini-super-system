@@ -609,6 +609,20 @@ namespace GeminiSuperDesktop {
         [DllImport("user32.dll", SetLastError = true)]
         static extern bool SystemParametersInfo(uint uiAction, uint uiParam, IntPtr pvParam, uint fWinIni);
 
+        [DllImport("user32.dll", EntryPoint = "SystemParametersInfo", SetLastError = true)]
+        static extern bool SystemParametersInfoRect(uint uiAction, uint uiParam, ref RECT pvParam, uint fWinIni);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool MoveWindow(IntPtr hWnd, int X, int Y, int nWidth, int nHeight, bool bRepaint);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+        const uint SPI_GETWORKAREA = 0x0030;
+        const uint SWP_NOZORDER = 0x0004;
+        const uint SWP_NOACTIVATE = 0x0010;
+        const uint SWP_SHOWWINDOW = 0x0040;
+
         const uint SPI_SETFOREGROUNDLOCKTIMEOUT = 0x2001;
         const uint SPIF_SENDCHANGE = 0x0002;
         const uint SPIF_UPDATEINIFILE = 0x0001;
@@ -659,6 +673,154 @@ namespace GeminiSuperDesktop {
             try {
                 SystemParametersInfo(SPI_SETFOREGROUNDLOCKTIMEOUT, 0, IntPtr.Zero, 0);
             } catch {}
+        }
+
+        static void RunSta(Action action) {
+            Exception threadEx = null;
+            Thread t = new Thread(() => {
+                try { action(); }
+                catch (Exception ex) { threadEx = ex; }
+            });
+            t.SetApartmentState(ApartmentState.STA);
+            t.Start();
+            t.Join(3000);
+            if (threadEx != null) throw threadEx;
+        }
+
+        static void MoveWindowCmd(string titleFilter, int x, int y, int w, int h) {
+            IntPtr hDesk = EnsureInteractiveDesktop();
+            IntPtr targetHwnd;
+            string actualTitle;
+            if (!FindWindow(hDesk, titleFilter, out targetHwnd, out actualTitle)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                return;
+            }
+
+            ShowWindow(targetHwnd, SW_RESTORE);
+            Thread.Sleep(40);
+            bool ok = MoveWindow(targetHwnd, x, y, w, h, true);
+            if (!ok) {
+                ok = SetWindowPos(targetHwnd, IntPtr.Zero, x, y, w, h, SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+            }
+
+            RECT r;
+            GetWindowRect(targetHwnd, out r);
+            Console.WriteLine(string.Format("{{\"success\": {0}, \"title\": \"{1}\", \"x\": {2}, \"y\": {3}, \"width\": {4}, \"height\": {5}}}",
+                ok ? "true" : "false", EscapeJson(actualTitle), r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top));
+        }
+
+        static void GetWorkAreaCmd() {
+            RECT r = new RECT();
+            SystemParametersInfoRect(SPI_GETWORKAREA, 0, ref r, 0);
+            int screenW = GetSystemMetrics(0);
+            int screenH = GetSystemMetrics(1);
+            int virtX = GetSystemMetrics(76);
+            int virtY = GetSystemMetrics(77);
+            int virtW = GetSystemMetrics(78);
+            int virtH = GetSystemMetrics(79);
+
+            Console.WriteLine(string.Format("{{\"success\": true, \"screenW\": {0}, \"screenH\": {1}, \"workX\": {2}, \"workY\": {3}, \"workW\": {4}, \"workH\": {5}, \"virtX\": {6}, \"virtY\": {7}, \"virtW\": {8}, \"virtH\": {9}}}",
+                screenW, screenH, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top,
+                virtX, virtY, virtW, virtH));
+        }
+
+        static void ClipboardGetCmd() {
+            try {
+                string text = "";
+                bool hasText = false;
+                bool hasImage = false;
+                bool hasFiles = false;
+
+                RunSta(() => {
+                    hasText = Clipboard.ContainsText();
+                    hasImage = Clipboard.ContainsImage();
+                    hasFiles = Clipboard.ContainsFileDropList();
+                    if (hasText) {
+                        text = Clipboard.GetText();
+                    }
+                });
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"hasText\": {0}, \"hasImage\": {1}, \"hasFiles\": {2}, \"charCount\": {3}, \"text\": \"{4}\"}}",
+                    hasText ? "true" : "false", hasImage ? "true" : "false", hasFiles ? "true" : "false",
+                    text.Length, EscapeJson(text)));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void ClipboardSetCmd(string text) {
+            try {
+                RunSta(() => {
+                    Clipboard.SetText(text);
+                });
+                Console.WriteLine(string.Format("{{\"success\": true, \"charCount\": {0}}}", text.Length));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void ClipboardSaveImageCmd(string outputPath) {
+            try {
+                int w = 0, h = 0;
+                bool saved = false;
+                RunSta(() => {
+                    if (Clipboard.ContainsImage()) {
+                        using (Image img = Clipboard.GetImage()) {
+                            if (img != null) {
+                                string dir = Path.GetDirectoryName(outputPath);
+                                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) {
+                                    Directory.CreateDirectory(dir);
+                                }
+                                img.Save(outputPath, ImageFormat.Png);
+                                w = img.Width;
+                                h = img.Height;
+                                saved = true;
+                            }
+                        }
+                    }
+                });
+
+                if (saved) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"path\": \"{0}\", \"width\": {1}, \"height\": {2}}}",
+                        outputPath.Replace("\\", "/"), w, h));
+                } else {
+                    Console.WriteLine("{\"success\": false, \"error\": \"No image on clipboard\"}");
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void ClipboardLoadImageCmd(string inputPath) {
+            try {
+                if (!File.Exists(inputPath)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Input image file not found\"}");
+                    return;
+                }
+                int w = 0, h = 0;
+                RunSta(() => {
+                    using (Image img = Image.FromFile(inputPath)) {
+                        Clipboard.SetImage(img);
+                        w = img.Width;
+                        h = img.Height;
+                    }
+                });
+                Console.WriteLine(string.Format("{{\"success\": true, \"path\": \"{0}\", \"width\": {1}, \"height\": {2}}}",
+                    inputPath.Replace("\\", "/"), w, h));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void ClipboardClearCmd() {
+            try {
+                RunSta(() => {
+                    Clipboard.Clear();
+                });
+                Console.WriteLine("{\"success\": true}");
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
         }
 
         static void Main(string[] args) {
@@ -779,6 +941,24 @@ namespace GeminiSuperDesktop {
                         Console.WriteLine("{\"error\": \"Coords out of bounds\"}");
                     }
                 }
+            } else if (cmd == "move" && args.Length >= 6) {
+                int x = int.Parse(args[2]);
+                int y = int.Parse(args[3]);
+                int w = int.Parse(args[4]);
+                int h = int.Parse(args[5]);
+                MoveWindowCmd(args[1], x, y, w, h);
+            } else if (cmd == "workarea") {
+                GetWorkAreaCmd();
+            } else if (cmd == "clip_get") {
+                ClipboardGetCmd();
+            } else if (cmd == "clip_set" && args.Length >= 2) {
+                ClipboardSetCmd(args[1]);
+            } else if (cmd == "clip_save_image" && args.Length >= 2) {
+                ClipboardSaveImageCmd(args[1]);
+            } else if (cmd == "clip_load_image" && args.Length >= 2) {
+                ClipboardLoadImageCmd(args[1]);
+            } else if (cmd == "clip_clear") {
+                ClipboardClearCmd();
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

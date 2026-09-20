@@ -359,6 +359,43 @@ async function run() {
     assert.strictEqual(typeof bridge.executeAction, "function");
   });
 
+  // Suite 7: Native Clipboard Bridge, Workspace Layout & Service Watchdog
+  console.log("\x1b[1m[Suite 7: Clipboard, Workspace Layout & Service Watchdog]\x1b[0m");
+
+  await itAsync("Clipboard Bridge sets, reads, and clears Windows clipboard text", async () => {
+    const { getClipboardBridge } = require("../lib/clipboard-bridge.js");
+    const clip = getClipboardBridge();
+    const testPayload = `Gemini_Super_Test_${Date.now()}`;
+    const setRes = await clip.setText(testPayload);
+    assert.strictEqual(setRes.success, true);
+
+    const getRes = await clip.getText();
+    assert.strictEqual(getRes.success, true);
+    assert.strictEqual(getRes.hasText, true);
+    assert.strictEqual(getRes.text, testPayload);
+
+    await clip.clear();
+  });
+
+  await itAsync("Workspace Layout queries monitor work area dimensions", async () => {
+    const { getWorkspaceLayout } = require("../lib/workspace-layout.js");
+    const layout = getWorkspaceLayout();
+    const work = await layout.getWorkArea();
+    assert.strictEqual(work.success, true);
+    assert(work.screenW > 0, "Expected screen width > 0");
+    assert(work.workW > 0, "Expected work area width > 0");
+    assert(work.workH > 0, "Expected work area height > 0");
+  });
+
+  await itAsync("Service Watchdog polls background services and reports telemetry", async () => {
+    const { getServiceWatchdog } = require("../lib/service-watchdog.js");
+    const watchdog = getServiceWatchdog();
+    const vitals = await watchdog.getAllVitals();
+    assert.strictEqual(vitals.success, true);
+    assert(typeof vitals.summary === "string");
+    assert(vitals.services["ag2-discord-gateway"] !== undefined);
+  });
+
   console.log("\n=======================================================");
   console.log(`   TEST RESULTS: ${passedTests}/${totalTests} PASSED (${failedTests} FAILED)`);
   console.log("=======================================================\n");

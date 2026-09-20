@@ -28,6 +28,9 @@ function getSupervisor(options = {}) {
 }
 
 const { getDesktopBridge } = require("./lib/desktop-bridge.js");
+const { getClipboardBridge } = require("./lib/clipboard-bridge.js");
+const { getWorkspaceLayout } = require("./lib/workspace-layout.js");
+const { getServiceWatchdog } = require("./lib/service-watchdog.js");
 
 const server = new Server(
   {
@@ -778,6 +781,94 @@ const SYSTEM_TOOLS = [
               type: "number",
               default: 100,
               description: "Maximum number of memories to include in the galaxy graph (defaults to 100)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_clipboard",
+        description: "High-performance native Windows clipboard bridge. Read and write clipboard text (sub-15ms) or capture and load PNG images directly without third-party dependencies.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["get_text", "set_text", "save_image", "load_image", "clear"],
+              default: "get_text",
+              description: "Action to perform on the Windows clipboard."
+            },
+            text: {
+              type: "string",
+              description: "Text payload to write to clipboard (when action is set_text)."
+            },
+            imagePath: {
+              type: "string",
+              description: "Destination file path to save clipboard image (save_image) or source image path to load into clipboard (load_image)."
+            }
+          },
+          required: ["action"]
+        }
+      },
+      {
+        name: "super_workspace_layout",
+        description: "Deterministic Windows desktop workspace layout manager and window arranger. Tile, snap, and arrange open windows into side-by-side, thirds, 2x2 grid, coding, or focus presets, or apply custom geometries.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            layout: {
+              type: "string",
+              enum: ["side_by_side", "thirds", "grid_2x2", "coding", "focus", "set_geometry"],
+              description: "Workspace layout preset to apply."
+            },
+            leftWindow: {
+              type: "string",
+              description: "Title substring or HWND for left side window."
+            },
+            rightWindow: {
+              type: "string",
+              description: "Title substring or HWND for right side window."
+            },
+            centerWindow: {
+              type: "string",
+              description: "Title substring or HWND for center window in thirds layout."
+            },
+            target: {
+              type: "string",
+              description: "Target window title substring or HWND for single-window operations."
+            },
+            ratio: {
+              type: "number",
+              default: 0.5,
+              description: "Split ratio between 0.1 and 0.9 for side-by-side layout (default: 0.5)."
+            },
+            x: { type: "number", description: "X coordinate (px) for set_geometry." },
+            y: { type: "number", description: "Y coordinate (px) for set_geometry." },
+            width: { type: "number", description: "Width (px) for set_geometry." },
+            height: { type: "number", description: "Height (px) for set_geometry." }
+          },
+          required: ["layout"]
+        }
+      },
+      {
+        name: "super_service_watchdog",
+        description: "Autonomous service health monitor, TCP/HTTP port prober, and self-healing watchdog for the sovereign stack (llama-server, ag2-discord-gateway, gemini-super-system, haven-server).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["status", "restart", "auto_heal"],
+              default: "status",
+              description: "Watchdog action to perform."
+            },
+            service: {
+              type: "string",
+              description: "Target service key (e.g. 'llama-server', 'ag2-discord-gateway', 'gemini-super-system', 'haven-server') for status or restart."
+            },
+            requiredServices: {
+              type: "array",
+              items: { type: "string" },
+              description: "List of service keys to check and auto-heal (defaults to all)."
             }
           }
         }
@@ -1624,6 +1715,63 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 `• Synaptic Links : ${galaxy.links.length}\n` +
                 `• Clusters       : ${galaxy.clusters.map(c => `${c.category} (${c.count})`).join(", ")}\n` +
                 `• Graph Data JSON:\n` + JSON.stringify(galaxy, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_clipboard") {
+    const bridge = getClipboardBridge();
+    const res = await bridge.execute(args);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📋 [Universal Windows Clipboard Bridge]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_workspace_layout") {
+    const layoutManager = getWorkspaceLayout();
+    const res = await layoutManager.applyLayout(args.layout, args);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🪟 [Workspace Layout Manager]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_service_watchdog") {
+    const watchdog = getServiceWatchdog();
+    const action = args.action || "status";
+    let res;
+    if (action === "status") {
+      if (args.service) {
+        res = await watchdog.getServiceStatus(args.service);
+      } else {
+        res = await watchdog.getAllVitals();
+      }
+    } else if (action === "restart") {
+      if (!args.service) {
+        res = { success: false, error: "Missing required parameter 'service' for restart action." };
+      } else {
+        res = await watchdog.restartService(args.service);
+      }
+    } else if (action === "auto_heal") {
+      res = await watchdog.autoHeal(args.requiredServices);
+    } else {
+      res = { success: false, error: `Unknown action '${action}'.` };
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [Sovereign Service Watchdog]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
