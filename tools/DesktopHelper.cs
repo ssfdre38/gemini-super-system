@@ -26,11 +26,17 @@ namespace GeminiSuperDesktop {
         public string ClassName;
         public string Title;
         public RECT Rect;
+        public RECT FrameRect;
         public bool IsForeground;
         public bool IsMinimized;
         public bool IsMaximized;
         public bool IsHung;
         public bool IsElevated;
+        public bool IsCloaked;
+        public int ZOrder;
+        public string MonitorDevice;
+        public bool IsPrimaryMonitor;
+        public bool IsTopmost;
     }
 
     class DxgiCaptureEngine {
@@ -395,6 +401,163 @@ namespace GeminiSuperDesktop {
         [DllImport("user32.dll")]
         static extern int GetSystemMetrics(int nIndex);
 
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmGetWindowAttribute(IntPtr hwnd, uint dwAttribute, out int pvAttribute, int cbAttribute);
+
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmGetWindowAttribute(IntPtr hwnd, uint dwAttribute, out RECT pvAttribute, int cbAttribute);
+
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmGetColorizationColor(out uint pcrColorization, out bool pfOpaqueBlend);
+
+        const uint DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+        const uint DWMWA_CLOAKED = 14;
+        const uint DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+
+        [DllImport("user32.dll")]
+        public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
+        public delegate bool MonitorEnumProc(IntPtr hMonitor, IntPtr hdcMonitor, ref RECT lprcMonitor, IntPtr dwData);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
+        public struct MONITORINFOEX {
+            public int cbSize;
+            public RECT rcMonitor;
+            public RECT rcWork;
+            public uint dwFlags;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string szDevice;
+        }
+
+        [DllImport("user32.dll", CharSet = CharSet.Auto)]
+        public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr MonitorFromWindow(IntPtr hWnd, uint dwFlags);
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLong")]
+        private static extern IntPtr GetWindowLongPtr32(IntPtr hWnd, int nIndex);
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtr")]
+        private static extern IntPtr GetWindowLongPtr64(IntPtr hWnd, int nIndex);
+
+        public static IntPtr GetWindowLongPtr(IntPtr hWnd, int nIndex) {
+            if (IntPtr.Size == 8)
+                return GetWindowLongPtr64(hWnd, nIndex);
+            else
+                return GetWindowLongPtr32(hWnd, nIndex);
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct PROCESS_MEMORY_COUNTERS_EX {
+            public uint cb;
+            public uint PageFaultCount;
+            public UIntPtr PeakWorkingSetSize;
+            public UIntPtr WorkingSetSize;
+            public UIntPtr QuotaPeakPagedPoolUsage;
+            public UIntPtr QuotaPagedPoolUsage;
+            public UIntPtr QuotaPeakNonPagedPoolUsage;
+            public UIntPtr QuotaNonPagedPoolUsage;
+            public UIntPtr PagefileUsage;
+            public UIntPtr PeakPagefileUsage;
+            public UIntPtr PrivateUsage;
+        }
+
+        [DllImport("psapi.dll", SetLastError = true)]
+        public static extern bool GetProcessMemoryInfo(IntPtr hProcess, out PROCESS_MEMORY_COUNTERS_EX counters, uint size);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool GetProcessTimes(IntPtr hProcess, out long lpCreationTime, out long lpExitTime, out long lpKernelTime, out long lpUserTime);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern IntPtr OpenProcess(uint processAccess, bool bInheritHandle, uint processId);
+
+        [ComImport]
+        [Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
+        class MMDeviceEnumeratorComObject {}
+
+        [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IMMDeviceEnumerator {
+            int EnumAudioEndpoints(int dataFlow, int stateMask, out IntPtr deviceCollection);
+            [PreserveSig]
+            int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice endpoint);
+            int GetDevice(string pwstrId, out IMMDevice endpoint);
+            int RegisterEndpointNotificationCallback(IntPtr pClient);
+            int UnregisterEndpointNotificationCallback(IntPtr pClient);
+        }
+
+        [Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IMMDevice {
+            [PreserveSig]
+            int Activate(ref Guid iid, int dwClsCtx, IntPtr pActivationParams, [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);
+            int OpenPropertyStore(int stgmAccess, out IntPtr ppProperties);
+            int GetId([MarshalAs(UnmanagedType.LPWStr)] out string ppstrId);
+            int GetState(out int pdwState);
+        }
+
+        [Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IAudioEndpointVolume {
+            int RegisterControlChangeNotify(IntPtr pNotify);
+            int UnregisterControlChangeNotify(IntPtr pNotify);
+            int GetChannelCount(out uint pnChannelCount);
+            int SetMasterVolumeLevel(float fLevelDB, ref Guid pguidEventContext);
+            [PreserveSig]
+            int SetMasterVolumeLevelScalar(float fLevel, ref Guid pguidEventContext);
+            int GetMasterVolumeLevel(out float pfLevelDB);
+            [PreserveSig]
+            int GetMasterVolumeLevelScalar(out float pfLevel);
+            int SetChannelVolumeLevel(uint nChannel, float fLevelDB, ref Guid pguidEventContext);
+            int SetChannelVolumeLevelScalar(uint nChannel, float fLevel, ref Guid pguidEventContext);
+            int GetChannelVolumeLevel(uint nChannel, out float pfLevelDB);
+            int GetChannelVolumeLevelScalar(uint nChannel, out float pfLevel);
+            [PreserveSig]
+            int SetMute([MarshalAs(UnmanagedType.Bool)] bool bMute, ref Guid pguidEventContext);
+            [PreserveSig]
+            int GetMute([MarshalAs(UnmanagedType.Bool)] out bool pbMute);
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct CURSORINFO {
+            public int cbSize;
+            public int flags;
+            public IntPtr hCursor;
+            public POINT ptScreenPos;
+        }
+
+        [DllImport("user32.dll")]
+        public static extern bool GetCursorInfo(out CURSORINFO pci);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MEMORYSTATUSEX {
+            public uint dwLength;
+            public uint dwMemoryLoad;
+            public ulong ullTotalPhys;
+            public ulong ullAvailPhys;
+            public ulong ullTotalPageFile;
+            public ulong ullAvailPageFile;
+            public ulong ullTotalVirtual;
+            public ulong ullAvailVirtual;
+            public ulong ullAvailExtendedVirtual;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct SYSTEM_POWER_STATUS {
+            public byte ACLineStatus;
+            public byte BatteryFlag;
+            public byte BatteryLifePercent;
+            public byte SystemStatusFlag;
+            public uint BatteryLifeTime;
+            public uint BatteryFullLifeTime;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool GetSystemPowerStatus(out SYSTEM_POWER_STATUS lpSystemPowerStatus);
+
+        [DllImport("kernel32.dll")]
+        public static extern ulong GetTickCount64();
+
         [StructLayout(LayoutKind.Sequential)]
         public struct POINT { public int x; public int y; }
 
@@ -564,7 +727,7 @@ namespace GeminiSuperDesktop {
             try {
                 Thread t = new Thread(() => {
                     try {
-                        Clipboard.SetText(text);
+                        Clipboard.SetDataObject(text, true, 5, 50);
                     } catch {}
                 });
                 t.SetApartmentState(ApartmentState.STA);
@@ -719,9 +882,314 @@ namespace GeminiSuperDesktop {
             int virtW = GetSystemMetrics(78);
             int virtH = GetSystemMetrics(79);
 
-            Console.WriteLine(string.Format("{{\"success\": true, \"screenW\": {0}, \"screenH\": {1}, \"workX\": {2}, \"workY\": {3}, \"workW\": {4}, \"workH\": {5}, \"virtX\": {6}, \"virtY\": {7}, \"virtW\": {8}, \"virtH\": {9}}}",
+            var monitorList = new List<string>();
+            try {
+                EnumDisplayMonitors(IntPtr.Zero, IntPtr.Zero, (IntPtr hMon, IntPtr hdc, ref RECT rcMon, IntPtr data) => {
+                    MONITORINFOEX mi = new MONITORINFOEX();
+                    mi.cbSize = Marshal.SizeOf(typeof(MONITORINFOEX));
+                    if (GetMonitorInfo(hMon, ref mi)) {
+                        bool isPrimary = (mi.dwFlags & 1) != 0;
+                        int mW = mi.rcMonitor.Right - mi.rcMonitor.Left;
+                        int mH = mi.rcMonitor.Bottom - mi.rcMonitor.Top;
+                        int wW = mi.rcWork.Right - mi.rcWork.Left;
+                        int wH = mi.rcWork.Bottom - mi.rcWork.Top;
+                        monitorList.Add(string.Format("{{\"device\": \"{0}\", \"isPrimary\": {1}, \"bounds\": {{\"x\": {2}, \"y\": {3}, \"width\": {4}, \"height\": {5}}}, \"workArea\": {{\"x\": {6}, \"y\": {7}, \"width\": {8}, \"height\": {9}}}}}",
+                            EscapeJson(mi.szDevice), isPrimary ? "true" : "false",
+                            mi.rcMonitor.Left, mi.rcMonitor.Top, mW, mH,
+                            mi.rcWork.Left, mi.rcWork.Top, wW, wH));
+                    }
+                    return true;
+                }, IntPtr.Zero);
+            } catch {}
+
+            Console.WriteLine(string.Format("{{\"success\": true, \"screenW\": {0}, \"screenH\": {1}, \"workX\": {2}, \"workY\": {3}, \"workW\": {4}, \"workH\": {5}, \"virtX\": {6}, \"virtY\": {7}, \"virtW\": {8}, \"virtH\": {9}, \"monitors\": [{10}]}}",
                 screenW, screenH, r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top,
-                virtX, virtY, virtW, virtH));
+                virtX, virtY, virtW, virtH,
+                string.Join(",", monitorList.ToArray())));
+        }
+
+        static void GetVitalsCmd() {
+            try {
+                MEMORYSTATUSEX msex = new MEMORYSTATUSEX();
+                msex.dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX));
+                bool memOk = GlobalMemoryStatusEx(ref msex);
+
+                SYSTEM_POWER_STATUS pwr = new SYSTEM_POWER_STATUS();
+                bool pwrOk = GetSystemPowerStatus(out pwr);
+
+                ulong uptimeMs = GetTickCount64();
+                ulong uptimeSec = uptimeMs / 1000UL;
+
+                uint colorization = 0;
+                bool opaque = false;
+                string accentHex = "#0078D7";
+                try {
+                    if (DwmGetColorizationColor(out colorization, out opaque) == 0) {
+                        accentHex = string.Format("#{0:X6}", colorization & 0x00FFFFFF);
+                    }
+                } catch {}
+
+                string acStr = "Unknown";
+                if (pwr.ACLineStatus == 0) acStr = "Offline";
+                else if (pwr.ACLineStatus == 1) acStr = "Online";
+
+                string batStatus = "Unknown";
+                if ((pwr.BatteryFlag & 128) != 0) batStatus = "NoBattery";
+                else if ((pwr.BatteryFlag & 8) != 0) batStatus = "Charging";
+                else if ((pwr.BatteryFlag & 4) != 0) batStatus = "Critical";
+                else if ((pwr.BatteryFlag & 2) != 0) batStatus = "Low";
+                else if ((pwr.BatteryFlag & 1) != 0) batStatus = "High";
+
+                int batPct = (pwr.BatteryLifePercent <= 100) ? pwr.BatteryLifePercent : -1;
+                long batTimeSec = (pwr.BatteryLifeTime != 0xFFFFFFFF) ? (long)pwr.BatteryLifeTime : -1L;
+
+                ulong totalPhysMB = memOk ? (msex.ullTotalPhys / (1024UL * 1024UL)) : 0UL;
+                ulong availPhysMB = memOk ? (msex.ullAvailPhys / (1024UL * 1024UL)) : 0UL;
+                ulong usedPhysMB = (totalPhysMB > availPhysMB) ? (totalPhysMB - availPhysMB) : 0UL;
+                ulong totalPageMB = memOk ? (msex.ullTotalPageFile / (1024UL * 1024UL)) : 0UL;
+                ulong availPageMB = memOk ? (msex.ullAvailPageFile / (1024UL * 1024UL)) : 0UL;
+                ulong totalVirtMB = memOk ? (msex.ullTotalVirtual / (1024UL * 1024UL)) : 0UL;
+                ulong availVirtMB = memOk ? (msex.ullAvailVirtual / (1024UL * 1024UL)) : 0UL;
+
+                string json = string.Format("{{\"success\": true, \"memory\": {{\"loadPercent\": {0}, \"totalPhysicalMB\": {1}, \"availPhysicalMB\": {2}, \"usedPhysicalMB\": {3}, \"totalPageFileMB\": {4}, \"availPageFileMB\": {5}, \"totalVirtualMB\": {6}, \"availVirtualMB\": {7}}}, \"power\": {{\"acLineStatus\": {8}, \"acStatus\": \"{9}\", \"batteryFlag\": {10}, \"batteryStatus\": \"{11}\", \"batteryLifePercent\": {12}, \"batterySaver\": {13}, \"batteryLifeTimeSeconds\": {14}}}, \"system\": {{\"uptimeSeconds\": {15}, \"uptimeMs\": {16}, \"processorCount\": {17}, \"machineName\": \"{18}\", \"osVersion\": \"{19}\", \"is64BitOS\": {20}, \"isElevated\": {21}, \"accentColor\": \"{22}\"}}}}",
+                    memOk ? msex.dwMemoryLoad : 0, totalPhysMB, availPhysMB, usedPhysMB, totalPageMB, availPageMB, totalVirtMB, availVirtMB,
+                    pwr.ACLineStatus, acStr, pwr.BatteryFlag, batStatus, batPct, (pwr.SystemStatusFlag == 1) ? "true" : "false", batTimeSec,
+                    uptimeSec, uptimeMs, Environment.ProcessorCount, EscapeJson(Environment.MachineName), EscapeJson(Environment.OSVersion.VersionString),
+                    Environment.Is64BitOperatingSystem ? "true" : "false", IsCurrentProcessElevated() ? "true" : "false", accentHex);
+
+                Console.WriteLine(json);
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void GetCursorInfoCmd() {
+            try {
+                CURSORINFO ci = new CURSORINFO();
+                ci.cbSize = Marshal.SizeOf(typeof(CURSORINFO));
+                if (GetCursorInfo(out ci)) {
+                    bool isVisible = (ci.flags & 1) != 0;
+                    bool isSuppressed = (ci.flags & 2) != 0;
+                    Console.WriteLine(string.Format("{{\"success\": true, \"x\": {0}, \"y\": {1}, \"isVisible\": {2}, \"isSuppressed\": {3}, \"hCursor\": \"0x{4:X}\"}}",
+                        ci.ptScreenPos.x, ci.ptScreenPos.y, isVisible ? "true" : "false", isSuppressed ? "true" : "false", ci.hCursor.ToInt64()));
+                } else {
+                    POINT pt;
+                    GetCursorPos(out pt);
+                    Console.WriteLine(string.Format("{{\"success\": true, \"x\": {0}, \"y\": {1}, \"isVisible\": true, \"isSuppressed\": false, \"hCursor\": \"0x0\"}}",
+                        pt.x, pt.y));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void GetAudioVolumeCmd() {
+            try {
+                var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+                IMMDevice dev;
+                int hr = enumerator.GetDefaultAudioEndpoint(0 /* eRender */, 1 /* eMultimedia */, out dev);
+                if (hr != 0 || dev == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to get audio endpoint (0x{0:X})\"}}", hr));
+                    return;
+                }
+                Guid iid = new Guid("5CDF2C82-841E-4546-9722-0CF74078229A");
+                object obj;
+                hr = dev.Activate(ref iid, 1 /* CLSCTX_INPROC_SERVER */, IntPtr.Zero, out obj);
+                if (hr != 0 || obj == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to activate audio volume (0x{0:X})\"}}", hr));
+                    return;
+                }
+                var vol = (IAudioEndpointVolume)obj;
+                float level;
+                vol.GetMasterVolumeLevelScalar(out level);
+                bool mute;
+                vol.GetMute(out mute);
+                int pct = (int)Math.Round(level * 100f);
+                Console.WriteLine(string.Format("{{\"success\": true, \"volume\": {0}, \"scalar\": {1:F3}, \"isMuted\": {2}}}",
+                    pct, level, mute ? "true" : "false"));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void SetAudioVolumeCmd(float percent) {
+            try {
+                if (percent < 0f) percent = 0f;
+                if (percent > 100f) percent = 100f;
+                float scalar = percent / 100.0f;
+
+                var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+                IMMDevice dev;
+                int hr = enumerator.GetDefaultAudioEndpoint(0, 1, out dev);
+                if (hr != 0 || dev == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to get audio endpoint (0x{0:X})\"}}", hr));
+                    return;
+                }
+                Guid iid = new Guid("5CDF2C82-841E-4546-9722-0CF74078229A");
+                object obj;
+                hr = dev.Activate(ref iid, 1, IntPtr.Zero, out obj);
+                if (hr != 0 || obj == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to activate audio volume (0x{0:X})\"}}", hr));
+                    return;
+                }
+                var vol = (IAudioEndpointVolume)obj;
+                Guid ctx = Guid.Empty;
+                vol.SetMasterVolumeLevelScalar(scalar, ref ctx);
+                bool mute;
+                vol.GetMute(out mute);
+                Console.WriteLine(string.Format("{{\"success\": true, \"volume\": {0}, \"scalar\": {1:F3}, \"isMuted\": {2}}}",
+                    (int)Math.Round(percent), scalar, mute ? "true" : "false"));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void SetAudioMuteCmd(bool mute) {
+            try {
+                var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+                IMMDevice dev;
+                int hr = enumerator.GetDefaultAudioEndpoint(0, 1, out dev);
+                if (hr != 0 || dev == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to get audio endpoint (0x{0:X})\"}}", hr));
+                    return;
+                }
+                Guid iid = new Guid("5CDF2C82-841E-4546-9722-0CF74078229A");
+                object obj;
+                hr = dev.Activate(ref iid, 1, IntPtr.Zero, out obj);
+                if (hr != 0 || obj == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to activate audio volume (0x{0:X})\"}}", hr));
+                    return;
+                }
+                var vol = (IAudioEndpointVolume)obj;
+                Guid ctx = Guid.Empty;
+                vol.SetMute(mute, ref ctx);
+                float level;
+                vol.GetMasterVolumeLevelScalar(out level);
+                int pct = (int)Math.Round(level * 100f);
+                Console.WriteLine(string.Format("{{\"success\": true, \"isMuted\": {0}, \"volume\": {1}}}",
+                    mute ? "true" : "false", pct));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void ToggleAudioMuteCmd() {
+            try {
+                var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+                IMMDevice dev;
+                int hr = enumerator.GetDefaultAudioEndpoint(0, 1, out dev);
+                if (hr != 0 || dev == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to get audio endpoint (0x{0:X})\"}}", hr));
+                    return;
+                }
+                Guid iid = new Guid("5CDF2C82-841E-4546-9722-0CF74078229A");
+                object obj;
+                hr = dev.Activate(ref iid, 1, IntPtr.Zero, out obj);
+                if (hr != 0 || obj == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to activate audio volume (0x{0:X})\"}}", hr));
+                    return;
+                }
+                var vol = (IAudioEndpointVolume)obj;
+                bool currentMute;
+                vol.GetMute(out currentMute);
+                bool newMute = !currentMute;
+                Guid ctx = Guid.Empty;
+                vol.SetMute(newMute, ref ctx);
+                float level;
+                vol.GetMasterVolumeLevelScalar(out level);
+                int pct = (int)Math.Round(level * 100f);
+                Console.WriteLine(string.Format("{{\"success\": true, \"isMuted\": {0}, \"volume\": {1}}}",
+                    newMute ? "true" : "false", pct));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void GetProcessVitalsCmd(string query) {
+            try {
+                Process targetProc = null;
+                int pid = 0;
+                if (int.TryParse(query, out pid)) {
+                    try { targetProc = Process.GetProcessById(pid); } catch {}
+                } else {
+                    string cleanName = query.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? query.Substring(0, query.Length - 4) : query;
+                    var procs = Process.GetProcessesByName(cleanName);
+                    if (procs != null && procs.Length > 0) {
+                        targetProc = procs[0];
+                    } else {
+                        var all = Process.GetProcesses();
+                        foreach (var p in all) {
+                            try {
+                                if (p.ProcessName.IndexOf(cleanName, StringComparison.OrdinalIgnoreCase) >= 0) {
+                                    targetProc = p;
+                                    break;
+                                }
+                            } catch {}
+                        }
+                    }
+                }
+
+                if (targetProc == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Process not found: {0}\"}}", EscapeJson(query)));
+                    return;
+                }
+
+                uint targetPid = (uint)targetProc.Id;
+                string name = targetProc.ProcessName;
+                bool responding = true;
+                try { responding = targetProc.Responding; } catch {}
+                int threads = 0;
+                try { threads = targetProc.Threads.Count; } catch {}
+
+                IntPtr hProc = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */ | 0x0400 /* PROCESS_VM_READ */, false, targetPid);
+                if (hProc == IntPtr.Zero) {
+                    try { hProc = targetProc.Handle; } catch {}
+                }
+
+                double wsMB = 0, peakWsMB = 0, privMB = 0, pagefileMB = 0;
+                long kMs = 0, uMs = 0, totalCpuMs = 0;
+
+                try {
+                    if (hProc != IntPtr.Zero) {
+                        PROCESS_MEMORY_COUNTERS_EX mem;
+                        mem.cb = (uint)Marshal.SizeOf(typeof(PROCESS_MEMORY_COUNTERS_EX));
+                        if (GetProcessMemoryInfo(hProc, out mem, mem.cb)) {
+                            wsMB = (ulong)mem.WorkingSetSize / (1024.0 * 1024.0);
+                            peakWsMB = (ulong)mem.PeakWorkingSetSize / (1024.0 * 1024.0);
+                            privMB = (ulong)mem.PrivateUsage / (1024.0 * 1024.0);
+                            pagefileMB = (ulong)mem.PagefileUsage / (1024.0 * 1024.0);
+                        }
+
+                        long cTime, eTime, kTime, uTime;
+                        if (GetProcessTimes(hProc, out cTime, out eTime, out kTime, out uTime)) {
+                            kMs = kTime / 10000;
+                            uMs = uTime / 10000;
+                            totalCpuMs = kMs + uMs;
+                        }
+                    } else {
+                        wsMB = targetProc.WorkingSet64 / (1024.0 * 1024.0);
+                        peakWsMB = targetProc.PeakWorkingSet64 / (1024.0 * 1024.0);
+                        privMB = targetProc.PrivateMemorySize64 / (1024.0 * 1024.0);
+                        totalCpuMs = (long)targetProc.TotalProcessorTime.TotalMilliseconds;
+                        uMs = (long)targetProc.UserProcessorTime.TotalMilliseconds;
+                        kMs = (long)targetProc.PrivilegedProcessorTime.TotalMilliseconds;
+                    }
+                } finally {
+                    if (hProc != IntPtr.Zero) {
+                        try {
+                            if (hProc != targetProc.Handle) CloseHandle(hProc);
+                        } catch {
+                            CloseHandle(hProc);
+                        }
+                    }
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"pid\": {0}, \"process\": \"{1}\", \"workingSetMB\": {2:F2}, \"peakWorkingSetMB\": {3:F2}, \"privateBytesMB\": {4:F2}, \"pagefileMB\": {5:F2}, \"kernelTimeMs\": {6}, \"userTimeMs\": {7}, \"totalCpuTimeMs\": {8}, \"threads\": {9}, \"isResponding\": {10}}}",
+                    targetPid, EscapeJson(name), wsMB, peakWsMB, privMB, pagefileMB,
+                    kMs, uMs, totalCpuMs, threads, responding ? "true" : "false"));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
         }
 
         static void ClipboardGetCmd() {
@@ -751,7 +1219,7 @@ namespace GeminiSuperDesktop {
         static void ClipboardSetCmd(string text) {
             try {
                 RunSta(() => {
-                    Clipboard.SetText(text);
+                    Clipboard.SetDataObject(text, true, 5, 50);
                 });
                 Console.WriteLine(string.Format("{{\"success\": true, \"charCount\": {0}}}", text.Length));
             } catch (Exception ex) {
@@ -800,7 +1268,7 @@ namespace GeminiSuperDesktop {
                 int w = 0, h = 0;
                 RunSta(() => {
                     using (Image img = Image.FromFile(inputPath)) {
-                        Clipboard.SetImage(img);
+                        Clipboard.SetDataObject(img, true, 5, 50);
                         w = img.Width;
                         h = img.Height;
                     }
@@ -853,7 +1321,8 @@ namespace GeminiSuperDesktop {
             if (cmd == "active" || cmd == "foreground") {
                 GetActiveWindow();
             } else if (cmd == "list") {
-                ListWindows();
+                bool includeCloaked = (args.Length > 1 && (args[1].Equals("--all", StringComparison.OrdinalIgnoreCase) || args[1].Equals("all", StringComparison.OrdinalIgnoreCase)));
+                ListWindows(includeCloaked);
             } else if (cmd == "info" && args.Length >= 2) {
                 GetWindowInfoCmd(args[1]);
             } else if (cmd == "focus" && args.Length >= 2) {
@@ -959,15 +1428,35 @@ namespace GeminiSuperDesktop {
                 ClipboardLoadImageCmd(args[1]);
             } else if (cmd == "clip_clear") {
                 ClipboardClearCmd();
+            } else if (cmd == "vitals" || cmd == "sysinfo" || cmd == "hardware") {
+                GetVitalsCmd();
+            } else if (cmd == "cursor") {
+                GetCursorInfoCmd();
+            } else if (cmd == "volume" || cmd == "audio_volume" || cmd == "get_volume") {
+                GetAudioVolumeCmd();
+            } else if ((cmd == "set_volume" || cmd == "setvolume") && args.Length >= 2) {
+                float val = 0f;
+                float.TryParse(args[1], out val);
+                SetAudioVolumeCmd(val);
+            } else if (cmd == "mute") {
+                SetAudioMuteCmd(true);
+            } else if (cmd == "unmute") {
+                SetAudioMuteCmd(false);
+            } else if (cmd == "toggle_mute" || cmd == "togglemute") {
+                ToggleAudioMuteCmd();
+            } else if ((cmd == "process_vitals" || cmd == "proc_vitals" || cmd == "procvitals") && args.Length >= 2) {
+                GetProcessVitalsCmd(args[1]);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
         }
 
-        static List<WindowMeta> CollectDesktopWindows(IntPtr hDesk) {
+        static List<WindowMeta> CollectDesktopWindows(IntPtr hDesk, bool includeCloaked = false) {
             IntPtr hFore = GetForegroundWindow();
             var list = new List<WindowMeta>();
             var elevCache = new Dictionary<uint, bool>();
+            var monCache = new Dictionary<IntPtr, Tuple<string, bool>>();
+            int currentZOrder = 0;
 
             EnumDesktopWindows(hDesk, (hWnd, lParam) => {
                 if (IsWindowVisible(hWnd)) {
@@ -975,6 +1464,15 @@ namespace GeminiSuperDesktop {
                     GetWindowText(hWnd, sb, sb.Capacity);
                     string title = sb.ToString().Trim();
                     if (!string.IsNullOrEmpty(title) && title != "Program Manager") {
+                        int cloaked = 0;
+                        try {
+                            DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out cloaked, sizeof(int));
+                        } catch {}
+                        bool isCloaked = (cloaked != 0);
+                        if (!includeCloaked && isCloaked) {
+                            return true;
+                        }
+
                         uint pid;
                         GetWindowThreadProcessId(hWnd, out pid);
                         string procName = "";
@@ -992,6 +1490,38 @@ namespace GeminiSuperDesktop {
                                 elevCache[pid] = isElevated;
                             }
 
+                            RECT frameRect = r;
+                            try {
+                                RECT extRect;
+                                if (DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, out extRect, Marshal.SizeOf(typeof(RECT))) == 0) {
+                                    frameRect = extRect;
+                                }
+                            } catch {}
+
+                            IntPtr hMon = IntPtr.Zero;
+                            try { hMon = MonitorFromWindow(hWnd, 2 /* MONITOR_DEFAULTTONEAREST */); } catch {}
+                            string monDevice = "";
+                            bool isPrimaryMon = false;
+                            if (hMon != IntPtr.Zero) {
+                                Tuple<string, bool> mInfo;
+                                if (!monCache.TryGetValue(hMon, out mInfo)) {
+                                    MONITORINFOEX mi = new MONITORINFOEX();
+                                    mi.cbSize = Marshal.SizeOf(typeof(MONITORINFOEX));
+                                    if (GetMonitorInfo(hMon, ref mi)) {
+                                        mInfo = Tuple.Create(mi.szDevice, (mi.dwFlags & 1) != 0);
+                                    } else {
+                                        mInfo = Tuple.Create("", false);
+                                    }
+                                    monCache[hMon] = mInfo;
+                                }
+                                monDevice = mInfo.Item1;
+                                isPrimaryMon = mInfo.Item2;
+                            }
+
+                            long exStyle = 0;
+                            try { exStyle = GetWindowLongPtr(hWnd, -20 /* GWL_EXSTYLE */).ToInt64(); } catch {}
+                            bool isTopmost = (exStyle & 0x00000008) != 0;
+
                             list.Add(new WindowMeta {
                                 Handle = hWnd,
                                 Pid = pid,
@@ -999,11 +1529,17 @@ namespace GeminiSuperDesktop {
                                 ClassName = sbClass.ToString().Trim(),
                                 Title = title,
                                 Rect = r,
+                                FrameRect = frameRect,
                                 IsForeground = (hWnd == hFore),
                                 IsMinimized = IsIconic(hWnd),
                                 IsMaximized = IsZoomed(hWnd),
                                 IsHung = IsHungAppWindow(hWnd),
-                                IsElevated = isElevated
+                                IsElevated = isElevated,
+                                IsCloaked = isCloaked,
+                                ZOrder = currentZOrder++,
+                                MonitorDevice = monDevice,
+                                IsPrimaryMonitor = isPrimaryMon,
+                                IsTopmost = isTopmost
                             });
                         }
                     }
@@ -1017,7 +1553,7 @@ namespace GeminiSuperDesktop {
             IntPtr hDesk = EnsureInteractiveDesktop();
             IntPtr hWnd = GetForegroundWindow();
             if (hWnd == IntPtr.Zero && hDesk != IntPtr.Zero) {
-                var windows = CollectDesktopWindows(hDesk);
+                var windows = CollectDesktopWindows(hDesk, false);
                 foreach (var w in windows) {
                     if (!w.IsMinimized && (w.Rect.Right - w.Rect.Left) > 100 && (w.Rect.Bottom - w.Rect.Top) > 100 && w.Title != "PopupHost") {
                         hWnd = w.Handle;
@@ -1045,35 +1581,68 @@ namespace GeminiSuperDesktop {
 
             RECT r;
             GetWindowRect(hWnd, out r);
+            RECT frameRect = r;
+            try {
+                RECT extRect;
+                if (DwmGetWindowAttribute(hWnd, DWMWA_EXTENDED_FRAME_BOUNDS, out extRect, Marshal.SizeOf(typeof(RECT))) == 0) {
+                    frameRect = extRect;
+                }
+            } catch {}
+
+            int cloaked = 0;
+            try { DwmGetWindowAttribute(hWnd, DWMWA_CLOAKED, out cloaked, sizeof(int)); } catch {}
+
             bool isMin = IsIconic(hWnd);
             bool isMax = IsZoomed(hWnd);
             bool isHung = IsHungAppWindow(hWnd);
             bool isElevated = IsProcessElevated(pid);
 
-            Console.WriteLine(string.Format("{{\"success\": true, \"handle\": \"{0}\", \"pid\": {1}, \"process\": \"{2}\", \"class\": \"{3}\", \"title\": \"{4}\", \"x\": {5}, \"y\": {6}, \"width\": {7}, \"height\": {8}, \"isMinimized\": {9}, \"isMaximized\": {10}, \"isHung\": {11}, \"isElevated\": {12}}}",
+            IntPtr hMon = IntPtr.Zero;
+            try { hMon = MonitorFromWindow(hWnd, 2); } catch {}
+            string monDevice = "";
+            bool isPrimaryMon = false;
+            if (hMon != IntPtr.Zero) {
+                MONITORINFOEX mi = new MONITORINFOEX();
+                mi.cbSize = Marshal.SizeOf(typeof(MONITORINFOEX));
+                if (GetMonitorInfo(hMon, ref mi)) {
+                    monDevice = mi.szDevice;
+                    isPrimaryMon = (mi.dwFlags & 1) != 0;
+                }
+            }
+            long exStyle = 0;
+            try { exStyle = GetWindowLongPtr(hWnd, -20).ToInt64(); } catch {}
+            bool isTopmost = (exStyle & 0x00000008) != 0;
+
+            Console.WriteLine(string.Format("{{\"success\": true, \"handle\": \"{0}\", \"pid\": {1}, \"process\": \"{2}\", \"class\": \"{3}\", \"title\": \"{4}\", \"x\": {5}, \"y\": {6}, \"width\": {7}, \"height\": {8}, \"frameX\": {9}, \"frameY\": {10}, \"frameWidth\": {11}, \"frameHeight\": {12}, \"isMinimized\": {13}, \"isMaximized\": {14}, \"isHung\": {15}, \"isElevated\": {16}, \"isCloaked\": {17}, \"isTopmost\": {18}, \"monitor\": \"{19}\", \"isPrimaryMonitor\": {20}}}",
                 hWnd, pid, EscapeJson(procName), EscapeJson(className), EscapeJson(title),
                 r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top,
+                frameRect.Left, frameRect.Top, frameRect.Right - frameRect.Left, frameRect.Bottom - frameRect.Top,
                 isMin ? "true" : "false", isMax ? "true" : "false", isHung ? "true" : "false",
-                isElevated ? "true" : "false"));
+                isElevated ? "true" : "false", (cloaked != 0) ? "true" : "false",
+                isTopmost ? "true" : "false", EscapeJson(monDevice), isPrimaryMon ? "true" : "false"));
         }
 
-        static void ListWindows() {
+        static void ListWindows(bool includeCloaked = false) {
             IntPtr hDesk = EnsureInteractiveDesktop();
             if (hDesk == IntPtr.Zero) {
                 Console.WriteLine("[]");
                 return;
             }
 
-            var windows = CollectDesktopWindows(hDesk);
+            var windows = CollectDesktopWindows(hDesk, includeCloaked);
             var list = new List<string>();
             foreach (var w in windows) {
                 int width = w.Rect.Right - w.Rect.Left;
                 int height = w.Rect.Bottom - w.Rect.Top;
-                list.Add(string.Format("{{\"handle\": \"{0}\", \"pid\": {1}, \"process\": \"{2}\", \"class\": \"{3}\", \"title\": \"{4}\", \"x\": {5}, \"y\": {6}, \"width\": {7}, \"height\": {8}, \"isForeground\": {9}, \"isMinimized\": {10}, \"isMaximized\": {11}, \"isElevated\": {12}}}",
+                int fWidth = w.FrameRect.Right - w.FrameRect.Left;
+                int fHeight = w.FrameRect.Bottom - w.FrameRect.Top;
+                list.Add(string.Format("{{\"handle\": \"{0}\", \"pid\": {1}, \"process\": \"{2}\", \"class\": \"{3}\", \"title\": \"{4}\", \"x\": {5}, \"y\": {6}, \"width\": {7}, \"height\": {8}, \"frameX\": {9}, \"frameY\": {10}, \"frameWidth\": {11}, \"frameHeight\": {12}, \"isForeground\": {13}, \"isMinimized\": {14}, \"isMaximized\": {15}, \"isElevated\": {16}, \"isCloaked\": {17}, \"zOrder\": {18}, \"isTopmost\": {19}, \"monitor\": \"{20}\", \"isPrimaryMonitor\": {21}}}",
                     w.Handle, w.Pid, EscapeJson(w.ProcessName), EscapeJson(w.ClassName), EscapeJson(w.Title),
                     w.Rect.Left, w.Rect.Top, width, height,
+                    w.FrameRect.Left, w.FrameRect.Top, fWidth, fHeight,
                     w.IsForeground ? "true" : "false", w.IsMinimized ? "true" : "false", w.IsMaximized ? "true" : "false",
-                    w.IsElevated ? "true" : "false"));
+                    w.IsElevated ? "true" : "false", w.IsCloaked ? "true" : "false",
+                    w.ZOrder, w.IsTopmost ? "true" : "false", EscapeJson(w.MonitorDevice), w.IsPrimaryMonitor ? "true" : "false"));
             }
 
             Console.WriteLine("[" + string.Join(",", list.ToArray()) + "]");
@@ -1086,7 +1655,7 @@ namespace GeminiSuperDesktop {
             long handleNum = 0;
             bool isHandle = long.TryParse(query, out handleNum);
 
-            var candidates = CollectDesktopWindows(hDesk);
+            var candidates = CollectDesktopWindows(hDesk, true);
 
             if (isHandle) {
                 foreach (var w in candidates) {
@@ -1170,17 +1739,29 @@ namespace GeminiSuperDesktop {
 
             RECT r;
             GetWindowRect(targetHwnd, out r);
+            RECT frameRect = r;
+            try {
+                RECT extRect;
+                if (DwmGetWindowAttribute(targetHwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out extRect, Marshal.SizeOf(typeof(RECT))) == 0) {
+                    frameRect = extRect;
+                }
+            } catch {}
+
+            int cloaked = 0;
+            try { DwmGetWindowAttribute(targetHwnd, DWMWA_CLOAKED, out cloaked, sizeof(int)); } catch {}
+
             IntPtr hFore = GetForegroundWindow();
             bool isElevated = IsProcessElevated(pid);
 
-            Console.WriteLine(string.Format("{{\"success\": true, \"handle\": \"{0}\", \"pid\": {1}, \"process\": \"{2}\", \"class\": \"{3}\", \"title\": \"{4}\", \"x\": {5}, \"y\": {6}, \"width\": {7}, \"height\": {8}, \"isForeground\": {9}, \"isMinimized\": {10}, \"isMaximized\": {11}, \"isHung\": {12}, \"isElevated\": {13}}}",
+            Console.WriteLine(string.Format("{{\"success\": true, \"handle\": \"{0}\", \"pid\": {1}, \"process\": \"{2}\", \"class\": \"{3}\", \"title\": \"{4}\", \"x\": {5}, \"y\": {6}, \"width\": {7}, \"height\": {8}, \"frameX\": {9}, \"frameY\": {10}, \"frameWidth\": {11}, \"frameHeight\": {12}, \"isForeground\": {13}, \"isMinimized\": {14}, \"isMaximized\": {15}, \"isHung\": {16}, \"isElevated\": {17}, \"isCloaked\": {18}}}",
                 targetHwnd, pid, EscapeJson(procName), EscapeJson(sbClass.ToString().Trim()), EscapeJson(actualTitle),
                 r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top,
+                frameRect.Left, frameRect.Top, frameRect.Right - frameRect.Left, frameRect.Bottom - frameRect.Top,
                 (targetHwnd == hFore) ? "true" : "false",
                 IsIconic(targetHwnd) ? "true" : "false",
                 IsZoomed(targetHwnd) ? "true" : "false",
                 IsHungAppWindow(targetHwnd) ? "true" : "false",
-                isElevated ? "true" : "false"));
+                isElevated ? "true" : "false", (cloaked != 0) ? "true" : "false"));
         }
 
         static bool ForceForegroundWindow(IntPtr hWnd) {

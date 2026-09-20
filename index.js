@@ -210,10 +210,15 @@ const SYSTEM_TOOLS = [
       },
       {
         name: "super_desktop_list_windows",
-        description: "Lists all active visible native Windows desktop windows (HWND, PID, title, dimensions, coordinates) in under 20ms without video streaming.",
+        description: "Lists all active visible native Windows desktop windows (HWND, PID, title, dimensions, coordinates, exact visual frame bounds) in under 20ms without video streaming.",
         inputSchema: {
           type: "object",
-          properties: {}
+          properties: {
+            includeCloaked: {
+              type: "boolean",
+              description: "Whether to include cloaked background/virtual desktop windows (defaults to false)."
+            }
+          }
         }
       },
       {
@@ -841,6 +846,14 @@ const SYSTEM_TOOLS = [
               default: 0.5,
               description: "Split ratio between 0.1 and 0.9 for side-by-side layout (default: 0.5)."
             },
+            monitorIndex: {
+              type: "number",
+              description: "Optional 0-indexed monitor display number to apply the layout to (default: primary monitor)."
+            },
+            monitorDevice: {
+              type: "string",
+              description: "Optional monitor device name substring (e.g. 'DISPLAY1', 'DISPLAY2') to target."
+            },
             x: { type: "number", description: "X coordinate (px) for set_geometry." },
             y: { type: "number", description: "Y coordinate (px) for set_geometry." },
             width: { type: "number", description: "Width (px) for set_geometry." },
@@ -869,6 +882,46 @@ const SYSTEM_TOOLS = [
               type: "array",
               items: { type: "string" },
               description: "List of service keys to check and auto-heal (defaults to all)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_desktop_vitals",
+        description: "Direct native Win32 hardware vitals and power telemetry (memory load, physical/virtual RAM pages, AC/battery power, system uptime, and DWM accent color) in under 2ms without PowerShell or WMI.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_desktop_audio",
+        description: "Queries or controls native Windows Core Audio master endpoint volume (0-100%) and mute state with sub-1ms latency.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["get", "set", "mute", "unmute", "toggle_mute"],
+              default: "get",
+              description: "Audio action to perform ('get', 'set', 'mute', 'unmute', 'toggle_mute')."
+            },
+            volume: {
+              type: "number",
+              description: "Volume percentage between 0 and 100 (used when action is 'set')."
+            }
+          }
+        }
+      },
+      {
+        name: "super_desktop_process_vitals",
+        description: "Native Win32 process performance and memory telemetry via psapi.dll (working set, private bytes, peak memory, kernel/user CPU times, thread count) with sub-1ms latency.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            target: {
+              type: "string",
+              description: "Process identifier (PID numeric string or process name, e.g. 'node', 'Discord', 'llama-server', 'Code'). Defaults to current process."
             }
           }
         }
@@ -1054,14 +1107,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === "super_desktop_list_windows") {
     const bridge = getDesktopBridge();
-    const windows = bridge.listWindows();
+    const windows = bridge.listWindows({ includeCloaked: args?.includeCloaked });
     return {
       content: [
         {
           type: "text",
           text: Array.isArray(windows)
             ? `🖥️ Active Native Windows (${windows.length} found):\n` +
-              windows.map(w => `• [PID ${w.pid}] ${w.title} (${w.width}x${w.height} @ [${w.x}, ${w.y}])`).join("\n")
+              windows.map(w => `• [PID ${w.pid}] ${w.title} (${w.frameWidth || w.width}x${w.frameHeight || w.height} @ [${w.frameX !== undefined ? w.frameX : w.x}, ${w.frameY !== undefined ? w.frameY : w.y}])${w.isForeground ? " [FOREGROUND]" : ""}${w.isElevated ? " [ADMIN]" : ""}${w.isCloaked ? " [CLOAKED]" : ""}`).join("\n")
             : `⚠️ Error listing windows: ${windows.error || "Unknown error"}`
         }
       ]
@@ -1772,6 +1825,58 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🛡️ [Sovereign Service Watchdog]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_desktop_vitals") {
+    const bridge = getDesktopBridge();
+    const vitals = await bridge.getSystemVitals();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Native Win32 System Vitals]:\n` + JSON.stringify(vitals, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_desktop_audio") {
+    const bridge = getDesktopBridge();
+    const action = args?.action || "get";
+    let res;
+    if (action === "set") {
+      res = await bridge.setAudioVolume(args?.volume ?? 50);
+    } else if (action === "mute") {
+      res = await bridge.setAudioMute(true);
+    } else if (action === "unmute") {
+      res = await bridge.setAudioMute(false);
+    } else if (action === "toggle_mute") {
+      res = await bridge.toggleAudioMute();
+    } else {
+      res = await bridge.getAudioVolume();
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔊 [Core Audio Endpoint Volume]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_desktop_process_vitals") {
+    const bridge = getDesktopBridge();
+    const target = args?.target || process.pid;
+    const res = await bridge.getProcessVitals(target);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📊 [Process Vitals: ${target}]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

@@ -377,7 +377,7 @@ async function run() {
     await clip.clear();
   });
 
-  await itAsync("Workspace Layout queries monitor work area dimensions", async () => {
+  await itAsync("Workspace Layout queries monitor work area dimensions and multi-monitor topology", async () => {
     const { getWorkspaceLayout } = require("../lib/workspace-layout.js");
     const layout = getWorkspaceLayout();
     const work = await layout.getWorkArea();
@@ -385,6 +385,63 @@ async function run() {
     assert(work.screenW > 0, "Expected screen width > 0");
     assert(work.workW > 0, "Expected work area width > 0");
     assert(work.workH > 0, "Expected work area height > 0");
+    assert(Array.isArray(work.monitors), "Expected monitors array in work area");
+    assert(work.monitors.length > 0, "Expected at least 1 monitor");
+    const primary = work.monitors.find(m => m.isPrimary);
+    assert(primary !== undefined, "Expected a primary monitor");
+    assert(primary.bounds.width > 0, "Expected primary monitor bounds");
+  });
+
+  await itAsync("Native Win32 Telemetry retrieves sub-1ms hardware vitals, cursor info, and window hierarchy", async () => {
+    const { getDesktopBridge } = require("../lib/desktop-bridge.js");
+    const bridge = getDesktopBridge();
+
+    const vitals = await bridge.getSystemVitals();
+    assert.strictEqual(vitals.success, true);
+    assert(vitals.memory.totalPhysicalMB > 0, "Expected total physical memory");
+    assert(vitals.power.acStatus !== undefined, "Expected AC status");
+    assert(typeof vitals.system.uptimeSeconds === "number", "Expected uptime");
+
+    const cursor = await bridge.getCursorInfo();
+    assert.strictEqual(cursor.success, true);
+    assert(typeof cursor.x === "number" && typeof cursor.y === "number", "Expected cursor coordinates");
+
+    const windows = bridge.listWindows();
+    assert(Array.isArray(windows), "Expected window list array");
+    if (windows.length > 0) {
+      const w = windows[0];
+      assert(w.frameX !== undefined, "Expected frameX on window meta");
+      assert(w.isCloaked !== undefined, "Expected isCloaked on window meta");
+      assert(w.zOrder !== undefined, "Expected zOrder on window meta");
+      assert(w.monitor !== undefined, "Expected monitor on window meta");
+      assert(w.isPrimaryMonitor !== undefined, "Expected isPrimaryMonitor on window meta");
+      assert(w.isTopmost !== undefined, "Expected isTopmost on window meta");
+    }
+  });
+
+  await itAsync("Native Core Audio Endpoint queries master volume and mute state", async () => {
+    const { getDesktopBridge } = require("../lib/desktop-bridge.js");
+    const bridge = getDesktopBridge();
+
+    const audio = await bridge.getAudioVolume();
+    assert.strictEqual(audio.success, true);
+    assert(typeof audio.volume === "number" && audio.volume >= 0 && audio.volume <= 100, "Expected volume 0-100");
+    assert(typeof audio.isMuted === "boolean", "Expected boolean isMuted");
+  });
+
+  await itAsync("Native Process Vitals queries per-process working set, private bytes, and CPU time", async () => {
+    const { getDesktopBridge } = require("../lib/desktop-bridge.js");
+    const bridge = getDesktopBridge();
+
+    const selfProc = await bridge.getProcessVitals(process.pid);
+    assert.strictEqual(selfProc.success, true);
+    assert.strictEqual(selfProc.pid, process.pid);
+    assert(selfProc.workingSetMB > 0, "Expected positive working set MB");
+    assert(selfProc.threads > 0, "Expected threads > 0");
+
+    const namedProc = await bridge.getProcessVitals("node");
+    assert.strictEqual(namedProc.success, true);
+    assert(namedProc.workingSetMB > 0, "Expected positive working set MB for node");
   });
 
   await itAsync("Service Watchdog polls background services and reports telemetry", async () => {
