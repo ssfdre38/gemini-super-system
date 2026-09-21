@@ -43,9 +43,25 @@ async function runTest() {
   console.log("=======================================================\n");
 
   const testPort = 41299;
+  const mockClipboardBridge = {
+    text: "",
+    async getText() {
+      return { success: true, text: this.text, hasText: this.text.length > 0 };
+    },
+    async setText(t) {
+      this.text = t;
+      return { success: true, charCount: t.length };
+    },
+    async clear() {
+      this.text = "";
+      return { success: true };
+    }
+  };
+
   const gateway = new GeminiAndroidGateway(null, {
     host: "127.0.0.1",
-    port: testPort
+    port: testPort,
+    clipboardBridge: mockClipboardBridge
   });
 
   // 1. Test Endpoint Discovery

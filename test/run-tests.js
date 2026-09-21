@@ -365,19 +365,31 @@ async function run() {
   // Suite 7: Native Clipboard Bridge, Workspace Layout & Service Watchdog
   console.log("\x1b[1m[Suite 7: Clipboard, Workspace Layout & Service Watchdog]\x1b[0m");
 
-  await itAsync("Clipboard Bridge sets, reads, and clears Windows clipboard text", async () => {
+  await itAsync("Clipboard Bridge sets, reads, and clears Windows clipboard text (non-destructive)", async () => {
     const { getClipboardBridge } = require("../lib/clipboard-bridge.js");
     const clip = getClipboardBridge();
-    const testPayload = `Gemini_Super_Test_${Date.now()}`;
-    const setRes = await clip.setText(testPayload);
-    assert.strictEqual(setRes.success, true);
 
-    const getRes = await clip.getText();
-    assert.strictEqual(getRes.success, true);
-    assert.strictEqual(getRes.hasText, true);
-    assert.strictEqual(getRes.text, testPayload);
+    // Preserve user's active clipboard content before testing
+    const initialClip = await clip.getText();
+    const originalText = (initialClip && initialClip.success && initialClip.hasText) ? initialClip.text : null;
 
-    await clip.clear();
+    try {
+      const testPayload = `Gemini_Super_Test_${Date.now()}`;
+      const setRes = await clip.setText(testPayload);
+      assert.strictEqual(setRes.success, true);
+
+      const getRes = await clip.getText();
+      assert.strictEqual(getRes.success, true);
+      assert.strictEqual(getRes.hasText, true);
+      assert.strictEqual(getRes.text, testPayload);
+    } finally {
+      // Non-destructive restore: return user's clipboard to its original state
+      if (originalText !== null) {
+        await clip.setText(originalText);
+      } else {
+        await clip.clear();
+      }
+    }
   });
 
   await itAsync("Workspace Layout queries monitor work area dimensions and multi-monitor topology", async () => {
