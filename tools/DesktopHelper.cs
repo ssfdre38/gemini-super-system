@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using System.Windows.Automation;
+using System.Net.NetworkInformation;
 
 namespace GeminiSuperDesktop {
     [StructLayout(LayoutKind.Sequential)]
@@ -470,6 +471,68 @@ namespace GeminiSuperDesktop {
 
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern IntPtr OpenProcess(uint processAccess, bool bInheritHandle, uint processId);
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct LASTINPUTINFO {
+            public uint cbSize;
+            public uint dwTime;
+        }
+
+        [DllImport("user32.dll")]
+        static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct FLASHWINFO {
+            public uint cbSize;
+            public IntPtr hwnd;
+            public uint dwFlags;
+            public uint uCount;
+            public uint dwTimeout;
+        }
+
+        [DllImport("user32.dll")]
+        static extern bool FlashWindowEx(ref FLASHWINFO pwfi);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
+        struct DEVMODE {
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string dmDeviceName;
+            public short dmSpecVersion;
+            public short dmDriverVersion;
+            public short dmSize;
+            public short dmDriverExtra;
+            public int dmFields;
+            public int dmPositionX;
+            public int dmPositionY;
+            public int dmDisplayOrientation;
+            public int dmDisplayFixedOutput;
+            public short dmColor;
+            public short dmDuplex;
+            public short dmYResolution;
+            public short dmTTOption;
+            public short dmCollate;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string dmFormName;
+            public short dmLogPixels;
+            public int dmBitsPerPel;
+            public int dmPelsWidth;
+            public int dmPelsHeight;
+            public int dmDisplayFlags;
+            public int dmDisplayFrequency;
+            public int dmICMMethod;
+            public int dmICMIntent;
+            public int dmMediaType;
+            public int dmDitherType;
+            public int dmReserved1;
+            public int dmReserved2;
+            public int dmPanningWidth;
+            public int dmPanningHeight;
+        }
+
+        const int ENUM_CURRENT_SETTINGS = -1;
+
+        [DllImport("user32.dll")]
+        static extern bool EnumDisplaySettings(string deviceName, int modeNum, ref DEVMODE devMode);
 
         [ComImport]
         [Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
@@ -1192,6 +1255,230 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static void GetPresenceCmd() {
+            try {
+                LASTINPUTINFO lii = new LASTINPUTINFO();
+                lii.cbSize = (uint)Marshal.SizeOf(typeof(LASTINPUTINFO));
+                uint idleMs = 0;
+                if (GetLastInputInfo(ref lii)) {
+                    uint tick = (uint)Environment.TickCount;
+                    idleMs = (tick >= lii.dwTime) ? (tick - lii.dwTime) : 0;
+                }
+                double idleSec = Math.Round(idleMs / 1000.0, 2);
+                bool isIdle = (idleSec >= 300.0);
+
+                const int SM_REMOTESESSION = 0x1000;
+                bool isRemote = (GetSystemMetrics(SM_REMOTESESSION) != 0);
+                int sessionId = Process.GetCurrentProcess().SessionId;
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"idleMs\": {0}, \"idleSeconds\": {1:F2}, \"isIdle\": {2}, \"isRemoteSession\": {3}, \"sessionId\": {4}, \"sessionType\": \"{5}\", \"note\": \"{6}\"}}",
+                    idleMs,
+                    idleSec,
+                    isIdle ? "true" : "false",
+                    isRemote ? "true" : "false",
+                    sessionId,
+                    isRemote ? "RDP" : "Console",
+                    isRemote
+                        ? "RDP session active: input tracking measures events forwarded across network; high latency, client minimization, or session disconnect can freeze or jump reported idle time."
+                        : "Direct interactive console session active."
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void GetStorageVitalsCmd() {
+            try {
+                var drives = DriveInfo.GetDrives();
+                var list = new List<string>();
+                long totalAllBytes = 0;
+                long freeAllBytes = 0;
+
+                foreach (var d in drives) {
+                    try {
+                        if (!d.IsReady) continue;
+                        totalAllBytes += d.TotalSize;
+                        freeAllBytes += d.TotalFreeSpace;
+                        long usedBytes = d.TotalSize - d.TotalFreeSpace;
+                        double pctUsed = d.TotalSize > 0 ? Math.Round((double)usedBytes / d.TotalSize * 100.0, 1) : 0.0;
+
+                        double totalGB = Math.Round(d.TotalSize / (1024.0 * 1024.0 * 1024.0), 2);
+                        double freeGB = Math.Round(d.TotalFreeSpace / (1024.0 * 1024.0 * 1024.0), 2);
+                        double usedGB = Math.Round(usedBytes / (1024.0 * 1024.0 * 1024.0), 2);
+                        bool isRedirected = (d.DriveType == DriveType.Network) || d.Name.IndexOf("tsclient", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                        list.Add(string.Format(
+                            "{{\"name\": \"{0}\", \"label\": \"{1}\", \"type\": \"{2}\", \"fileSystem\": \"{3}\", \"totalGB\": {4:F2}, \"freeGB\": {5:F2}, \"usedGB\": {6:F2}, \"percentUsed\": {7:F1}, \"isRdpRedirected\": {8}, \"isReady\": true}}",
+                            EscapeJson(d.Name),
+                            EscapeJson(d.VolumeLabel),
+                            EscapeJson(d.DriveType.ToString()),
+                            EscapeJson(d.DriveFormat),
+                            totalGB,
+                            freeGB,
+                            usedGB,
+                            pctUsed,
+                            isRedirected ? "true" : "false"
+                        ));
+                    } catch {}
+                }
+
+                double totalStorageGB = Math.Round(totalAllBytes / (1024.0 * 1024.0 * 1024.0), 2);
+                double freeStorageGB = Math.Round(freeAllBytes / (1024.0 * 1024.0 * 1024.0), 2);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"totalStorageGB\": {0:F2}, \"freeStorageGB\": {1:F2}, \"driveCount\": {2}, \"drives\": [{3}]}}",
+                    totalStorageGB, freeStorageGB, list.Count, string.Join(", ", list.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void GetNetworkVitalsCmd() {
+            try {
+                bool isNetAvailable = NetworkInterface.GetIsNetworkAvailable();
+                var interfaces = NetworkInterface.GetAllNetworkInterfaces();
+                var list = new List<string>();
+
+                foreach (var ni in interfaces) {
+                    try {
+                        if (ni.OperationalStatus != OperationalStatus.Up &&
+                            ni.NetworkInterfaceType != NetworkInterfaceType.Loopback) {
+                            continue;
+                        }
+
+                        var ipProps = ni.GetIPProperties();
+                        var ips = new List<string>();
+                        foreach (var unicast in ipProps.UnicastAddresses) {
+                            if (unicast.Address != null) {
+                                ips.Add(string.Format("\"{0}\"", unicast.Address.ToString()));
+                            }
+                        }
+
+                        var gateways = new List<string>();
+                        foreach (var gw in ipProps.GatewayAddresses) {
+                            if (gw.Address != null) {
+                                gateways.Add(string.Format("\"{0}\"", gw.Address.ToString()));
+                            }
+                        }
+
+                        var stats = ni.GetIPv4Statistics();
+                        long rxBytes = stats != null ? stats.BytesReceived : 0;
+                        long txBytes = stats != null ? stats.BytesSent : 0;
+                        double speedMbps = Math.Round(ni.Speed / 1000000.0, 1);
+
+                        list.Add(string.Format(
+                            "{{\"name\": \"{0}\", \"description\": \"{1}\", \"type\": \"{2}\", \"status\": \"{3}\", \"speedMbps\": {4:F1}, \"bytesReceived\": {5}, \"bytesSent\": {6}, \"addresses\": [{7}], \"gateways\": [{8}]}}",
+                            EscapeJson(ni.Name),
+                            EscapeJson(ni.Description),
+                            EscapeJson(ni.NetworkInterfaceType.ToString()),
+                            EscapeJson(ni.OperationalStatus.ToString()),
+                            speedMbps,
+                            rxBytes,
+                            txBytes,
+                            string.Join(", ", ips.ToArray()),
+                            string.Join(", ", gateways.ToArray())
+                        ));
+                    } catch {}
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"isNetworkAvailable\": {0}, \"adapterCount\": {1}, \"adapters\": [{2}]}}",
+                    isNetAvailable ? "true" : "false",
+                    list.Count,
+                    string.Join(", ", list.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void GetDisplayTopologyCmd() {
+            try {
+                const int SM_REMOTESESSION = 0x1000;
+                bool isRemote = (GetSystemMetrics(SM_REMOTESESSION) != 0);
+                int virtX = GetSystemMetrics(76);
+                int virtY = GetSystemMetrics(77);
+                int virtW = GetSystemMetrics(78);
+                int virtH = GetSystemMetrics(79);
+                int monCount = GetSystemMetrics(80);
+                if (monCount == 0) monCount = Screen.AllScreens.Length;
+
+                var monList = new List<string>();
+                for (int i = 0; i < Screen.AllScreens.Length; i++) {
+                    var s = Screen.AllScreens[i];
+                    DEVMODE dm = new DEVMODE();
+                    dm.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+                    int refreshHz = 60;
+                    if (EnumDisplaySettings(s.DeviceName, ENUM_CURRENT_SETTINGS, ref dm)) {
+                        refreshHz = dm.dmDisplayFrequency;
+                    }
+
+                    monList.Add(string.Format(
+                        "{{\"index\": {0}, \"device\": \"{1}\", \"isPrimary\": {2}, \"bounds\": {{\"x\": {3}, \"y\": {4}, \"width\": {5}, \"height\": {6}}}, \"workingArea\": {{\"x\": {7}, \"y\": {8}, \"width\": {9}, \"height\": {10}}}, \"refreshRateHz\": {11}, \"bitsPerPixel\": {12}}}",
+                        i,
+                        EscapeJson(s.DeviceName),
+                        s.Primary ? "true" : "false",
+                        s.Bounds.X, s.Bounds.Y, s.Bounds.Width, s.Bounds.Height,
+                        s.WorkingArea.X, s.WorkingArea.Y, s.WorkingArea.Width, s.WorkingArea.Height,
+                        refreshHz,
+                        s.BitsPerPixel
+                    ));
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"isRemoteSession\": {0}, \"sessionType\": \"{1}\", \"monitorCount\": {2}, \"virtualScreen\": {{\"x\": {3}, \"y\": {4}, \"width\": {5}, \"height\": {6}}}, \"monitors\": [{7}], \"note\": \"{8}\"}}",
+                    isRemote ? "true" : "false",
+                    isRemote ? "RDP" : "Console",
+                    monCount,
+                    virtX, virtY, virtW > 0 ? virtW : GetSystemMetrics(0), virtH > 0 ? virtH : GetSystemMetrics(1),
+                    string.Join(", ", monList.ToArray()),
+                    isRemote ? "RDP virtual display adapter active: virtual display topology conforms to remote client geometry." : "Native physical displays active."
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void FlashWindowCmd(string query, int count) {
+            try {
+                IntPtr hWnd = IntPtr.Zero;
+                if (string.IsNullOrEmpty(query) || query.Equals("active", StringComparison.OrdinalIgnoreCase) || query.Equals("foreground", StringComparison.OrdinalIgnoreCase)) {
+                    hWnd = GetForegroundWindow();
+                } else {
+                    IntPtr hDesk = OpenInputDesktop(0, false, 0x01FF);
+                    if (hDesk == IntPtr.Zero) hDesk = OpenDesktop("Default", 0, false, 0x01FF);
+                    var windows = CollectDesktopWindows(hDesk, true);
+                    foreach (var w in windows) {
+                        if ((w.Title != null && w.Title.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                            (w.ProcessName != null && w.ProcessName.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0)) {
+                            hWnd = w.Handle;
+                            break;
+                        }
+                    }
+                }
+
+                if (hWnd == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"No matching window found for '{0}'\"}}", EscapeJson(query)));
+                    return;
+                }
+
+                FLASHWINFO fwi = new FLASHWINFO();
+                fwi.cbSize = (uint)Marshal.SizeOf(typeof(FLASHWINFO));
+                fwi.hwnd = hWnd;
+                fwi.dwFlags = 3 | 12; // FLASHW_ALL | FLASHW_TIMERNOFG
+                fwi.uCount = (uint)Math.Max(1, count);
+                fwi.dwTimeout = 0;
+
+                bool ok = FlashWindowEx(ref fwi);
+                Console.WriteLine(string.Format("{{\"success\": {0}, \"handle\": {1}, \"count\": {2}}}",
+                    ok ? "true" : "false", hWnd.ToInt64(), count));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void ClipboardGetCmd() {
             try {
                 string text = "";
@@ -1446,6 +1733,18 @@ namespace GeminiSuperDesktop {
                 ToggleAudioMuteCmd();
             } else if ((cmd == "process_vitals" || cmd == "proc_vitals" || cmd == "procvitals") && args.Length >= 2) {
                 GetProcessVitalsCmd(args[1]);
+            } else if (cmd == "presence" || cmd == "idle" || cmd == "user_presence") {
+                GetPresenceCmd();
+            } else if (cmd == "storage" || cmd == "drives" || cmd == "disks") {
+                GetStorageVitalsCmd();
+            } else if (cmd == "network" || cmd == "net" || cmd == "adapters") {
+                GetNetworkVitalsCmd();
+            } else if (cmd == "display_topology" || cmd == "monitors" || cmd == "displays") {
+                GetDisplayTopologyCmd();
+            } else if (cmd == "flash" || cmd == "flash_window") {
+                string target = args.Length >= 2 ? args[1] : "active";
+                int count = args.Length >= 3 ? int.Parse(args[2]) : 3;
+                FlashWindowCmd(target, count);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

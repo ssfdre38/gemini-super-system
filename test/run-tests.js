@@ -465,6 +465,60 @@ async function run() {
     assert(vitals.services["ag2-discord-gateway"] !== undefined);
   });
 
+  await itAsync("Native User Presence tracks idle metrics and RDP session awareness", async () => {
+    const { getDesktopBridge } = require("../lib/desktop-bridge.js");
+    const bridge = getDesktopBridge();
+    const presence = await bridge.getPresence();
+    assert.strictEqual(presence.success, true);
+    assert(typeof presence.idleMs === "number" && presence.idleMs >= 0, "Expected non-negative idleMs");
+    assert(typeof presence.idleSeconds === "number" && presence.idleSeconds >= 0, "Expected non-negative idleSeconds");
+    assert(typeof presence.isIdle === "boolean", "Expected boolean isIdle");
+    assert(typeof presence.isRemoteSession === "boolean", "Expected boolean isRemoteSession");
+    assert(typeof presence.sessionType === "string", "Expected string sessionType");
+    assert(typeof presence.sessionId === "number", "Expected number sessionId");
+  });
+
+  await itAsync("Native Storage Vitals queries drive geometry and volume capacity", async () => {
+    const { getDesktopBridge } = require("../lib/desktop-bridge.js");
+    const bridge = getDesktopBridge();
+    const storage = await bridge.getStorageVitals();
+    assert.strictEqual(storage.success, true);
+    assert(storage.totalStorageGB > 0, "Expected totalStorageGB > 0");
+    assert(storage.freeStorageGB >= 0, "Expected freeStorageGB >= 0");
+    assert(Array.isArray(storage.drives) && storage.drives.length > 0, "Expected drives array");
+    const cDrive = storage.drives.find(d => d.name.toLowerCase().startsWith("c:"));
+    assert(cDrive !== undefined, "Expected C: drive");
+    assert(cDrive.totalGB > 0, "Expected C: totalGB > 0");
+  });
+
+  await itAsync("Native Network Vitals queries network adapters and throughput telemetry", async () => {
+    const { getDesktopBridge } = require("../lib/desktop-bridge.js");
+    const bridge = getDesktopBridge();
+    const net = await bridge.getNetworkVitals();
+    assert.strictEqual(net.success, true);
+    assert(typeof net.isNetworkAvailable === "boolean", "Expected boolean isNetworkAvailable");
+    assert(Array.isArray(net.adapters), "Expected adapters array");
+  });
+
+  await itAsync("Native Display Topology queries refresh rates, virtual screen, and monitors", async () => {
+    const { getDesktopBridge } = require("../lib/desktop-bridge.js");
+    const bridge = getDesktopBridge();
+    const display = await bridge.getDisplayTopology();
+    assert.strictEqual(display.success, true);
+    assert(typeof display.isRemoteSession === "boolean", "Expected boolean isRemoteSession");
+    assert(display.virtualScreen.width > 0 && display.virtualScreen.height > 0, "Expected positive virtual screen bounds");
+    assert(Array.isArray(display.monitors) && display.monitors.length > 0, "Expected monitors array");
+    assert(display.monitors[0].refreshRateHz > 0, "Expected positive refresh rate Hz");
+  });
+
+  await itAsync("Native Window Attention Flashing signals taskbar and window caption", async () => {
+    const { getDesktopBridge } = require("../lib/desktop-bridge.js");
+    const bridge = getDesktopBridge();
+    const res = await bridge.flashWindow("active", 1);
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.count, 1);
+  });
+
   console.log("\n=======================================================");
   console.log(`   TEST RESULTS: ${passedTests}/${totalTests} PASSED (${failedTests} FAILED)`);
   console.log("=======================================================\n");

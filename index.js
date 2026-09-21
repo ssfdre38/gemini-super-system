@@ -925,6 +925,55 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_presence",
+        description: "Queries user presence, idle duration in milliseconds/seconds via Win32 GetLastInputInfo, and Terminal Services / RDP remote session detection. Highlights if idle metrics may be delayed due to RDP network latency.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_storage",
+        description: "Retrieves sub-millisecond native Win32 storage drive geometry and capacity telemetry across all logical disks (C:, D:, etc.), reporting total/free/used GB, percent utilized, and RDP redirected drive flags.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_network",
+        description: "Sub-millisecond native Win32 network adapter telemetry, active interfaces (Ethernet, Wi-Fi, WireGuard/NetBird, Tailscale), IP addresses, link speeds, gateways, and live RX/TX throughput counters.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_display_topology",
+        description: "Queries multi-monitor display matrix, per-monitor refresh rates (Hz), color bit depth, virtual screen bounds, and RDP virtual display adapter topology.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_flash_window",
+        description: "Flashes a target window caption and taskbar button using Win32 FlashWindowEx to attract user attention when background operations or builds complete.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            target: {
+              type: "string",
+              description: "Window title, process name filter, or 'active' / 'foreground'. Defaults to 'active'."
+            },
+            count: {
+              type: "number",
+              description: "Number of times to flash window/taskbar button (defaults to 3)."
+            }
+          }
+        }
       }
 ];
 
@@ -1882,6 +1931,73 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     };
   }
 
+  if (name === "super_presence") {
+    const bridge = getDesktopBridge();
+    const res = await bridge.getPresence();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🕒 [User Presence & RDP Session Tracking]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_storage") {
+    const bridge = getDesktopBridge();
+    const res = await bridge.getStorageVitals();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💾 [Storage & Drive Geometry Vitals]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_network") {
+    const bridge = getDesktopBridge();
+    const res = await bridge.getNetworkVitals();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🌐 [Network Adapters & Connectivity Vitals]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_display_topology") {
+    const bridge = getDesktopBridge();
+    const res = await bridge.getDisplayTopology();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🖥️ [Display Topology & Refresh Rates]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_flash_window") {
+    const bridge = getDesktopBridge();
+    const target = args?.target || "active";
+    const count = args?.count || 3;
+    const res = await bridge.flashWindow(target, count);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Window Attention Flash]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
   return {
     isError: true,
     content: [{ type: "text", text: `Unknown tool: ${name}` }]
@@ -2089,7 +2205,18 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  console.error("Fatal error:", err);
-  process.exit(1);
-});
+module.exports = {
+  SYSTEM_TOOLS,
+  server,
+  getOrchestrator,
+  getSupervisor,
+  getDesktopBridge,
+  main
+};
+
+if (require.main === module) {
+  main().catch(err => {
+    console.error("Fatal error:", err);
+    process.exit(1);
+  });
+}
