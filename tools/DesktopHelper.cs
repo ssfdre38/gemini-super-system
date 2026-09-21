@@ -621,6 +621,45 @@ namespace GeminiSuperDesktop {
         [DllImport("kernel32.dll")]
         public static extern ulong GetTickCount64();
 
+        [DllImport("wtsapi32.dll", SetLastError = true)]
+        static extern bool WTSQuerySessionInformation(IntPtr hServer, int sessionId, int wtsInfoClass, out IntPtr ppBuffer, out int pBytesReturned);
+
+        [DllImport("wtsapi32.dll")]
+        static extern void WTSFreeMemory(IntPtr pMemory);
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct WTS_CLIENT_DISPLAY {
+            public uint HorizontalResolution;
+            public uint VerticalResolution;
+            public uint ColorDepth;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct WTS_CLIENT_ADDRESS {
+            public uint AddressFamily;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 20)]
+            public byte[] Address;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct OSVERSIONINFOEX {
+            public int dwOSVersionInfoSize;
+            public uint dwMajorVersion;
+            public uint dwMinorVersion;
+            public uint dwBuildNumber;
+            public uint dwPlatformId;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string szCSDVersion;
+            public ushort wServicePackMajor;
+            public ushort wServicePackMinor;
+            public ushort wSuiteMask;
+            public byte wProductType;
+            public byte wReserved;
+        }
+
+        [DllImport("ntdll.dll", SetLastError = true)]
+        public static extern int RtlGetVersion(ref OSVERSIONINFOEX versionInfo);
+
         [StructLayout(LayoutKind.Sequential)]
         public struct POINT { public int x; public int y; }
 
@@ -1014,10 +1053,29 @@ namespace GeminiSuperDesktop {
                 ulong totalVirtMB = memOk ? (msex.ullTotalVirtual / (1024UL * 1024UL)) : 0UL;
                 ulong availVirtMB = memOk ? (msex.ullAvailVirtual / (1024UL * 1024UL)) : 0UL;
 
-                string json = string.Format("{{\"success\": true, \"memory\": {{\"loadPercent\": {0}, \"totalPhysicalMB\": {1}, \"availPhysicalMB\": {2}, \"usedPhysicalMB\": {3}, \"totalPageFileMB\": {4}, \"availPageFileMB\": {5}, \"totalVirtualMB\": {6}, \"availVirtualMB\": {7}}}, \"power\": {{\"acLineStatus\": {8}, \"acStatus\": \"{9}\", \"batteryFlag\": {10}, \"batteryStatus\": \"{11}\", \"batteryLifePercent\": {12}, \"batterySaver\": {13}, \"batteryLifeTimeSeconds\": {14}}}, \"system\": {{\"uptimeSeconds\": {15}, \"uptimeMs\": {16}, \"processorCount\": {17}, \"machineName\": \"{18}\", \"osVersion\": \"{19}\", \"is64BitOS\": {20}, \"isElevated\": {21}, \"accentColor\": \"{22}\"}}}}",
+                string exactOsVersion = Environment.OSVersion.VersionString;
+                try {
+                    var osInfo = new OSVERSIONINFOEX();
+                    osInfo.dwOSVersionInfoSize = Marshal.SizeOf(typeof(OSVERSIONINFOEX));
+                    if (RtlGetVersion(ref osInfo) == 0) {
+                        exactOsVersion = string.Format("Windows {0}.{1} (Build {2})", osInfo.dwMajorVersion, osInfo.dwMinorVersion, osInfo.dwBuildNumber);
+                    }
+                } catch {}
+
+                bool isDarkMode = true;
+                bool enableTransparency = true;
+                try {
+                    object appTheme = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 0);
+                    if (appTheme is int && ((int)appTheme) == 1) isDarkMode = false;
+                    object trans = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "EnableTransparency", 1);
+                    if (trans is int && ((int)trans) == 0) enableTransparency = false;
+                } catch {}
+
+                string json = string.Format("{{\"success\": true, \"memory\": {{\"loadPercent\": {0}, \"totalPhysicalMB\": {1}, \"availPhysicalMB\": {2}, \"usedPhysicalMB\": {3}, \"totalPageFileMB\": {4}, \"availPageFileMB\": {5}, \"totalVirtualMB\": {6}, \"availVirtualMB\": {7}}}, \"power\": {{\"acLineStatus\": {8}, \"acStatus\": \"{9}\", \"batteryFlag\": {10}, \"batteryStatus\": \"{11}\", \"batteryLifePercent\": {12}, \"batterySaver\": {13}, \"batteryLifeTimeSeconds\": {14}}}, \"system\": {{\"uptimeSeconds\": {15}, \"uptimeMs\": {16}, \"processorCount\": {17}, \"machineName\": \"{18}\", \"osVersion\": \"{19}\", \"exactOsVersion\": \"{20}\", \"darkMode\": {21}, \"transparency\": {22}, \"is64BitOS\": {23}, \"isElevated\": {24}, \"accentColor\": \"{25}\"}}}}",
                     memOk ? msex.dwMemoryLoad : 0, totalPhysMB, availPhysMB, usedPhysMB, totalPageMB, availPageMB, totalVirtMB, availVirtMB,
                     pwr.ACLineStatus, acStr, pwr.BatteryFlag, batStatus, batPct, (pwr.SystemStatusFlag == 1) ? "true" : "false", batTimeSec,
                     uptimeSec, uptimeMs, Environment.ProcessorCount, EscapeJson(Environment.MachineName), EscapeJson(Environment.OSVersion.VersionString),
+                    EscapeJson(exactOsVersion), isDarkMode ? "true" : "false", enableTransparency ? "true" : "false",
                     Environment.Is64BitOperatingSystem ? "true" : "false", IsCurrentProcessElevated() ? "true" : "false", accentHex);
 
                 Console.WriteLine(json);
@@ -1271,14 +1329,58 @@ namespace GeminiSuperDesktop {
                 bool isRemote = (GetSystemMetrics(SM_REMOTESESSION) != 0);
                 int sessionId = Process.GetCurrentProcess().SessionId;
 
+                string clientName = "";
+                string clientDisplay = "";
+                string clientAddress = "";
+
+                if (isRemote) {
+                    IntPtr pBuf = IntPtr.Zero;
+                    int bytes = 0;
+                    try {
+                        if (WTSQuerySessionInformation(IntPtr.Zero, -1, 10, out pBuf, out bytes) && pBuf != IntPtr.Zero) {
+                            clientName = Marshal.PtrToStringAnsi(pBuf) ?? "";
+                        }
+                    } catch {} finally {
+                        if (pBuf != IntPtr.Zero) WTSFreeMemory(pBuf);
+                        pBuf = IntPtr.Zero;
+                    }
+
+                    try {
+                        if (WTSQuerySessionInformation(IntPtr.Zero, -1, 15, out pBuf, out bytes) && pBuf != IntPtr.Zero) {
+                            var d = (WTS_CLIENT_DISPLAY)Marshal.PtrToStructure(pBuf, typeof(WTS_CLIENT_DISPLAY));
+                            if (d.HorizontalResolution > 0 && d.VerticalResolution > 0) {
+                                clientDisplay = string.Format("{0}x{1} @ {2}bpp", d.HorizontalResolution, d.VerticalResolution, d.ColorDepth);
+                            }
+                        }
+                    } catch {} finally {
+                        if (pBuf != IntPtr.Zero) WTSFreeMemory(pBuf);
+                        pBuf = IntPtr.Zero;
+                    }
+
+                    try {
+                        if (WTSQuerySessionInformation(IntPtr.Zero, -1, 14, out pBuf, out bytes) && pBuf != IntPtr.Zero) {
+                            var a = (WTS_CLIENT_ADDRESS)Marshal.PtrToStructure(pBuf, typeof(WTS_CLIENT_ADDRESS));
+                            if (a.AddressFamily == 2) {
+                                clientAddress = string.Format("{0}.{1}.{2}.{3}", a.Address[2], a.Address[3], a.Address[4], a.Address[5]);
+                            }
+                        }
+                    } catch {} finally {
+                        if (pBuf != IntPtr.Zero) WTSFreeMemory(pBuf);
+                        pBuf = IntPtr.Zero;
+                    }
+                }
+
                 Console.WriteLine(string.Format(
-                    "{{\"success\": true, \"idleMs\": {0}, \"idleSeconds\": {1:F2}, \"isIdle\": {2}, \"isRemoteSession\": {3}, \"sessionId\": {4}, \"sessionType\": \"{5}\", \"note\": \"{6}\"}}",
+                    "{{\"success\": true, \"idleMs\": {0}, \"idleSeconds\": {1:F2}, \"isIdle\": {2}, \"isRemoteSession\": {3}, \"sessionId\": {4}, \"sessionType\": \"{5}\", \"clientName\": \"{6}\", \"clientDisplay\": \"{7}\", \"clientAddress\": \"{8}\", \"note\": \"{9}\"}}",
                     idleMs,
                     idleSec,
                     isIdle ? "true" : "false",
                     isRemote ? "true" : "false",
                     sessionId,
                     isRemote ? "RDP" : "Console",
+                    EscapeJson(clientName),
+                    EscapeJson(clientDisplay),
+                    EscapeJson(clientAddress),
                     isRemote
                         ? "RDP session active: input tracking measures events forwarded across network; high latency, client minimization, or session disconnect can freeze or jump reported idle time."
                         : "Direct interactive console session active."
