@@ -974,6 +974,66 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_android_status",
+        description: "Inspects connected Android companion devices, battery percentages, charging states, screen states, network latency, and connection endpoints over NetBird, LAN, or Wi-Fi.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            deviceId: {
+              type: "string",
+              description: "Optional specific Android device ID filter."
+            }
+          }
+        }
+      },
+      {
+        name: "super_android_notify",
+        description: "Pushes a real-time actionable notification or toast alert straight to connected Android devices (e.g. Samsung Galaxy Tab, phone) with title, message, priority, and optional action tags.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            title: {
+              type: "string",
+              description: "Notification title."
+            },
+            message: {
+              type: "string",
+              description: "Notification body content."
+            },
+            priority: {
+              type: "string",
+              enum: ["default", "high", "urgent"],
+              default: "high",
+              description: "Notification priority level."
+            },
+            deviceId: {
+              type: "string",
+              description: "Optional target device ID (defaults to all connected devices)."
+            }
+          },
+          required: ["title", "message"]
+        }
+      },
+      {
+        name: "super_android_clipboard",
+        description: "Synchronizes the clipboard bidirectionally between the host PC and connected Android devices. Pushes text to the Android clipboard or fetches the latest synced Android clipboard text.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["push", "pull", "sync"],
+              default: "sync",
+              description: "Action to perform ('push' to send text to Android, 'pull' to fetch from Android, 'sync' for bidirectional sync)."
+            },
+            text: {
+              type: "string",
+              description: "Text payload to push to Android devices (when action is 'push')."
+            }
+          }
+        }
       }
 ];
 
@@ -1993,6 +2053,64 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [Window Attention Flash]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_android_status") {
+    const { getAndroidGateway } = require("./lib/android-gateway.js");
+    const gw = getAndroidGateway(orch);
+    const devices = gw.getConnectedDevices();
+    const endpoints = gw.getEndpoints();
+    const target = args?.deviceId ? devices.filter(d => d.deviceId === args.deviceId) : devices;
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📱 [Android Companion Gateway Status]:\n` +
+                `• Connected Devices : ${devices.length}\n` +
+                `• Local Endpoints   :\n` + endpoints.map(e => `  - [${e.category}] ${e.wsUrl}`).join("\n") + "\n\n" +
+                `• Devices Detail    :\n` + JSON.stringify(target, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_android_notify") {
+    const { getAndroidGateway } = require("./lib/android-gateway.js");
+    const gw = getAndroidGateway(orch);
+    const res = gw.notify({
+      title: args?.title || "Gemini Alert",
+      message: args?.message || "",
+      priority: args?.priority || "high",
+      deviceId: args?.deviceId || null
+    });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📱 [Android Notification Dispatched]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_android_clipboard") {
+    const { getAndroidGateway } = require("./lib/android-gateway.js");
+    const gw = getAndroidGateway(orch);
+    const action = args?.action || "sync";
+    let res;
+    if (action === "push" && args?.text) {
+      res = await gw.syncClipboard(args.text);
+    } else {
+      res = await gw.syncClipboard(null);
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📋 [Android Clipboard Sync]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

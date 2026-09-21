@@ -302,6 +302,24 @@ A persistent, lightweight notification daemon living in the Windows notification
   - `🛑 Emergency Frame Interruption` (instantly halts queues and silences voice buffers)
 - **Invocation**: `npm run tray` or `node index.js --tray`.
 
+### 19. Universal Android Companion Gateway (RFC 6455 WebSocket & REST // Port 41242)
+Bridges Gemini Super System directly with mobile Android devices (smartphones, tablets, Samsung DeX, Wear OS) across LAN Wi-Fi, Tailscale, WireGuard, and NetBird mesh:
+- **Zero NPM Dependencies**: Built directly on native Node.js core modules (`http` + `crypto`), implementing full RFC 6455 WebSocket frame parsing (text, binary, ping/pong, close, frame unmasking) with zero external bloat.
+- **Dynamic Network Interface Discovery**: When the daemon boots, it automatically discovers all local network adapters (`LAN`, `WireGuard/NetBird`, `Tailscale`, `Localhost`), displaying exact `ws://` and `http://` pairing URLs so any user can connect their own Android device effortlessly.
+- **Portability & Configurable Environment**:
+  - `GEMINI_ANDROID_HOST`: Default `0.0.0.0` (binds to all local and virtual mesh interfaces).
+  - `GEMINI_ANDROID_PORT`: Default `41242` (configurable).
+  - `GEMINI_ANDROID_TOKEN`: Optional auth token for secured or public network environments.
+- **Universal Mobile Capabilities**:
+  - **Handheld Vitals Telemetry**: Streams real-time battery percentage, charging status, and screen on/off/locked states to the desktop host.
+  - **Universal Bi-Directional Clipboard**: Seamlessly syncs clipboard between Windows and Android devices in real time without third-party cloud services.
+  - **Actionable Push Notifications**: Dispatches high-priority heads-up alerts and task completion notifications directly to Android notification drawers.
+  - **Conversational Token Streaming**: Streams Gemini and AGY thought tokens directly to handheld screens.
+- **Native MCP Android Tools**:
+  - `super_android_status`: Inspects connected Android companion devices, battery percentages, charging states, and network latency.
+  - `super_android_notify`: Pushes a real-time actionable notification or toast alert straight to connected Android devices.
+  - `super_android_clipboard`: Synchronizes clipboard bidirectionally between host PC and connected Android devices.
+
 ---
 
 ## 🚀 Quick Start

@@ -236,7 +236,10 @@ async function run() {
       getActiveApp: () => ({ name: "test_process", title: "Test Window" }),
       hmb: { memories: [1, 2, 3] },
       dashboard: { server: true, stop: () => {} },
-      appWatcher: { isRunning: true, stop: () => { mockOrchestrator.appWatcher.isRunning = false; } }
+      appWatcher: { isRunning: true, stop: () => { mockOrchestrator.appWatcher.isRunning = false; } },
+      startAndroidGateway: async () => {},
+      stopAndroidGateway: async () => {},
+      androidGateway: { server: true, getConnectedDevices: () => [] }
     };
 
     const sup = new GeminiSupervisor(mockOrchestrator, {
@@ -517,6 +520,89 @@ async function run() {
     const res = await bridge.flashWindow("active", 1);
     assert.strictEqual(res.success, true);
     assert.strictEqual(res.count, 1);
+  });
+
+  // Suite 8: Android Companion Gateway & Device Telemetry
+  console.log("\n\x1b[1m[Suite 8: Android Companion Gateway & Device Telemetry]\x1b[0m");
+
+  await itAsync("Android Gateway enumerates local endpoints across LAN, Mesh, and Localhost", async () => {
+    const { GeminiAndroidGateway } = require("../lib/android-gateway.js");
+    const gw = new GeminiAndroidGateway();
+    const endpoints = gw.getEndpoints();
+    assert(Array.isArray(endpoints), "Endpoints should be an array");
+    assert(endpoints.length > 0, "Should discover at least localhost");
+    const localhost = endpoints.find(e => e.address === "127.0.0.1");
+    assert(localhost !== undefined, "Expected 127.0.0.1 in endpoints");
+    assert(localhost.wsUrl.includes(":41242/ws/agy"), "Expected default port 41242 wsUrl");
+  });
+
+  await itAsync("Android Gateway boots, accepts device registration, dispatches notifications, and handles clipboard sync", async () => {
+    const { GeminiAndroidGateway } = require("../lib/android-gateway.js");
+    const testPort = 41288;
+    const gw = new GeminiAndroidGateway(null, { host: "127.0.0.1", port: testPort });
+    await gw.start();
+    assert(gw.server !== null);
+
+    const net = require("net");
+    const crypto = require("crypto");
+    const clientKey = crypto.randomBytes(16).toString("base64");
+    const socket = net.createConnection({ port: testPort, host: "127.0.0.1" });
+
+    await new Promise((resolve, reject) => {
+      socket.on("connect", () => {
+        socket.write([
+          `GET /ws/agy HTTP/1.1`,
+          `Host: 127.0.0.1:${testPort}`,
+          `Upgrade: websocket`,
+          `Connection: Upgrade`,
+          `Sec-WebSocket-Key: ${clientKey}`,
+          `Sec-WebSocket-Version: 13`,
+          `\r\n`
+        ].join("\r\n"));
+      });
+      socket.on("data", (chunk) => {
+        if (chunk.toString("utf8").includes("101 Switching Protocols")) {
+          resolve();
+        }
+      });
+      socket.on("error", reject);
+    });
+
+    assert.strictEqual(gw.devices.size, 1);
+
+    // Send registration
+    const text = JSON.stringify({
+      type: "HELLO",
+      deviceId: "samsung-sm-x218u",
+      model: "SM-X218U",
+      deviceName: "Daniel's Galaxy Tab",
+      battery: { percent: 92, isCharging: true }
+    });
+    const payload = Buffer.from(text, "utf8");
+    const mask = Buffer.from([0x11, 0x22, 0x33, 0x44]);
+    const masked = Buffer.alloc(payload.length);
+    for (let i = 0; i < payload.length; i++) masked[i] = payload[i] ^ mask[i % 4];
+    const header = Buffer.alloc(4);
+    header[0] = 0x81;
+    header[1] = 0x80 | 126;
+    header.writeUInt16BE(payload.length, 2);
+    socket.write(Buffer.concat([header, mask, masked]));
+
+    await new Promise(r => setTimeout(r, 60));
+    const devices = gw.getConnectedDevices();
+    assert.strictEqual(devices.length, 1);
+    assert.strictEqual(devices[0].deviceId, "samsung-sm-x218u");
+    assert.strictEqual(devices[0].model, "SM-X218U");
+    assert.strictEqual(devices[0].battery.percent, 92);
+
+    // Notify test
+    const notif = gw.notify({ title: "Test Alert", message: "Fleet healthy." });
+    assert.strictEqual(notif.dispatched, 1);
+
+    // Clean teardown
+    socket.destroy();
+    await gw.stop();
+    assert.strictEqual(gw.server, null);
   });
 
   console.log("\n=======================================================");
