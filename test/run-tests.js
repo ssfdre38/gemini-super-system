@@ -243,7 +243,10 @@ async function run() {
       androidGateway: { server: true, getConnectedDevices: () => [] },
       startGemmiBridge: async () => {},
       stopGemmiBridge: async () => {},
-      gemmiBridge: { avatarPort: 8088, meshPort: 18799 }
+      gemmiBridge: { avatarPort: 8088, meshPort: 18799 },
+      getCognitiveStatus: () => ({ active: true, lastThought: "nominal" }),
+      startCognitivePulse: () => {},
+      stopCognitivePulse: () => {}
     };
 
     const sup = new GeminiSupervisor(mockOrchestrator, {
@@ -752,6 +755,25 @@ async function run() {
     await bridge.stop();
     assert.strictEqual(bridge.avatarServer, null);
     assert.strictEqual(bridge.meshServer, null);
+  });
+
+  // Suite 10: Proactive Cognitive Pulse & Autonomous Companion Mind
+  console.log("\x1b[1m[Suite 10: Proactive Cognitive Pulse & Autonomous Companion Mind]\x1b[0m");
+
+  await itAsync("CognitivePulse gathers ambient context, synthesizes thoughts, and synchronizes avatar", async () => {
+    const { CognitivePulse } = require("../lib/cognitive-pulse.js");
+    const pulseEngine = new CognitivePulse(null, { minPulseIntervalMs: 10 });
+    const ctx = pulseEngine.gatherContext();
+    assert(ctx.desktop !== undefined);
+    assert(ctx.mobile !== undefined);
+
+    const res = await pulseEngine.pulse("suite_test");
+    assert.strictEqual(res.status, "success");
+    assert(typeof res.thought === "string" && res.thought.length > 0);
+
+    const status = pulseEngine.getStatus();
+    assert.strictEqual(status.historyCount, 1);
+    assert.strictEqual(status.lastThought, res.thought);
   });
 
   console.log("\n=======================================================");
