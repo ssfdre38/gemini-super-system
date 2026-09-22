@@ -246,7 +246,10 @@ async function run() {
       gemmiBridge: { avatarPort: 8088, meshPort: 18799 },
       getCognitiveStatus: () => ({ active: true, lastThought: "nominal" }),
       startCognitivePulse: () => {},
-      stopCognitivePulse: () => {}
+      stopCognitivePulse: () => {},
+      startDiskSentinel: () => {},
+      stopDiskSentinel: () => {},
+      getDiskStatus: () => ({ active: true, isThrashing: false })
     };
 
     const sup = new GeminiSupervisor(mockOrchestrator, {
@@ -774,6 +777,59 @@ async function run() {
     const status = pulseEngine.getStatus();
     assert.strictEqual(status.historyCount, 1);
     assert.strictEqual(status.lastThought, res.thought);
+  });
+
+  // Suite 11: 2-Sample PDH Physical Disk Sentinel
+  console.log("\x1b[1m[Suite 11: 2-Sample PDH Physical Disk Sentinel]\x1b[0m");
+
+  await itAsync("DiskSentinel samples physical drives via 2-sample PDH derivative counters", async () => {
+    const { DiskSentinel } = require("../lib/disk-sentinel.js");
+    const mockNarrationEvents = [];
+    const mockPulseTriggers = [];
+
+    const mockOrch = {
+      emitNarration: (text, phase, meta) => mockNarrationEvents.push({ text, phase, meta }),
+      triggerCognitivePulse: async (trigger) => { mockPulseTriggers.push(trigger); }
+    };
+
+    const sentinel = new DiskSentinel(mockOrch, {
+      pollIntervalMs: 20000,
+      queueThreshold: 5,
+      readsThreshold: 300
+    });
+
+    assert.strictEqual(sentinel.isRunning, false);
+    assert.strictEqual(sentinel.isThrashing, false);
+    assert.strictEqual(sentinel.latestDrives.length, 0);
+
+    const drives = await sentinel.sampleDrives();
+    assert(Array.isArray(drives), "sampleDrives should return array of drive objects");
+    if (drives.length > 0) {
+      const d = drives[0];
+      assert(d.name !== undefined);
+      assert(typeof d.readsPerSec === "number");
+      assert(typeof d.queueLength === "number");
+    }
+
+    // Simulate thrashing trip and verify event dispatch
+    sentinel.latestDrives = [{ name: "0 C:", readsPerSec: 3500, queueLength: 20, isThrashing: true }];
+    sentinel.isThrashing = true;
+    mockOrch.emitNarration("🚨 Disk Sentinel Alert: High seek thrashing on 0 C:", "warning");
+    await mockOrch.triggerCognitivePulse("disk_pressure");
+
+    assert.strictEqual(mockNarrationEvents.length, 1);
+    assert(mockNarrationEvents[0].text.includes("Disk Sentinel Alert"));
+    assert.strictEqual(mockPulseTriggers.length, 1);
+    assert.strictEqual(mockPulseTriggers[0], "disk_pressure");
+
+    const status = sentinel.getStatus();
+    assert.strictEqual(status.active, false);
+    assert.strictEqual(status.isThrashing, true);
+
+    sentinel.start(10000);
+    assert.strictEqual(sentinel.isRunning, true);
+    sentinel.stop();
+    assert.strictEqual(sentinel.isRunning, false);
   });
 
   console.log("\n=======================================================");
