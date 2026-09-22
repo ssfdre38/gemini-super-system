@@ -21,6 +21,8 @@ out.log
 err.log
 data/*.tmp
 data/*.raw.tmp
+data/captures/*
+!data/captures/.gitkeep
 
 # OS & Editor files
 .DS_Store
@@ -38,6 +40,7 @@ coverage/
 # Credentials & Environment Variables (Private)
 .env
 .env.*
+!.env.example
 *.key
 *.pem
 *.secret

@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const assert = require("assert");
 const { execSync } = require("child_process");
+const http = require("http");
 
 const {
   HmbEngine,
@@ -613,6 +614,72 @@ async function run() {
     // Notify test
     const notif = gw.notify({ title: "Test Alert", message: "Fleet healthy." });
     assert.strictEqual(notif.dispatched, 1);
+
+    // Test POST /api/android/vitals
+    await new Promise((resolve, reject) => {
+      const vitalsPayload = JSON.stringify({
+        deviceId: "samsung-sm-x218u",
+        battery: { percent: 88, isCharging: false },
+        screenState: "on",
+        networkType: "mesh"
+      });
+      const req = http.request({
+        hostname: "127.0.0.1",
+        port: 41288,
+        path: "/api/android/vitals",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(vitalsPayload)
+        }
+      }, (res) => {
+        assert.strictEqual(res.statusCode, 200);
+        let data = "";
+        res.on("data", chunk => data += chunk);
+        res.on("end", () => {
+          const json = JSON.parse(data);
+          assert.strictEqual(json.ok, true);
+          assert.strictEqual(json.vitals.battery.percent, 88);
+          resolve();
+        });
+      });
+      req.on("error", reject);
+      req.write(vitalsPayload);
+      req.end();
+    });
+
+    // Test POST /api/android/optical
+    await new Promise((resolve, reject) => {
+      const opticalPayload = JSON.stringify({
+        image: "data:image/jpeg;base64,/9j/4AAQSkZJRg==",
+        landmark: "Lab Test Bench Station",
+        deviceId: "samsung-sm-x218u"
+      });
+      const req = http.request({
+        hostname: "127.0.0.1",
+        port: 41288,
+        path: "/api/android/optical",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(opticalPayload)
+        }
+      }, (res) => {
+        assert.strictEqual(res.statusCode, 200);
+        let data = "";
+        res.on("data", chunk => data += chunk);
+        res.on("end", () => {
+          const json = JSON.parse(data);
+          assert.strictEqual(json.ok, true);
+          assert.strictEqual(json.success, true);
+          assert(json.filename.startsWith("capture_"));
+          resolve();
+        });
+      });
+      req.on("error", reject);
+      req.write(opticalPayload);
+      req.end();
+    });
 
     // Clean teardown
     socket.destroy();

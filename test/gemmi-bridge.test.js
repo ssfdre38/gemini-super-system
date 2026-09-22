@@ -206,12 +206,50 @@ async function runTest() {
         const json = JSON.parse(data);
         assert.strictEqual(json.ok, true);
         assert.strictEqual(json.success, true);
+        assert.strictEqual(bridge.currentLocomotion, "walk");
+        assert(bridge.recentThought.includes("Vancouver Waterfront"), "Recent thought should reflect landmark");
         console.log(`  ✓ POST /api/mesh/state ingested GPS telemetry successfully`);
+        console.log(`  ✓ Autonomous locomotion reflex shifted posture to 'walk' and updated thought monologue`);
         resolve();
       });
     });
     req.on("error", reject);
     req.write(gpsPayload);
+    req.end();
+  });
+
+  // 5b. Test Autonomous Resting Locomotion Reflex (speed <= 0.2 m/s -> cozy)
+  const restingGpsPayload = JSON.stringify({
+    nodeId: "Gemmi-Mobile-GalaxyTab-A9Plus",
+    latitude: 49.2827,
+    longitude: -123.1207,
+    speed: 0.0,
+    landmark: "Vancouver Waterfront Coffee Station",
+    timestamp: Date.now()
+  });
+
+  await new Promise((resolve, reject) => {
+    const req = http.request({
+      hostname: "127.0.0.1",
+      port: meshPort,
+      path: "/api/mesh/state",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(restingGpsPayload)
+      }
+    }, (res) => {
+      assert.strictEqual(res.statusCode, 200);
+      res.on("data", () => {});
+      res.on("end", () => {
+        assert.strictEqual(bridge.currentLocomotion, "cozy");
+        assert(bridge.recentThought.includes("Coffee Station"), "Thought should update to resting landmark");
+        console.log(`  ✓ Resting GPS telemetry (speed: 0.0) automatically relaxed avatar posture to 'cozy'`);
+        resolve();
+      });
+    });
+    req.on("error", reject);
+    req.write(restingGpsPayload);
     req.end();
   });
 
@@ -224,9 +262,8 @@ async function runTest() {
       res.on("end", () => {
         const json = JSON.parse(data);
         assert.strictEqual(json.ok, true);
-        assert.strictEqual(json.telemetry.landmark, "Vancouver Waterfront & Harbour Flight Centre");
-        assert.strictEqual(json.telemetry.bearing, 315.0);
-        assert.strictEqual(json.telemetry.speed, 1.4);
+        assert.strictEqual(json.telemetry.landmark, "Vancouver Waterfront Coffee Station");
+        assert.strictEqual(json.telemetry.speed, 0.0);
         console.log(`  ✓ GET /api/mesh/state returned hydrated sub-meter GPS coordinates`);
         resolve();
       });
@@ -242,7 +279,7 @@ async function runTest() {
   console.log(`  ✓ Both Avatar and Mesh servers stopped cleanly`);
 
   console.log("\n=======================================================");
-  console.log("   🎉 ALL GEMMI BRIDGE TESTS PASSED (9/9)!");
+  console.log("   🎉 ALL GEMMI BRIDGE TESTS PASSED (10/10)!");
   console.log("=======================================================\n");
 }
 
