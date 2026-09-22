@@ -322,6 +322,21 @@ Bridges Gemini Super System directly with mobile Android devices (smartphones, t
 
 ---
 
+## 20. 🌐 Gemmi Ambient Mesh & 4D Avatar Bridge (Ports 8088 & 18799)
+
+Built for deep, native interop with `gemmi-android` (8/14 build) and sovereign embodied companion ecosystems:
+- **Port 8088 — 4D Avatar WebGL Viewport & Real-Time Locomotion**:
+  - Serves procedural Three.js bone rigging control system (`gemmi_4d_avatar_visualizer.html`) with dual-mesh GLB model support (`avatar_sanitized.glb` & `gemmi_avatar_v3.glb`).
+  - RFC 6455 WebSocket engine streaming live locomotion postures (`cozy`, `walk`, `sit`, `radar`), gestural triggers (`wave`, `bow`, `nod`, `dance`), and spontaneous internal thoughts directly into Android WebViews.
+- **Port 18799 — Sub-Meter Fused GPS & Mesh Ingestion Gateway**:
+  - Receives live Android `FusedLocationProviderClient` GPS telemetry (`POST /api/mesh/state`), recording latitude, longitude, bearing, speed, and regional landmark detection.
+  - Automatically streams mobile location into the Mission Control Dashboard HUD and Haven Memory Bank.
+- **Native MCP Tools**:
+  - `super_avatar_animate`: Controls 4D avatar locomotion, gestural triggers, and thought monologues.
+  - `super_mobile_gps`: Retrieves real-time sub-meter GPS coordinates, bearing, and detected landmark names.
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. Web Mission Control Dashboard

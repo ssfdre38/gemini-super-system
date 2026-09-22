@@ -239,7 +239,10 @@ async function run() {
       appWatcher: { isRunning: true, stop: () => { mockOrchestrator.appWatcher.isRunning = false; } },
       startAndroidGateway: async () => {},
       stopAndroidGateway: async () => {},
-      androidGateway: { server: true, getConnectedDevices: () => [] }
+      androidGateway: { server: true, getConnectedDevices: () => [] },
+      startGemmiBridge: async () => {},
+      stopGemmiBridge: async () => {},
+      gemmiBridge: { avatarPort: 8088, meshPort: 18799 }
     };
 
     const sup = new GeminiSupervisor(mockOrchestrator, {
@@ -615,6 +618,73 @@ async function run() {
     socket.destroy();
     await gw.stop();
     assert.strictEqual(gw.server, null);
+  });
+
+  // Suite 9: Gemmi 4D Avatar Viewport & Sub-Meter GPS Mesh Bridge
+  console.log("\x1b[1m[Suite 9: Gemmi 4D Avatar & Sub-Meter GPS Mesh Bridge]\x1b[0m");
+
+  await itAsync("GemmiBridge boots, manages 4D Avatar locomotion, and ingests mobile GPS telemetry", async () => {
+    const { GemmiBridge } = require("../lib/gemmi-bridge.js");
+    const bridge = new GemmiBridge(null, {
+      host: "127.0.0.1",
+      avatarPort: 48099,
+      meshPort: 48788
+    });
+    await bridge.start();
+    assert(bridge.avatarServer !== null);
+    assert(bridge.meshServer !== null);
+
+    // Test Avatar Locomotion & Action state
+    bridge.setLocomotion("walk");
+    assert.strictEqual(bridge.currentLocomotion, "walk");
+    bridge.triggerAction("wave");
+    assert.strictEqual(bridge.currentAction, "wave");
+    bridge.setThought("Scanning horizon...");
+    assert.strictEqual(bridge.recentThought, "Scanning horizon...");
+
+    // Test GPS Mesh Ingestion (Port 48788)
+    const http = require("http");
+    const gpsPayload = JSON.stringify({
+      nodeId: "Gemmi-Mobile-GalaxyTab-A9Plus",
+      latitude: 49.2827,
+      longitude: -123.1207,
+      bearing: 315.0,
+      speed: 1.4,
+      landmark: "Vancouver Waterfront & Harbour Flight Centre"
+    });
+
+    await new Promise((resolve, reject) => {
+      const req = http.request({
+        hostname: "127.0.0.1",
+        port: 48788,
+        path: "/api/mesh/state",
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Content-Length": Buffer.byteLength(gpsPayload)
+        }
+      }, (res) => {
+        assert.strictEqual(res.statusCode, 200);
+        let data = "";
+        res.on("data", chunk => data += chunk);
+        res.on("end", () => {
+          const json = JSON.parse(data);
+          assert.strictEqual(json.ok, true);
+          resolve();
+        });
+      });
+      req.on("error", reject);
+      req.write(gpsPayload);
+      req.end();
+    });
+
+    assert.strictEqual(bridge.latestGpsTelemetry.landmark, "Vancouver Waterfront & Harbour Flight Centre");
+    assert.strictEqual(bridge.latestGpsTelemetry.latitude, 49.2827);
+    assert.strictEqual(bridge.latestGpsTelemetry.speed, 1.4);
+
+    await bridge.stop();
+    assert.strictEqual(bridge.avatarServer, null);
+    assert.strictEqual(bridge.meshServer, null);
   });
 
   console.log("\n=======================================================");

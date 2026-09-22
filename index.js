@@ -1034,6 +1034,37 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_avatar_animate",
+        description: "Controls the live 3D procedural Three.js Gemmi Avatar Viewport on port 8088. Animates avatar locomotion (cozy, walk, sit, radar), triggers gestural actions (wave, bow, nod, dance), and updates the internal cognition thought monologue.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["wave", "bow", "nod", "dance"],
+              description: "Avatar gesture action to trigger."
+            },
+            state: {
+              type: "string",
+              enum: ["cozy", "walk", "sit", "radar", "listen"],
+              description: "Avatar locomotion posture."
+            },
+            thought: {
+              type: "string",
+              description: "Monologue thought to broadcast and display in the 3D viewport."
+            }
+          }
+        }
+      },
+      {
+        name: "super_mobile_gps",
+        description: "Retrieves the real-time sub-meter Fused GPS telemetry, bearing, speed, and detected landmark from Daniel's mobile Android tablet (SM-X218U / gemmi-android) streaming over the NetBird P2P mesh.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
 ];
 
@@ -2111,6 +2142,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `📋 [Android Clipboard Sync]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_avatar_animate") {
+    const res = orch.animateAvatar({
+      action: args?.action,
+      state: args?.state,
+      thought: args?.thought
+    });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎭 [Gemmi 4D Avatar Animated]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_mobile_gps") {
+    const gps = orch.getMobileGps();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛰️ [Mobile GPS Telemetry]:\n` + JSON.stringify(gps || { status: "Awaiting mobile GPS sync" }, null, 2)
         }
       ]
     };
