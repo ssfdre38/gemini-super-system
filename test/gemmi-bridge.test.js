@@ -73,6 +73,54 @@ async function runTest() {
     }).on("error", reject);
   });
 
+  // 2b. Test Port 8088 POST /api/animate
+  await new Promise((resolve, reject) => {
+    const postPayload = JSON.stringify({
+      action: "bow",
+      state: "walk",
+      thought: "Testing direct REST locomotion dispatch."
+    });
+    const req = http.request(`http://127.0.0.1:${avatarPort}/api/animate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Content-Length": Buffer.byteLength(postPayload)
+      }
+    }, (res) => {
+      assert.strictEqual(res.statusCode, 200);
+      let data = "";
+      res.on("data", chunk => data += chunk);
+      res.on("end", () => {
+        const json = JSON.parse(data);
+        assert.strictEqual(json.success, true);
+        assert.strictEqual(json.locomotion, "walk");
+        assert.strictEqual(json.action, "bow");
+        assert.strictEqual(json.recentThought, "Testing direct REST locomotion dispatch.");
+        console.log(`  ✓ POST /api/animate on port ${avatarPort} triggered locomotion and action`);
+        resolve();
+      });
+    });
+    req.on("error", reject);
+    req.write(postPayload);
+    req.end();
+  });
+
+  // 2c. Test Port 8088 GET /api/gps
+  await new Promise((resolve, reject) => {
+    http.get(`http://127.0.0.1:${avatarPort}/api/gps`, (res) => {
+      assert.strictEqual(res.statusCode, 200);
+      let data = "";
+      res.on("data", chunk => data += chunk);
+      res.on("end", () => {
+        const json = JSON.parse(data);
+        assert.strictEqual(json.ok, true);
+        assert(json.gps !== undefined, "Should have GPS object");
+        console.log(`  ✓ GET /api/gps on port ${avatarPort} returned GPS telemetry`);
+        resolve();
+      });
+    }).on("error", reject);
+  });
+
   // 3. Test Port 8088 WebSocket Handshake & Hydration Frame
   const clientKey = crypto.randomBytes(16).toString("base64");
   const socket = net.createConnection({ port: avatarPort, host: "127.0.0.1" });
@@ -194,7 +242,7 @@ async function runTest() {
   console.log(`  ✓ Both Avatar and Mesh servers stopped cleanly`);
 
   console.log("\n=======================================================");
-  console.log("   🎉 ALL GEMMI BRIDGE TESTS PASSED (7/7)!");
+  console.log("   🎉 ALL GEMMI BRIDGE TESTS PASSED (9/9)!");
   console.log("=======================================================\n");
 }
 
