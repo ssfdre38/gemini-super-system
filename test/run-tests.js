@@ -348,12 +348,42 @@ async function run() {
     assert(vitals.aiWorkloads !== undefined, "Expected AI workloads map");
   });
 
-  it("Discord VIP Event Watcher manages start, status, and stop lifecycle", () => {
+  await itAsync("Discord VIP Event Watcher manages start, status, and Shane's AI Gaming2Gamers awareness", async () => {
     const { DiscordEventWatcher } = require("../lib/discord-watcher.js");
-    const mockBridge = { observeDiscord: async () => ({ success: true, recentMessages: [] }) };
-    const watcher = new DiscordEventWatcher(mockBridge, { intervalSec: 30 });
+    const mockBusNarrations = [];
+    const mockMemories = [];
+    const mockOrch = {
+      bus: { emitNarration: (text, phase, meta) => mockBusNarrations.push({ text, phase, meta }) },
+      remember: async (mem) => { mockMemories.push(mem); return { id: 1001n, success: true }; }
+    };
+    const mockBridge = {
+      observeDiscord: async () => ({
+        success: true,
+        server: "Google Gemini",
+        channel: "#lounge",
+        recentMessages: [
+          {
+            author: "Gaming2Gamers",
+            time: "11:38 AM",
+            content: "Classic Windows PDH counter quirk! Rate counters like disk reads/sec need two samples over a time delta."
+          }
+        ]
+      })
+    };
+    const watcher = new DiscordEventWatcher(mockBridge, { intervalSec: 30, orchestrator: mockOrch });
 
     assert.strictEqual(watcher.isRunning, false);
+    assert(watcher.vipAuthors.has("gaming2gamers"), "Expected Gaming2Gamers in VIP authors");
+    assert(watcher.alertKeywords.includes("pdh"), "Expected 'pdh' in alert keywords");
+    assert(watcher.alertKeywords.includes("derivative"), "Expected 'derivative' in alert keywords");
+
+    await watcher.tick(true);
+    assert.strictEqual(watcher.eventLog.length, 1);
+    assert.strictEqual(mockBusNarrations.length, 1);
+    assert(mockBusNarrations[0].text.includes("Gaming2Gamers"));
+    assert.strictEqual(mockMemories.length, 1);
+    assert(mockMemories[0].concept.includes("Gaming2Gamers"));
+
     const startRes = watcher.start(30);
     assert.strictEqual(startRes.success, true);
     assert.strictEqual(watcher.isRunning, true);
@@ -765,7 +795,16 @@ async function run() {
 
   await itAsync("CognitivePulse gathers ambient context, synthesizes thoughts, and synchronizes avatar", async () => {
     const { CognitivePulse } = require("../lib/cognitive-pulse.js");
-    const pulseEngine = new CognitivePulse(null, { minPulseIntervalMs: 10 });
+    const mockMemories = [];
+    const mockOrch = {
+      remember: async (mem) => { mockMemories.push(mem); return { id: 2001n, success: true }; },
+      gemmiBridge: {
+        setThought: (t) => {},
+        setLocomotion: (l) => {},
+        triggerAction: (a) => {}
+      }
+    };
+    const pulseEngine = new CognitivePulse(mockOrch, { minPulseIntervalMs: 10, autoAnchorCooldownMs: 0 });
     const ctx = pulseEngine.gatherContext();
     assert(ctx.desktop !== undefined);
     assert(ctx.mobile !== undefined);
@@ -773,10 +812,23 @@ async function run() {
     const res = await pulseEngine.pulse("suite_test");
     assert.strictEqual(res.status, "success");
     assert(typeof res.thought === "string" && res.thought.length > 0);
+    assert(res.motor !== undefined, "Expected motor state in pulse response");
+    assert(typeof res.motor.locomotion === "string");
+
+    // Test sensory reflex: idle_return triggers action 'wave' and auto-anchors memory
+    const idleRes = await pulseEngine.pulse("idle_return");
+    assert.strictEqual(idleRes.motor.action, "wave");
+    assert.strictEqual(idleRes.motor.locomotion, "cozy");
+
+    // Test sensory reflex: disk_pressure triggers action 'alert' and locomotion 'radar'
+    const diskRes = await pulseEngine.pulse("disk_pressure");
+    assert.strictEqual(diskRes.motor.action, "alert");
+    assert.strictEqual(diskRes.motor.locomotion, "radar");
 
     const status = pulseEngine.getStatus();
-    assert.strictEqual(status.historyCount, 1);
-    assert.strictEqual(status.lastThought, res.thought);
+    assert(status.historyCount >= 3);
+    assert.strictEqual(status.lastThought, diskRes.thought);
+    assert.strictEqual(status.lastMotor.locomotion, "radar");
   });
 
   // Suite 11: 2-Sample PDH Physical Disk Sentinel
