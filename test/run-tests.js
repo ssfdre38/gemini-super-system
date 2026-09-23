@@ -418,7 +418,14 @@ async function run() {
       const setRes = await clip.setText(testPayload);
       assert.strictEqual(setRes.success, true);
 
-      const getRes = await clip.getText();
+      // Allow Windows OLE clipboard broker to settle handover
+      await new Promise(r => setTimeout(r, 80));
+
+      let getRes = await clip.getText();
+      if (!getRes.hasText) {
+        await new Promise(r => setTimeout(r, 120));
+        getRes = await clip.getText();
+      }
       assert.strictEqual(getRes.success, true);
       assert.strictEqual(getRes.hasText, true);
       assert.strictEqual(getRes.text, testPayload);
@@ -882,6 +889,31 @@ async function run() {
     assert.strictEqual(sentinel.isRunning, true);
     sentinel.stop();
     assert.strictEqual(sentinel.isRunning, false);
+  });
+
+  // Suite 12: Universal System Diagnostic Doctor
+  console.log("\x1b[1m[Suite 12: Universal System Diagnostic Doctor]\x1b[0m");
+
+  await itAsync("runDoctor inspects environment and returns structured diagnostic summary", async () => {
+    const { runDoctor } = require("../lib/doctor.js");
+    const report = await runDoctor({ silent: true });
+
+    assert(report !== null && typeof report === "object");
+    assert(report.timestamp);
+    assert.strictEqual(report.overallSuccess, true);
+    assert(Array.isArray(report.checks));
+    assert(report.checks.length >= 8);
+
+    const checkNames = report.checks.map(c => c.name);
+    assert(checkNames.includes("Operating System"));
+    assert(checkNames.includes("Node.js Runtime"));
+    assert(checkNames.includes("Host Hardware"));
+    assert(checkNames.includes("Haven Memory Bank (.hmb)"));
+    assert(checkNames.includes("Spindle Sentinel (2-Sample PDH)"));
+    assert(checkNames.includes("Display Topology & Win32"));
+    assert(checkNames.includes("Speech Synthesis (TTS)"));
+    assert(checkNames.includes("Native Companion Tools"));
+    assert(checkNames.includes("Port & Network Endpoints"));
   });
 
   console.log("\n=======================================================");

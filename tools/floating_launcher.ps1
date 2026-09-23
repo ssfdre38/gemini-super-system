@@ -80,7 +80,13 @@ $window.Top = ($screen.Height * 0.18)
 $window.Add_KeyDown({
     param($sender, $e)
     if ($e.Key -eq [System.Windows.Input.Key]::Escape) {
-        $window.Close()
+        if ($outputContainer.Visibility -eq [System.Windows.Visibility]::Visible) {
+            $outputContainer.Visibility = [System.Windows.Visibility]::Collapsed
+            $window.Height = 82
+            $inputBox.SelectAll()
+        } else {
+            $window.Close()
+        }
     }
 })
 
@@ -100,10 +106,68 @@ $inputBox.Add_KeyDown({
             $q = $state
             $response = ""
             try {
-                # Attempt dispatch via local mission control API
-                $body = @{ prompt = $q; engine = "auto" } | ConvertTo-Json
-                $res = Invoke-RestMethod -Uri "http://localhost:18880/api/dispatch" -Method Post -Body $body -ContentType "application/json" -TimeoutSec 6 -ErrorAction Stop
-                $response = "Dispatched via $($res.engineUsed.ToUpper()) [Task #$($res.dispatchId)]`nStatus: $($res.status)`nTimestamp: $($res.timestamp)"
+                if ($q -match "^/(pulse|think)$") {
+                    $res = Invoke-RestMethod -Uri "http://localhost:18880/api/gemmi/pulse" -Method Post -TimeoutSec 6 -ErrorAction Stop
+                    $thought = $res.result.thought
+                    $loco = $res.result.motor.locomotion
+                    $act = $res.result.motor.action
+                    $actStr = if ($act) { " | Emote: $act" } else { "" }
+                    $response = "🧠 Gemmi Ambient Mind Pulse:`n`"$thought`"`n`nPosture: $loco$actStr`nTrigger: $($res.result.trigger) • $(Get-Date -Format 'HH:mm:ss')"
+                }
+                elseif ($q -match "^/(disk|spindle)$") {
+                    $res = Invoke-RestMethod -Uri "http://localhost:18880/api/system/disk" -Method Post -TimeoutSec 5 -ErrorAction Stop
+                    $d = $res.status.drives[0]
+                    $isThrash = $res.status.isThrashing
+                    $statusStr = if ($isThrash) { "⚠️ THRASHER DETECTED (Seek Pressure Alert)" } else { "✓ NOMINAL (Seek Starvation Guard Armed)" }
+                    $response = "🛡️ 2-Sample PDH Physical Disk Sentinel:`nDrive: $($d.name)`n• Current Disk Queue Depth: $($d.queueLength)`n• Read Operations / sec:    $($d.readsPerSec)/s`n• Active Spindle Time:       $($d.percentDiskTime)%`n`nStatus: $statusStr"
+                }
+                elseif ($q -match "^/(mem|recall)\s*(.*)$") {
+                    $searchQuery = $Matches[2].Trim()
+                    if ([string]::IsNullOrWhiteSpace($searchQuery)) {
+                        $searchQuery = "Sovereign Core"
+                    }
+                    $recallBody = @{ query = $searchQuery; topK = 3 } | ConvertTo-Json
+                    $res = Invoke-RestMethod -Uri "http://localhost:18880/api/memory/recall" -Method Post -Body $recallBody -ContentType "application/json" -TimeoutSec 4 -ErrorAction Stop
+                    if ($res.memories.Count -gt 0) {
+                        $lines = @("🧠 64-Bit Haven Memory Bank (.hmb) Recall for `"$searchQuery`":`n")
+                        foreach ($m in $res.memories) {
+                            $pct = [Math]::Round($m.score * 100, 1)
+                            $lines += "[#$($m.id)] ($($m.category)) $($m.concept) • Match: $pct%`n   $($m.content)`n"
+                        }
+                        $response = $lines -join "`n"
+                    } else {
+                        $response = "🧠 No memories found matching `"$searchQuery`" in 64-bit Haven Memory Bank."
+                    }
+                }
+                elseif ($q -match "^/avatar\s*(.*)$") {
+                    $state = $Matches[1].Trim()
+                    if ([string]::IsNullOrWhiteSpace($state)) { $state = "cozy" }
+                    $animBody = @{ state = $state } | ConvertTo-Json
+                    $res = Invoke-RestMethod -Uri "http://localhost:18880/api/gemmi/animate" -Method Post -Body $animBody -ContentType "application/json" -TimeoutSec 4 -ErrorAction Stop
+                    $response = "🌐 Gemmi 4D Avatar Synchronized:`nLocomotion Posture: $($res.locomotion)`nConnected Viewports: $($res.connectedClients)`nThought: `"$($res.recentThought)`""
+                }
+                elseif ($q -match "^/act\s*(.*)$") {
+                    $action = $Matches[1].Trim()
+                    if ([string]::IsNullOrWhiteSpace($action)) { $action = "wave" }
+                    $animBody = @{ action = $action } | ConvertTo-Json
+                    $res = Invoke-RestMethod -Uri "http://localhost:18880/api/gemmi/animate" -Method Post -Body $animBody -ContentType "application/json" -TimeoutSec 4 -ErrorAction Stop
+                    $response = "✨ Gemmi 4D Avatar Emote Triggered:`nAction: $action`nPosture: $($res.locomotion)"
+                }
+                elseif ($q -match "^/(status|health)$") {
+                    $res = Invoke-RestMethod -Uri "http://localhost:18880/api/gemmi/status" -TimeoutSec 4 -ErrorAction Stop
+                    $d = $res.cognitivePulse
+                    $p = $d.lastMotor.locomotion
+                    $response = "⚡ Gemini Super System Telemetry:`n• Ambient Mind:  `"$($d.lastThought)`"`n• Motor Posture: $p`n• Focus App:     $($d.focusApp)`n• Avatar Engine: Port $($res.avatar.port) (Clients: $($res.avatar.connectedViewports))`n• Mobile Mesh:   Port 18799 ($($res.gps.landmark))`n• Spindle Health: Nominal"
+                }
+                elseif ($q -match "^/help$") {
+                    $response = "⚡ Gemini Super Reticle Commands:`n  /pulse           - Trigger proactive cognitive thought pulse`n  /disk            - Sample 2-sample PDH physical drive metrics`n  /mem <query>     - Recall anchors from 64-bit Haven Memory Bank`n  /avatar <state>  - Set avatar posture (cozy, walk, sit, radar, think)`n  /act <action>    - Trigger gesture emote (wave, nod, cheer, alert)`n  /status          - Cross-device ambient health & vitals`n  <any prompt>     - Dispatches to orchestrator or local LLM"
+                }
+                else {
+                    # Standard dispatch via local mission control API
+                    $body = @{ prompt = $q; engine = "auto" } | ConvertTo-Json
+                    $res = Invoke-RestMethod -Uri "http://localhost:18880/api/dispatch" -Method Post -Body $body -ContentType "application/json" -TimeoutSec 6 -ErrorAction Stop
+                    $response = "Dispatched via $($res.engineUsed.ToUpper()) [Task #$($res.dispatchId)]`nStatus: $($res.status)`nTimestamp: $($res.timestamp)"
+                }
             }
             catch {
                 # Fallback: Query memory recall or local infer directly

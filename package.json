@@ -16,6 +16,7 @@
     "launcher": "powershell -Sta -WindowStyle Hidden -ExecutionPolicy Bypass -File tools/floating_launcher.ps1",
     "watch": "node index.js --watch",
     "test": "node test/run-tests.js",
+    "doctor": "node index.js --doctor",
     "lint": "node --check index.js lib/*.js test/*.js scripts/*.js",
     "build:sea": "node scripts/build_standalone.js",
     "deploy:site": "python scripts/deploy_site.py"

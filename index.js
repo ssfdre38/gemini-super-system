@@ -2350,6 +2350,11 @@ async function main() {
     ps.unref();
     process.exit(0);
   }
+  if (process.argv.includes("--doctor")) {
+    const { runDoctor } = require("./lib/doctor.js");
+    const doc = await runDoctor();
+    process.exit(doc.overallSuccess ? 0 : 1);
+  }
   if (process.argv.includes("--watch")) {
     const orch = getOrchestrator();
     await orch.initialize();

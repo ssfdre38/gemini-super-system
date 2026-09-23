@@ -71,6 +71,43 @@ $itemGalaxy.Add_Click({
     [System.Diagnostics.Process]::Start("http://localhost:18880/#galaxy") | Out-Null
 })
 
+# 4D Avatar WebGL Viewport
+$itemAvatar = $menu.Items.Add("🌐 4D Avatar Viewport (:8088)")
+$itemAvatar.Add_Click({
+    [System.Diagnostics.Process]::Start("http://localhost:8088") | Out-Null
+})
+
+# Spindle Guardian & Disk Sentinel Check
+$itemDisk = $menu.Items.Add("🛡️ Spindle Guardian & Disk Health")
+$itemDisk.Add_Click({
+    try {
+        $res = Invoke-RestMethod -Uri "http://localhost:18880/api/system/disk" -Method Post -TimeoutSec 4 -ErrorAction Stop
+        if ($res.status.drives.Count -gt 0) {
+            $d = $res.status.drives[0]
+            $msg = "Drive $($d.name)`nQueue Depth: $($d.queueLength) | Reads: $($d.readsPerSec)/s | Active: $($d.percentDiskTime)%`nStatus: $(if ($d.isThrashing) { 'THRASHER DETECTED' } else { 'NOMINAL' })"
+            $iconType = if ($d.isThrashing) { [System.Windows.Forms.ToolTipIcon]::Warning } else { [System.Windows.Forms.ToolTipIcon]::Info }
+            $tray.ShowBalloonTip(4000, "🛡️ Spindle Guardian (2-Sample PDH)", $msg, $iconType)
+        } else {
+            $tray.ShowBalloonTip(3000, "🛡️ Spindle Guardian", "Disk sampling nominal. No active seek thrashing.", [System.Windows.Forms.ToolTipIcon]::Info)
+        }
+    } catch {
+        $tray.ShowBalloonTip(3000, "🛡️ Spindle Guardian", "Mission Control daemon offline on :18880", [System.Windows.Forms.ToolTipIcon]::Warning)
+    }
+})
+
+# Pulse Companion Mind
+$itemPulse = $menu.Items.Add("⚡ Pulse Companion Mind")
+$itemPulse.Add_Click({
+    try {
+        $res = Invoke-RestMethod -Uri "http://localhost:18880/api/gemmi/pulse" -Method Post -TimeoutSec 6 -ErrorAction Stop
+        $thought = $res.result.thought
+        $motor = $res.result.motor.locomotion
+        $tray.ShowBalloonTip(4000, "🧠 Gemmi Ambient Mind ($motor)", "`"$thought`"", [System.Windows.Forms.ToolTipIcon]::Info)
+    } catch {
+        $tray.ShowBalloonTip(3000, "🧠 Cognitive Pulse", "Pulse failed or Mission Control offline.", [System.Windows.Forms.ToolTipIcon]::Warning)
+    }
+})
+
 # Live Showcase Website
 $itemShowcase = $menu.Items.Add("🌐 Live Showcase (geminiss.barrersoftware.com)")
 $itemShowcase.Add_Click({
