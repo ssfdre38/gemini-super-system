@@ -6,6 +6,7 @@
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64-blue.svg)](https://microsoft.com/windows)
 [![Protocol](https://img.shields.io/badge/protocol-MCP%20v1.30-purple.svg)](https://modelcontextprotocol.io/)
 [![Memory Engine](https://img.shields.io/badge/memory-64--bit%20HMB-orange.svg)](docs/HMB_SPEC.md)
+[![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20Daniel-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/ssfdre38)
 
 > **The Sovereign Native AI Operating System uniting Antigravity CLI (`agy`), Gemini Native (`gemini`), Win32 Hardware Actuation, Windows UIAutomation Semantic Perception, 64-Bit Haven Memory Bank (`.hmb`), Google Labs MCP, NetBird WireGuard Mesh, and Sovereign Local GGUF Inference into a unified, ambient digital coworker.**
 
@@ -33,7 +34,12 @@
   - [16. Ambient Window & App-Switch Awareness Hook](#16-ambient-window--app-switch-awareness-hook)
   - [17. Translucent Obsidian Floating Command HUD (WPF)](#17-translucent-obsidian-floating-command-hud-wpf)
   - [18. Native Windows System Tray Companion Daemon](#18-native-windows-system-tray-companion-daemon)
-- [🚀 Quick Start & Installation](#-quick-start)
+  - [19. Universal Android Companion Gateway & Device Telemetry](#19-universal-android-companion-gateway--device-telemetry)
+  - [20. Gemmi Ambient Mesh & 4D Avatar Bridge (Ports 8088 & 18799)](#20--gemmi-ambient-mesh--4d-avatar-bridge-ports-8088--18799)
+  - [21. Proactive Cognitive Pulse & Autonomic Motor Reflexes](#21--proactive-cognitive-pulse--autonomic-motor-reflexes)
+  - [22. 2-Sample PDH Physical Disk Sentinel (Spindle Guardian)](#22-️-2-sample-pdh-physical-disk-sentinel-spindle-guardian)
+- [🚀 Quick Start](#-quick-start)
+- [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
 - [👥 Contributors & Credits](#-contributors--credits)
 
@@ -337,6 +343,24 @@ Built for deep, native interop with `gemmi-android` (8/14 build) and sovereign e
 
 ---
 
+## 21. 🧠 Proactive Cognitive Pulse & Autonomic Motor Reflexes
+
+Transcending the "turn-based chatbot" constraint with a continuous, living background cognitive loop:
+- **Autonomous Monologue Synthesis**: Periodically observes active Windows application context, tablet battery, GPS velocity, and disk pressure, generating spontaneous in-character thought monologues via local Gemma-4 LLM with sub-second heuristic fallbacks.
+- **Autonomic Motor Actuation**: Thoughts and sensory reflexes directly actuate avatar locomotion (`cozy`, `walk`, `sit`, `radar`, `think`) and physical gesture emotes (`wave`, `nod`, `alert`, `cheer`).
+- **Continuous Episodic Life-Log**: Automatically anchors high-salience milestones (workstation returns, tablet docking, sustained focus sessions, spindle thrashing mitigations) into the 64-bit binary Haven Memory Bank (`.hmb`) with 128-dimensional semantic embeddings.
+
+---
+
+## 22. 🛡️ 2-Sample PDH Physical Disk Sentinel (Spindle Guardian)
+
+Background compilers, telemetry agents, and update tools (e.g. Visual Studio `BackgroundDownload.exe`) can silently thrash mechanical disk seek heads to 100% active time and starve host I/O.
+- **2-Sample Derivative Calculation**: Implements the proper Windows PDH 2-sample rate math (`-SampleInterval 1 -MaxSamples 2`) to accurately calculate true `Disk Reads/sec`, `Disk Writes/sec`, and `% Disk Time`.
+- **Seek Starvation Guard**: If disk queue length $\ge 6$ or read rate $\ge 400$/sec, immediately isolates the offending process PID, alerts the universal bus, and triggers a `disk_pressure` sensory reflex in the companion mind.
+- **Zero-Dependency Native Execution**: Executed via non-blocking, base64-encoded UTF-16LE PowerShell scripts with 100% HDD async resilience.
+
+---
+
 ## 🚀 Quick Start
 
 ### 1. Web Mission Control Dashboard
@@ -373,6 +397,20 @@ Add to `~/.gemini/settings.json`:
   }
 }
 ```
+
+---
+
+## ☕ Support the Development
+
+If **Gemini Super System** helps your workflow, enables your sovereign local AI, or you want to support independent, bare-metal engineering:
+
+<p align="center">
+  <a href="https://ko-fi.com/ssfdre38" target="_blank">
+    <img src="https://ko-fi.com/img/githubbutton_sm.svg" alt="Support on Ko-fi" width="220" />
+  </a>
+</p>
+
+*Every coffee helps sustain the long hours, hardware test benches, and compute dedicated to building open, sovereign, bare-metal AI tooling.*
 
 ---
 
