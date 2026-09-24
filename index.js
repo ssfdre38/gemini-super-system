@@ -1207,6 +1207,81 @@ const SYSTEM_TOOLS = [
           type: "object",
           properties: {}
         }
+      },
+      {
+        name: "super_kernel_vitals",
+        description: "Queries sub-millisecond Windows NT Kernel memory pools (Paged Pool, Non-Paged Pool, System Cache, Kernel Handles, Commit Limit/Peak, and physical RAM allocation) via Win32 GetPerformanceInfo (psapi.dll).",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_kernel_drivers",
+        description: "Enumerates loaded Windows kernel-mode drivers, service states, and File System Minifilter Drivers (FLTMGR.SYS altitudes, active instances, and WDK architectural classifications e.g. Antivirus, Continuous Backup, Storage QoS, Encryption).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              description: "Optional case-insensitive search term to filter driver or minifilter name"
+            },
+            runningOnly: {
+              type: "boolean",
+              description: "Whether to return only running kernel drivers (default: true)"
+            }
+          }
+        }
+      },
+      {
+        name: "super_physical_disks",
+        description: "Queries physical storage disk geometries, bus types (NVMe, SATA, USB), media types (SSD vs HDD), physical sector alignments (4Kn native vs 512-byte emulation), partition counts, and solid-state TRIM status (fsutil DisableDeleteNotify).",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_process_tune",
+        description: "Dynamically tunes process execution priority class (idle, below_normal, normal, above_normal, high, realtime), sets CPU core affinity mask (e.g. 0x0FF for cores 0-7), and trims physical RAM working set memory (EmptyWorkingSet).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            target: {
+              type: "string",
+              description: "Process identifier (PID as integer or process name like 'llama-server' or 'node')"
+            },
+            priority: {
+              type: "string",
+              description: "Process priority class: 'idle' | 'below_normal' | 'normal' | 'above_normal' | 'high' | 'realtime'"
+            },
+            affinityMask: {
+              type: "string",
+              description: "CPU core bitmask in hex (e.g. '0x00F' for cores 0-3) or decimal"
+            },
+            trimWorkingSet: {
+              type: "boolean",
+              description: "Whether to invoke Win32 EmptyWorkingSet to flush process pages to standby memory"
+            }
+          },
+          required: ["target"]
+        }
+      },
+      {
+        name: "super_power_status",
+        description: "Queries low-level Win32 system power status (AC Line Online/Offline, battery percentage, battery saver mode) and active Windows Power Scheme GUID and friendly name (e.g. Balanced, High Performance) via powrprof.dll.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_kernel_interrupts",
+        description: "Gathers hardware interrupt rate, Deferred Procedure Call (DPC) % and CPU processor queue length to diagnose driver latency, hardware IRQ bottlenecks, and audio dropouts.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
 ];
 
@@ -2336,6 +2411,78 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [Task Worker Pool Status]:\n` + JSON.stringify(status, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_kernel_vitals") {
+    const vitals = await orch.getKernelVitals();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🏛️ [NT Kernel Vitals Telemetry]:\n` + JSON.stringify(vitals, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_kernel_drivers") {
+    const drivers = await orch.getKernelDrivers(args);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [Kernel Drivers & Minifilters]:\n` + JSON.stringify(drivers, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_physical_disks") {
+    const disks = await orch.getPhysicalDisks();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💽 [Physical Disk Geometry & TRIM]:\n` + JSON.stringify(disks, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_process_tune") {
+    const tuneRes = await orch.tuneProcess(args);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚙️ [Process Priority & Affinity Tune]:\n` + JSON.stringify(tuneRes, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_power_status") {
+    const power = await orch.getPowerStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Win32 System Power & Scheme]:\n` + JSON.stringify(power, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_kernel_interrupts") {
+    const irq = await orch.getKernelInterrupts();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⏱️ [Kernel Interrupts & DPC Telemetry]:\n` + JSON.stringify(irq, null, 2)
         }
       ]
     };

@@ -41,6 +41,7 @@
   - [23. Autonomous Task Worker Pool](#23--autonomous-task-worker-pool)
   - [24. True Dense Transformer Embedding Pipeline](#24--true-dense-transformer-embedding-pipeline)
   - [25. Native Parametric 3D CAD & Watertight Mesh Engine](#25--native-parametric-3d-cad--watertight-mesh-engine)
+  - [26. Native OS & Windows NT Kernel Layer Bridge](#26--native-os--windows-nt-kernel-layer-bridge)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -389,6 +390,33 @@ Enables Gemini to design, calculate, and fabricate physical objects without exte
 - **Gauss's Divergence Theorem Volume Math**: Computes exact watertight solid volume ($V = \frac{1}{6} \sum (\mathbf{v}_0 \times \mathbf{v}_1) \cdot \mathbf{v}_2$), PLA/PETG/ABS filament weights, and optimal slicing profiles.
 - **Parametric Generators & Watertight STL**: Produces print-ready binary STL files and human-editable OpenSCAD code for rotary knobs, battery covers, structural mounting brackets, spacers/bushings, involute spur gears, and electronics project boxes.
 - **Photo Reference Scale Calibration**: Converts photo pixel spans into real-world millimeters using coin, card, or ruler references with slide-fit and snap-fit tolerances.
+
+---
+
+## 26. 🛡️ Native OS & Windows NT Kernel Layer Bridge
+
+Bridges Gemini directly to the bare-metal Windows NT executive and kernel subsystems, moving beyond user-space application boundaries into low-level operating system observability and hardware orchestration:
+
+- **Sub-Millisecond NT Memory Pools (`psapi.dll`)**:
+  - Implements direct Win32 `GetPerformanceInfo` P/Invoke to extract Paged Pool, Non-Paged Pool, System Cache, Kernel Object Handles, and Commit Limits/Peaks in **sub-1ms** with zero WMI or child process overhead.
+- **Kernel Drivers & Minifilter Altitudes**:
+  - Direct kernel driver discovery (`sc query type= driver`) and Filesystem Minifilter inspection (`fltmc filters`).
+  - Automated classification of active filesystem minifilters into Microsoft Windows Driver Kit (WDK) architectural altitude bands (Antivirus, Virtualization, Encryption, Continuous Data Protection, Storage QoS, Backup).
+- **Direct Physical Disk Geometry & Sector Alignment**:
+  - Discovers underlying physical hardware drives (`Win32_DiskDrive`), exposing 4Kn vs 512e physical/logical sector sizes, raw byte capacities, interface buses (NVMe, SATA, SCSI, USB), and hardware TRIM solid-state wear status (`DisableDeleteNotify`).
+- **Dynamic Process Steering & Working Set Compaction**:
+  - Tunes running processes on the fly: sets Windows Priority Classes (`IDLE`, `BELOW_NORMAL`, `NORMAL`, `ABOVE_NORMAL`, `HIGH`, `REALTIME`), assigns CPU Core Affinity Bitmasks (`SetProcessAffinityMask` up to 64 cores), and trims physical RAM footprints down to bare working sets via `EmptyWorkingSet`.
+- **Win32 Power Scheme Telemetry**:
+  - Direct P/Invoke to `powrprof.dll` (`PowerGetActiveScheme`, `PowerReadFriendlyName`) and `kernel32.dll` (`GetSystemPowerStatus`), reporting real-time AC line connectivity, battery discharge rates, and the active Windows power profile (e.g. `High performance`, `Balanced`, `Power saver`).
+- **Kernel DPC & Hardware Interrupt Telemetry**:
+  - Continuously monitors Processor Queue Length, Deferred Procedure Call (DPC) time percentage, and Hardware Interrupt time percentage to detect driver ISR latencies, thermal throttling, and hardware interrupt storms.
+- **6 Native MCP Tools**:
+  - `super_kernel_vitals`: Sub-millisecond paged, non-paged, and commit memory pools.
+  - `super_kernel_drivers`: Kernel-mode drivers and filesystem minifilter altitude classification.
+  - `super_physical_disks`: Hardware disk geometry, 4Kn/512e sector alignment, and TRIM status.
+  - `super_process_tune`: Process priority class tuning, CPU affinity bitmasks, and working set trimming.
+  - `super_power_status`: Real-time AC line, battery levels, and active power scheme GUID.
+  - `super_kernel_interrupts`: DPC and Hardware Interrupt latency profiling.
 
 ---
 

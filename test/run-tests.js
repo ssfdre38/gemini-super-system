@@ -1092,6 +1092,87 @@ async function run() {
     if (fs.existsSync(testVault)) fs.unlinkSync(testVault);
   });
 
+  // Suite 16: Native OS & NT Kernel Layer Bridge
+  console.log("\n\x1b[1m[Suite 16: Native OS & NT Kernel Layer Bridge]\x1b[0m");
+
+  it("classifyAltitude maps WDK altitude ranges to architectural kernel roles", () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    assert.strictEqual(kb.classifyAltitude("328010"), "FSFilter Anti-Virus (Full Detection & Protection)");
+    assert.strictEqual(kb.classifyAltitude("409800"), "FSFilter Activity Monitor / Virtualization");
+    assert.strictEqual(kb.classifyAltitude("244000"), "FSFilter Storage QoS");
+    assert.strictEqual(kb.classifyAltitude("141100"), "FSFilter Encryption / DRM");
+  });
+
+  await itAsync("getKernelVitals queries sub-millisecond paged, non-paged, and commit pools", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const kv = await kb.getKernelVitals();
+
+    assert(kv !== null && typeof kv === "object");
+    assert.strictEqual(kv.success, true);
+    assert.strictEqual(kv.pageSizeBytes, 4096);
+    assert(kv.memoryPools.kernelPagedMB > 0, "Paged pool should be > 0MB");
+    assert(kv.memoryPools.kernelNonpagedMB > 0, "Non-paged pool should be > 0MB");
+    assert(kv.commit.commitTotalMB > 0);
+    assert(kv.physical.physicalTotalMB > 0);
+    assert(kv.handles.processCount > 0);
+  });
+
+  await itAsync("getKernelDrivers discovers loaded Windows kernel drivers and filesystem minifilters", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const kd = await kb.getKernelDrivers({ filter: "wdfilter" });
+
+    assert(kd !== null && typeof kd === "object");
+    assert.strictEqual(kd.success, true);
+    assert(kd.minifiltersCount >= 1, "Expected Windows Defender minifilter (WdFilter)");
+    assert.strictEqual(kd.minifilters[0].filterName.toLowerCase(), "wdfilter");
+    assert.strictEqual(kd.minifilters[0].altitude, "328010");
+  });
+
+  await itAsync("getPhysicalDisks queries physical drive geometries, sector alignment, and TRIM", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const pd = await kb.getPhysicalDisks();
+
+    assert(pd !== null && typeof pd === "object");
+    assert.strictEqual(pd.success, true);
+    assert(pd.physicalDisks.length >= 1, "Expected at least 1 physical disk");
+    assert(pd.physicalDisks[0].sizeGb > 0);
+    assert.strictEqual(typeof pd.trimStatus.ntfsTrimAllowed, "boolean");
+    assert(pd.logicalVolumes.length >= 1, "Expected at least 1 logical volume");
+  });
+
+  await itAsync("getPowerStatus retrieves Win32 AC line, battery, and active power scheme GUID", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const pwr = await kb.getPowerStatus();
+
+    assert(pwr !== null && typeof pwr === "object");
+    assert.strictEqual(pwr.success, true);
+    assert(pwr.acLineStatus === "Online" || pwr.acLineStatus === "Offline");
+    assert(pwr.activePowerScheme);
+    assert(pwr.activePowerScheme.guid.length > 0);
+  });
+
+  await itAsync("tuneProcess adjusts priority class, CPU affinity mask, and trims working set", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const tuneRes = await kb.tuneProcess({
+      target: process.pid,
+      priority: "normal",
+      affinityMask: "0xFFF",
+      trimWorkingSet: true
+    });
+
+    assert(tuneRes !== null && typeof tuneRes === "object");
+    assert.strictEqual(tuneRes.success, true);
+    assert.strictEqual(tuneRes.pid, process.pid);
+    assert.strictEqual(tuneRes.trimmed, true);
+    assert(tuneRes.current.priority);
+  });
+
   console.log("\n=======================================================");
   console.log(`   TEST RESULTS: ${passedTests}/${totalTests} PASSED (${failedTests} FAILED)`);
   console.log("=======================================================\n");

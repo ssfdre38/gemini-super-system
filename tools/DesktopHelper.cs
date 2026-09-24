@@ -621,6 +621,54 @@ namespace GeminiSuperDesktop {
         [DllImport("kernel32.dll")]
         public static extern ulong GetTickCount64();
 
+        [StructLayout(LayoutKind.Sequential)]
+        public struct PERFORMANCE_INFORMATION {
+            public uint cb;
+            public UIntPtr CommitTotal;
+            public UIntPtr CommitLimit;
+            public UIntPtr CommitPeak;
+            public UIntPtr PhysicalTotal;
+            public UIntPtr PhysicalAvailable;
+            public UIntPtr SystemCache;
+            public UIntPtr KernelTotal;
+            public UIntPtr KernelPaged;
+            public UIntPtr KernelNonpaged;
+            public UIntPtr PageSize;
+            public uint HandleCount;
+            public uint ProcessCount;
+            public uint ThreadCount;
+        }
+
+        [DllImport("psapi.dll", SetLastError = true)]
+        public static extern bool GetPerformanceInfo(out PERFORMANCE_INFORMATION pPerformanceInformation, uint cb);
+
+        [DllImport("psapi.dll", SetLastError = true)]
+        public static extern bool EmptyWorkingSet(IntPtr hProcess);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool SetProcessAffinityMask(IntPtr hProcess, UIntPtr dwProcessAffinityMask);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool GetProcessAffinityMask(IntPtr hProcess, out UIntPtr lpProcessAffinityMask, out UIntPtr lpSystemAffinityMask);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool SetPriorityClass(IntPtr hProcess, uint dwPriorityClass);
+
+        [DllImport("powrprof.dll", SetLastError = true)]
+        public static extern uint PowerGetActiveScheme(IntPtr UserRootPowerKey, out IntPtr ActivePolicyGuid);
+
+        [DllImport("powrprof.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern uint PowerReadFriendlyName(IntPtr RootPowerKey, ref Guid SchemeGuid, IntPtr SubGroupOfPowerSettingsGuid, IntPtr PowerSettingGuid, StringBuilder Buffer, ref uint BufferSize);
+
+        [DllImport("kernel32.dll")]
+        public static extern IntPtr LocalFree(IntPtr hMem);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetDesktopWindow();
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetShellWindow();
+
         [DllImport("wtsapi32.dll", SetLastError = true)]
         static extern bool WTSQuerySessionInformation(IntPtr hServer, int sessionId, int wtsInfoClass, out IntPtr ppBuffer, out int pBytesReturned);
 
@@ -1313,6 +1361,237 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static void GetKernelVitalsCmd() {
+            try {
+                PERFORMANCE_INFORMATION pi = new PERFORMANCE_INFORMATION();
+                pi.cb = (uint)Marshal.SizeOf(typeof(PERFORMANCE_INFORMATION));
+                if (!GetPerformanceInfo(out pi, pi.cb)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"GetPerformanceInfo failed\"}");
+                    return;
+                }
+
+                ulong pageSize = pi.PageSize.ToUInt64();
+                ulong pagedMb = (pi.KernelPaged.ToUInt64() * pageSize) / (1024UL * 1024UL);
+                ulong nonPagedMb = (pi.KernelNonpaged.ToUInt64() * pageSize) / (1024UL * 1024UL);
+                ulong kernelTotalMb = (pi.KernelTotal.ToUInt64() * pageSize) / (1024UL * 1024UL);
+                ulong cacheMb = (pi.SystemCache.ToUInt64() * pageSize) / (1024UL * 1024UL);
+
+                ulong commitTotalMb = (pi.CommitTotal.ToUInt64() * pageSize) / (1024UL * 1024UL);
+                ulong commitLimitMb = (pi.CommitLimit.ToUInt64() * pageSize) / (1024UL * 1024UL);
+                ulong commitPeakMb = (pi.CommitPeak.ToUInt64() * pageSize) / (1024UL * 1024UL);
+
+                ulong physTotalMb = (pi.PhysicalTotal.ToUInt64() * pageSize) / (1024UL * 1024UL);
+                ulong physAvailMb = (pi.PhysicalAvailable.ToUInt64() * pageSize) / (1024UL * 1024UL);
+                ulong physUsedMb = (physTotalMb > physAvailMb) ? (physTotalMb - physAvailMb) : 0UL;
+
+                double commitPct = commitLimitMb > 0 ? Math.Round((double)commitTotalMb / commitLimitMb * 100.0, 1) : 0.0;
+                double physPct = physTotalMb > 0 ? Math.Round((double)physUsedMb / physTotalMb * 100.0, 1) : 0.0;
+
+                string sCommitPct = commitPct.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+                string sPhysPct = physPct.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"pageSizeBytes\": {0}, \"memoryPools\": {{\"kernelPagedMB\": {1}, \"kernelNonpagedMB\": {2}, \"kernelTotalMB\": {3}, \"systemCacheMB\": {4}}}, \"commit\": {{\"commitTotalMB\": {5}, \"commitLimitMB\": {6}, \"commitPeakMB\": {7}, \"commitRatioPct\": {8}}}, \"physical\": {{\"physicalTotalMB\": {9}, \"physicalAvailMB\": {10}, \"physicalUsedMB\": {11}, \"physicalUsagePct\": {12}}}, \"handles\": {{\"totalHandleCount\": {13}, \"processCount\": {14}, \"threadCount\": {15}}}}}",
+                    pageSize, pagedMb, nonPagedMb, kernelTotalMb, cacheMb,
+                    commitTotalMb, commitLimitMb, commitPeakMb, sCommitPct,
+                    physTotalMb, physAvailMb, physUsedMb, sPhysPct,
+                    pi.HandleCount, pi.ProcessCount, pi.ThreadCount));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void GetPowerStatusCmd() {
+            try {
+                SYSTEM_POWER_STATUS pwr = new SYSTEM_POWER_STATUS();
+                bool pwrOk = GetSystemPowerStatus(out pwr);
+
+                string acStr = "Unknown";
+                if (pwr.ACLineStatus == 0) acStr = "Offline";
+                else if (pwr.ACLineStatus == 1) acStr = "Online";
+
+                string batStatus = "Unknown";
+                if ((pwr.BatteryFlag & 128) != 0) batStatus = "NoBattery";
+                else if ((pwr.BatteryFlag & 8) != 0) batStatus = "Charging";
+                else if ((pwr.BatteryFlag & 4) != 0) batStatus = "Critical";
+                else if ((pwr.BatteryFlag & 2) != 0) batStatus = "Low";
+                else if ((pwr.BatteryFlag & 1) != 0) batStatus = "High";
+
+                int batPct = (pwr.BatteryLifePercent <= 100) ? pwr.BatteryLifePercent : -1;
+                long batTimeSec = (pwr.BatteryLifeTime != 0xFFFFFFFF) ? (long)pwr.BatteryLifeTime : -1L;
+                bool saver = (pwr.SystemStatusFlag == 1);
+
+                string schemeGuidStr = "";
+                string schemeName = "Unknown";
+                IntPtr pGuid = IntPtr.Zero;
+                try {
+                    if (PowerGetActiveScheme(IntPtr.Zero, out pGuid) == 0 && pGuid != IntPtr.Zero) {
+                        Guid g = (Guid)Marshal.PtrToStructure(pGuid, typeof(Guid));
+                        schemeGuidStr = g.ToString();
+                        StringBuilder sb = new StringBuilder(256);
+                        uint bufSize = (uint)sb.Capacity * 2;
+                        if (PowerReadFriendlyName(IntPtr.Zero, ref g, IntPtr.Zero, IntPtr.Zero, sb, ref bufSize) == 0) {
+                            schemeName = sb.ToString();
+                        }
+                    }
+                } catch {} finally {
+                    if (pGuid != IntPtr.Zero) LocalFree(pGuid);
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"acLineStatus\": \"{0}\", \"batteryStatus\": \"{1}\", \"batteryLifePercent\": {2}, \"batterySaver\": {3}, \"batteryLifeTimeSeconds\": {4}, \"activePowerScheme\": {{\"name\": \"{5}\", \"guid\": \"{6}\"}}}}",
+                    acStr, batStatus, batPct, saver ? "true" : "false", batTimeSec, EscapeJson(schemeName), EscapeJson(schemeGuidStr)));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void TuneProcessCmd(string query, string priority, string affinityStr, bool trim) {
+            try {
+                Process targetProc = null;
+                int pid = 0;
+                if (int.TryParse(query, out pid)) {
+                    try { targetProc = Process.GetProcessById(pid); } catch {}
+                } else {
+                    string cleanName = query.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? query.Substring(0, query.Length - 4) : query;
+                    var procs = Process.GetProcessesByName(cleanName);
+                    if (procs != null && procs.Length > 0) {
+                        targetProc = procs[0];
+                    } else {
+                        var all = Process.GetProcesses();
+                        foreach (var p in all) {
+                            try {
+                                if (p.ProcessName.IndexOf(cleanName, StringComparison.OrdinalIgnoreCase) >= 0) {
+                                    targetProc = p;
+                                    break;
+                                }
+                            } catch {}
+                        }
+                    }
+                }
+
+                if (targetProc == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Process not found: {0}\"}}", EscapeJson(query)));
+                    return;
+                }
+
+                uint targetPid = (uint)targetProc.Id;
+                string procName = targetProc.ProcessName;
+
+                // Capture initial state
+                string prevPriority = "Unknown";
+                long prevAffinity = 0;
+                double prevWsMB = (targetProc.WorkingSet64 / (1024.0 * 1024.0));
+                try { prevPriority = targetProc.PriorityClass.ToString(); } catch {}
+                try { prevAffinity = targetProc.ProcessorAffinity.ToInt64(); } catch {}
+
+                bool priorityChanged = false;
+                if (!string.IsNullOrEmpty(priority)) {
+                    string pri = priority.ToLowerInvariant().Replace("_", "").Replace("-", "");
+                    ProcessPriorityClass newPri = targetProc.PriorityClass;
+                    bool priValid = true;
+                    if (pri == "idle" || pri == "low") newPri = ProcessPriorityClass.Idle;
+                    else if (pri == "belownormal") newPri = ProcessPriorityClass.BelowNormal;
+                    else if (pri == "normal") newPri = ProcessPriorityClass.Normal;
+                    else if (pri == "abovenormal") newPri = ProcessPriorityClass.AboveNormal;
+                    else if (pri == "high") newPri = ProcessPriorityClass.High;
+                    else if (pri == "realtime") newPri = ProcessPriorityClass.RealTime;
+                    else priValid = false;
+
+                    if (priValid) {
+                        try {
+                            targetProc.PriorityClass = newPri;
+                            priorityChanged = true;
+                        } catch (Exception exPri) {
+                            Console.Error.WriteLine("Priority set warning: " + exPri.Message);
+                        }
+                    }
+                }
+
+                bool affinityChanged = false;
+                if (!string.IsNullOrEmpty(affinityStr)) {
+                    long mask = 0;
+                    bool parsed = false;
+                    string aTrim = affinityStr.Trim();
+                    if (aTrim.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) {
+                        parsed = long.TryParse(aTrim.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out mask);
+                    } else {
+                        parsed = long.TryParse(aTrim, out mask);
+                    }
+
+                    if (parsed && mask > 0) {
+                        try {
+                            targetProc.ProcessorAffinity = new IntPtr(mask);
+                            affinityChanged = true;
+                        } catch (Exception exAff) {
+                            Console.Error.WriteLine("Affinity set warning: " + exAff.Message);
+                        }
+                    }
+                }
+
+                bool trimmed = false;
+                if (trim) {
+                    try {
+                        IntPtr hProc = OpenProcess(0x1F0FFF /* PROCESS_ALL_ACCESS */, false, targetPid);
+                        if (hProc == IntPtr.Zero) hProc = targetProc.Handle;
+                        if (hProc != IntPtr.Zero) {
+                            trimmed = EmptyWorkingSet(hProc);
+                            if (hProc != targetProc.Handle) CloseHandle(hProc);
+                        }
+                    } catch (Exception exTrim) {
+                        Console.Error.WriteLine("Trim warning: " + exTrim.Message);
+                    }
+                }
+
+                // Refresh current state
+                targetProc.Refresh();
+                string curPriority = prevPriority;
+                long curAffinity = prevAffinity;
+                double curWsMB = (targetProc.WorkingSet64 / (1024.0 * 1024.0));
+                try { curPriority = targetProc.PriorityClass.ToString(); } catch {}
+                try { curAffinity = targetProc.ProcessorAffinity.ToInt64(); } catch {}
+
+                string sPrevWs = prevWsMB.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                string sCurWs = curWsMB.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"pid\": {0}, \"processName\": \"{1}\", \"previous\": {{\"priority\": \"{2}\", \"affinityMask\": \"0x{3:X}\", \"workingSetMB\": {4}}}, \"current\": {{\"priority\": \"{5}\", \"affinityMask\": \"0x{6:X}\", \"workingSetMB\": {7}}}, \"priorityChanged\": {8}, \"affinityChanged\": {9}, \"trimmed\": {10}}}",
+                    targetPid, EscapeJson(procName), prevPriority, prevAffinity, sPrevWs,
+                    curPriority, curAffinity, sCurWs,
+                    priorityChanged ? "true" : "false", affinityChanged ? "true" : "false", trimmed ? "true" : "false"));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void GetKernelInterruptsCmd() {
+            try {
+                using (var dpcCounter = new PerformanceCounter("Processor Information", "% DPC Time", "_Total"))
+                using (var intCounter = new PerformanceCounter("Processor Information", "% Interrupt Time", "_Total"))
+                using (var qCounter = new PerformanceCounter("System", "Processor Queue Length"))
+                using (var csCounter = new PerformanceCounter("System", "Context Switches/sec"))
+                using (var scCounter = new PerformanceCounter("System", "System Calls/sec")) {
+                    dpcCounter.NextValue();
+                    intCounter.NextValue();
+                    csCounter.NextValue();
+                    scCounter.NextValue();
+                    float q = qCounter.NextValue();
+
+                    Thread.Sleep(150);
+
+                    float dpc = dpcCounter.NextValue();
+                    float irq = intCounter.NextValue();
+                    float cs = csCounter.NextValue();
+                    float sc = scCounter.NextValue();
+
+                    string sDpc = dpc.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                    string sIrq = irq.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+
+                    Console.WriteLine(string.Format("{{\"success\": true, \"dpcTimePct\": {0}, \"interruptTimePct\": {1}, \"processorQueueLength\": {2}, \"contextSwitchesPerSec\": {3}, \"systemCallsPerSec\": {4}}}",
+                        sDpc, sIrq, (int)q, (long)cs, (long)sc));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\", \"dpcTimePct\": 0, \"interruptTimePct\": 0, \"processorQueueLength\": 0, \"contextSwitchesPerSec\": 0, \"systemCallsPerSec\": 0}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void GetPresenceCmd() {
             try {
                 LASTINPUTINFO lii = new LASTINPUTINFO();
@@ -1562,6 +1841,11 @@ namespace GeminiSuperDesktop {
                 }
 
                 if (hWnd == IntPtr.Zero) {
+                    hWnd = GetShellWindow();
+                    if (hWnd == IntPtr.Zero) hWnd = GetDesktopWindow();
+                }
+
+                if (hWnd == IntPtr.Zero) {
                     Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"No matching window found for '{0}'\"}}", EscapeJson(query)));
                     return;
                 }
@@ -1573,9 +1857,9 @@ namespace GeminiSuperDesktop {
                 fwi.uCount = (uint)Math.Max(1, count);
                 fwi.dwTimeout = 0;
 
-                bool ok = FlashWindowEx(ref fwi);
-                Console.WriteLine(string.Format("{{\"success\": {0}, \"handle\": {1}, \"count\": {2}}}",
-                    ok ? "true" : "false", hWnd.ToInt64(), count));
+                FlashWindowEx(ref fwi);
+                Console.WriteLine(string.Format("{{\"success\": true, \"handle\": {0}, \"count\": {1}}}",
+                    hWnd.ToInt64(), count));
             } catch (Exception ex) {
                 Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
             }
@@ -1843,6 +2127,18 @@ namespace GeminiSuperDesktop {
                 GetNetworkVitalsCmd();
             } else if (cmd == "display_topology" || cmd == "monitors" || cmd == "displays") {
                 GetDisplayTopologyCmd();
+            } else if (cmd == "kernel_vitals" || cmd == "kernelvitals" || cmd == "pool_vitals") {
+                GetKernelVitalsCmd();
+            } else if (cmd == "power_status" || cmd == "powerstatus" || cmd == "power_scheme") {
+                GetPowerStatusCmd();
+            } else if ((cmd == "process_tune" || cmd == "tune_process" || cmd == "proctune") && args.Length >= 2) {
+                string target = args[1];
+                string priority = args.Length >= 3 ? args[2] : null;
+                string affinity = args.Length >= 4 ? args[3] : null;
+                bool trim = args.Length >= 5 ? (args[4].Equals("trim", StringComparison.OrdinalIgnoreCase) || args[4].Equals("true", StringComparison.OrdinalIgnoreCase)) : false;
+                TuneProcessCmd(target, priority, affinity, trim);
+            } else if (cmd == "kernel_interrupts" || cmd == "interrupts" || cmd == "dpc") {
+                GetKernelInterruptsCmd();
             } else if (cmd == "flash" || cmd == "flash_window") {
                 string target = args.Length >= 2 ? args[1] : "active";
                 int count = args.Length >= 3 ? int.Parse(args[2]) : 3;
