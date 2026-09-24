@@ -38,6 +38,9 @@
   - [20. Gemmi Ambient Mesh & 4D Avatar Bridge (Ports 8088 & 18799)](#20--gemmi-ambient-mesh--4d-avatar-bridge-ports-8088--18799)
   - [21. Proactive Cognitive Pulse & Autonomic Motor Reflexes](#21--proactive-cognitive-pulse--autonomic-motor-reflexes)
   - [22. 2-Sample PDH Physical Disk Sentinel (Spindle Guardian)](#22-️-2-sample-pdh-physical-disk-sentinel-spindle-guardian)
+  - [23. Autonomous Task Worker Pool](#23--autonomous-task-worker-pool)
+  - [24. True Dense Transformer Embedding Pipeline](#24--true-dense-transformer-embedding-pipeline)
+  - [25. Native Parametric 3D CAD & Watertight Mesh Engine](#25--native-parametric-3d-cad--watertight-mesh-engine)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -358,6 +361,34 @@ Background compilers, telemetry agents, and update tools (e.g. Visual Studio `Ba
 - **2-Sample Derivative Calculation**: Implements the proper Windows PDH 2-sample rate math (`-SampleInterval 1 -MaxSamples 2`) to accurately calculate true `Disk Reads/sec`, `Disk Writes/sec`, and `% Disk Time`.
 - **Seek Starvation Guard**: If disk queue length $\ge 6$ or read rate $\ge 400$/sec, immediately isolates the offending process PID, alerts the universal bus, and triggers a `disk_pressure` sensory reflex in the companion mind.
 - **Zero-Dependency Native Execution**: Executed via non-blocking, base64-encoded UTF-16LE PowerShell scripts with 100% HDD async resilience.
+
+---
+
+## 23. ⚡ Autonomous Task Worker Pool
+
+Eliminates dead queues with an active, asynchronous background task consumer loop:
+- **Autonomous Subprocess Execution**: Continuously polls `super_bus.json` for `QUEUED` tasks, dynamically scaling up to configured concurrency limits (default: 2 parallel workers).
+- **Multi-Engine Dispatch**: Spawns isolated subprocesses with 30-second timeout guards and live stdout/stderr streams for `gemini`, `agy`, `local-infer`, `cad`, and shell commands.
+- **Zero-Dead-Air Bus Audio**: Emits real-time speech narration cues as background tasks are claimed, executed, and completed.
+
+---
+
+## 24. 🧬 True Dense Transformer Embedding Pipeline
+
+Directly solves the limitation of pseudo-random hash projections with real neural semantic vector grounding:
+- **Multi-Tier Local & Cloud Routing**: Automatically probes local llama-server (`:11436/v1/embeddings`), Ollama (`:11434/api/embeddings`), and Gemini API (`text-embedding-004`), with seamless offline fallback to the deterministic harmonic unit-vector projection.
+- **Dynamic Dimensional Resampling (`projectVector`)**: Resamples 384-dim, 768-dim, and 1536-dim embeddings down into the 128-dimensional unit hypersphere with $L_2$ norm invariance for continuous Haven Memory Bank (`.hmb`) vector cosine similarity.
+- **Native Methods**: Exposes `rememberDense()`, `recallDense()`, and `getEmbeddingStatus()` directly within the cognitive runtime.
+
+---
+
+## 25. 📐 Native Parametric 3D CAD & Watertight Mesh Engine
+
+Enables Gemini to design, calculate, and fabricate physical objects without external CAD dependencies:
+- **Pure JavaScript CSG Engine**: Full 3D Constructive Solid Geometry (`Mesh`) engine providing geometric primitives, transforms, and boolean operations with zero external npm dependencies.
+- **Gauss's Divergence Theorem Volume Math**: Computes exact watertight solid volume ($V = \frac{1}{6} \sum (\mathbf{v}_0 \times \mathbf{v}_1) \cdot \mathbf{v}_2$), PLA/PETG/ABS filament weights, and optimal slicing profiles.
+- **Parametric Generators & Watertight STL**: Produces print-ready binary STL files and human-editable OpenSCAD code for rotary knobs, battery covers, structural mounting brackets, spacers/bushings, involute spur gears, and electronics project boxes.
+- **Photo Reference Scale Calibration**: Converts photo pixel spans into real-world millimeters using coin, card, or ruler references with slide-fit and snap-fit tolerances.
 
 ---
 
