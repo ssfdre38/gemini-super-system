@@ -914,6 +914,182 @@ async function run() {
     assert(checkNames.includes("Speech Synthesis (TTS)"));
     assert(checkNames.includes("Native Companion Tools"));
     assert(checkNames.includes("Port & Network Endpoints"));
+    assert(checkNames.includes("Task Worker Pool"));
+    assert(checkNames.includes("Parametric 3D CAD Engine"));
+    assert(checkNames.includes("Dense Embedding Pipeline"));
+  });
+
+  // Suite 13: Autonomous Task Worker Pool
+  console.log("\n\x1b[1m[Suite 13: Autonomous Task Worker Pool]\x1b[0m");
+
+  await itAsync("TaskWorkerPool executes queued tasks and manages concurrency lifecycle", async () => {
+    const { TaskWorkerPool } = require("../lib/worker-pool.js");
+    const tempBusPath = path.join(__dirname, "temp_worker_bus.json");
+    if (fs.existsSync(tempBusPath)) fs.unlinkSync(tempBusPath);
+
+    const bus = new GeminiSuperBus(tempBusPath);
+    const mockOrch = {
+      bus,
+      systemStatus: { gemini: { path: null }, agy: { path: null } },
+      localInfer: async (p) => ({ success: true, reply: `Infer echo: ${p}` }),
+      cadEngine: {
+        dispatchCad: (tool, args) => ({ success: true, tool, args })
+      }
+    };
+
+    const pool = new TaskWorkerPool(mockOrch, { maxConcurrency: 2, pollIntervalMs: 200 });
+    assert.strictEqual(pool.isRunning, false);
+
+    pool.start();
+    assert.strictEqual(pool.isRunning, true);
+
+    const status1 = pool.getStatus();
+    assert.strictEqual(status1.activeWorkerCount, 0);
+    assert.strictEqual(status1.maxConcurrency, 2);
+
+    // Queue a task
+    const task = bus.queueTask({ prompt: "Hello autonomous worker", engine: "auto" });
+    assert.strictEqual(task.status, "QUEUED");
+
+    // Trigger poll
+    await pool.poll();
+
+    // Wait short delay for worker to complete child execution
+    await new Promise(r => setTimeout(r, 600));
+
+    const finalState = bus.readState();
+    const completed = finalState.completedTasks.find(t => t.id === task.id);
+    assert(completed, "Expected task to be completed by worker pool");
+    assert.strictEqual(completed.status, "COMPLETED");
+
+    pool.stop();
+    assert.strictEqual(pool.isRunning, false);
+
+    if (fs.existsSync(tempBusPath)) fs.unlinkSync(tempBusPath);
+  });
+
+  // Suite 14: Parametric 3D CAD Engine & CSG Mathematics
+  console.log("\n\x1b[1m[Suite 14: Parametric 3D CAD Engine & CSG Mathematics]\x1b[0m");
+
+  it("Mesh primitives calculate volume via Gauss Divergence Theorem and serialize to binary STL", () => {
+    const { createBoxMesh, createCylinderMesh } = require("../lib/cad-engine.js");
+    const box = createBoxMesh(10, 10, 10);
+    const volBox = box.calculateVolume();
+    assert(Math.abs(volBox - 1000.0) < 1.0, `Expected ~1000mm3 box volume, got ${volBox}`);
+    assert(box.isWatertight(), "Box mesh must be watertight");
+
+    const stlBuf = box.toBinaryStl();
+    assert(Buffer.isBuffer(stlBuf));
+    assert(stlBuf.length > 84);
+    assert.strictEqual(stlBuf.readUInt32LE(80), 12); // 12 triangles for a cube
+
+    const cyl = createCylinderMesh(5, 20, 32);
+    const volCyl = cyl.calculateVolume();
+    const expectedCyl = Math.PI * 25 * 20; // ~1570.8
+    assert(Math.abs(volCyl - expectedCyl) < 50.0, `Expected ~1570mm3, got ${volCyl}`);
+    assert(cyl.isWatertight(), "Cylinder mesh must be watertight");
+  });
+
+  it("Parametric generators emit watertight models and valid OpenSCAD definitions", () => {
+    const {
+      generateRotaryKnob,
+      generateBatteryCover,
+      generateBracket,
+      generateSpacer,
+      generateSpurGear,
+      generateEnclosure,
+      calibrateScale,
+      inspectStlBuffer
+    } = require("../lib/cad-engine.js");
+
+    // Rotary Knob
+    const knob = generateRotaryKnob({ diameter: 22, height: 15, knurlCount: 20 });
+    assert(knob.volumeMm3 > 1000, "Knob volume should be > 1000mm3");
+    assert(knob.weightGramsPla > 1.0, "PLA weight should be > 1g");
+    assert(knob.openScadCode.includes("cylinder(d = diameter"));
+    assert(knob.isWatertight, "Knob mesh must be watertight");
+
+    // Battery Cover
+    const cover = generateBatteryCover({ length: 60, width: 30, thickness: 1.6 });
+    assert(cover.volumeMm3 > 500, "Cover volume should be > 500mm3");
+    assert(cover.openScadCode.includes("Cantilever Snap Arm"));
+
+    // Mounting Bracket
+    const bracket = generateBracket({ length: 35, width: 25, height: 35, thickness: 3.0 });
+    assert(bracket.volumeMm3 > 1000, "Bracket volume should be > 1000mm3");
+    assert(bracket.openScadCode.includes("difference()"));
+
+    // Spur Gear
+    const gear = generateSpurGear({ teeth: 18, module: 1.5, faceWidth: 5.0 });
+    assert.strictEqual(gear.pitchDiameterMm, 27.0);
+    assert(gear.volumeMm3 > 500);
+
+    // Enclosure Box
+    const enc = generateEnclosure({ length: 70, width: 45, height: 25, wallThickness: 2.0 });
+    assert(enc.volumeMm3 > 2000);
+    assert(enc.openScadCode.includes("cube([width, length, height]"));
+
+    // Reference Calibration
+    const cal = calibrateScale("quarter", 320, null, [{ label: "cavity_w", pixelSpan: 480 }]);
+    assert.strictEqual(cal.referenceObject, "US Quarter");
+    assert(cal.measurements[0].calculatedMm > 30.0);
+
+    // STL Inspector
+    const knobStl = knob.mesh.toBinaryStl();
+    const insp = inspectStlBuffer(knobStl);
+    assert.strictEqual(insp.format, "Binary STL");
+    assert(insp.triangleCount > 0);
+    assert(insp.weightEstimatesGrams.pla > 0);
+  });
+
+  // Suite 15: Dense Transformer Embedding Pipeline
+  console.log("\n\x1b[1m[Suite 15: Dense Transformer Embedding Pipeline]\x1b[0m");
+
+  it("projectVector resamples arbitrary tensor dimension to target unit sphere", () => {
+    const { projectVector, normalizeL2, cosineSimilarity } = require("../lib/hmb-engine.js");
+    const raw384 = new Float32Array(384);
+    for (let i = 0; i < 384; i++) raw384[i] = Math.cos(i * 0.05);
+
+    const projected = projectVector(raw384, 128);
+    assert.strictEqual(projected.length, 128);
+
+    normalizeL2(projected);
+    let sumSq = 0;
+    for (let i = 0; i < 128; i++) sumSq += projected[i] * projected[i];
+    assert(Math.abs(Math.sqrt(sumSq) - 1.0) < 0.001, "Expected normalized unit sphere vector");
+
+    const sim = cosineSimilarity(projected, projected, 128);
+    assert(Math.abs(sim - 1.0) < 0.001, "Self cosine similarity must equal 1.0");
+  });
+
+  await itAsync("generateDenseEmbedding and rememberDense perform semantic memory grounding", async () => {
+    const { generateDenseEmbedding, HmbEngine } = require("../lib/hmb-engine.js");
+    const res = await generateDenseEmbedding("High precision sovereign desktop agentics", 128);
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.vector.length, 128);
+    assert(res.source);
+
+    const testVault = path.join(__dirname, "temp_dense_vault.hmb");
+    if (fs.existsSync(testVault)) fs.unlinkSync(testVault);
+
+    const engine = new HmbEngine(testVault);
+    await engine.initialize();
+
+    const memRes = await engine.rememberDense({
+      concept: "Subprocess Concurrency Micro-Lock",
+      content: "TaskWorkerPool schedules background tasks without blocking node event loop.",
+      category: "SYSTEM"
+    });
+
+    assert(memRes.success);
+    assert(memRes.embeddingSource);
+
+    const recallRes = await engine.recallDense({ query: "worker pool concurrency", topK: 3 });
+    assert(recallRes.resultsCount > 0);
+    assert.strictEqual(recallRes.memories[0].concept, "Subprocess Concurrency Micro-Lock");
+
+    if (fs.existsSync(testVault)) fs.unlinkSync(testVault);
   });
 
   console.log("\n=======================================================");

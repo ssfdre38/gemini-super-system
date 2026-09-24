@@ -1065,6 +1065,148 @@ const SYSTEM_TOOLS = [
           type: "object",
           properties: {}
         }
+      },
+      {
+        name: "super_cad_rotary_knob",
+        description: "Generates a complete parametric 3D-printable rotary knob (potentiometer, rotary encoder, audio dial) with D-shaft / round / spline bore, perimeter knurling, pointer notch, watertight binary STL, and OpenSCAD code.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            diameter: { type: "number", default: 20.0, description: "Outer knob diameter in mm (default 20mm)." },
+            height: { type: "number", default: 14.0, description: "Total knob height in mm (default 14mm)." },
+            shaftDiameter: { type: "number", default: 6.0, description: "Potentiometer shaft diameter in mm (default 6mm)." },
+            shaftDepth: { type: "number", default: 10.0, description: "Bore cavity depth in mm (default 10mm)." },
+            shaftType: { type: "string", enum: ["d_shaft", "round", "t18_spline"], default: "d_shaft", description: "Shaft profile ('d_shaft', 'round', 't18_spline')." },
+            knurlCount: { type: "number", default: 24, description: "Number of grip knurl ribs (default 24)." },
+            knurlDepth: { type: "number", default: 0.8, description: "Knurl rib depth in mm (default 0.8mm)." },
+            pointerType: { type: "string", enum: ["line", "dot", "none"], default: "line", description: "Top pointer indicator style." },
+            clearance: { type: "number", default: 0.2, description: "Bore clearance tolerance in mm (default 0.2mm)." }
+          }
+        }
+      },
+      {
+        name: "super_cad_battery_cover",
+        description: "Generates a parametric 3D-printable replacement battery cover for remote controls, toys, and handheld devices with cantilever flex snap clip, alignment retention tabs, and grip ribs.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            length: { type: "number", default: 55.0, description: "Nominal cavity length in mm." },
+            width: { type: "number", default: 28.0, description: "Nominal cavity width in mm." },
+            thickness: { type: "number", default: 1.6, description: "Main plate thickness in mm (default 1.6mm)." },
+            clearance: { type: "number", default: 0.25, description: "Printing clearance tolerance offset in mm (default 0.25mm)." },
+            clipWidth: { type: "number", default: 10.0, description: "Cantilever snap clip width in mm." },
+            clipLength: { type: "number", default: 7.0, description: "Cantilever flex arm length in mm." },
+            hookOverhang: { type: "number", default: 1.2, description: "Catch tooth latch depth in mm." },
+            tabWidth: { type: "number", default: 8.0, description: "Rear retention tab width in mm." },
+            tabLength: { type: "number", default: 3.5, description: "Rear retention tab depth in mm." },
+            ribCount: { type: "number", default: 4, description: "Number of exterior finger grip ribs." }
+          }
+        }
+      },
+      {
+        name: "super_cad_mounting_bracket",
+        description: "Generates a rigid structural 3D mounting bracket (L-bracket, U-bracket, or flat plate) with triangular web gussets and countersunk bolt mounting holes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            type: { type: "string", enum: ["l_bracket", "u_bracket", "flat"], default: "l_bracket", description: "Bracket geometry type." },
+            length: { type: "number", default: 40.0, description: "Base length in mm." },
+            width: { type: "number", default: 25.0, description: "Width in mm." },
+            height: { type: "number", default: 40.0, description: "Upright height in mm." },
+            thickness: { type: "number", default: 3.2, description: "Wall thickness in mm (default 3.2mm)." },
+            holeDiameter: { type: "number", default: 4.5, description: "Mounting hole diameter in mm (default 4.5mm for M4)." },
+            gusset: { type: "boolean", default: true, description: "Include triangular reinforcing stiffener gussets." }
+          }
+        }
+      },
+      {
+        name: "super_cad_spacer_bushing",
+        description: "Generates parametric standoffs, spacers, flanged bushings, and washers with inner bore clearance for standard metric hardware (M2 to M8).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            outerDiameter: { type: "number", default: 12.0, description: "Outer body diameter in mm." },
+            innerDiameter: { type: "number", default: 5.2, description: "Inner through-bore diameter in mm (e.g. 5.2mm for M5)." },
+            height: { type: "number", default: 15.0, description: "Total spacer height in mm." },
+            flangeDiameter: { type: "number", default: 16.0, description: "Optional collar flange outer diameter in mm." },
+            flangeHeight: { type: "number", default: 2.0, description: "Flange collar thickness in mm." }
+          }
+        }
+      },
+      {
+        name: "super_cad_spur_gear",
+        description: "Generates parametric involute spur gears, pinions, and drive gears with pitch diameter calculation, shaft bore, and mounting hub.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            teeth: { type: "number", default: 20, description: "Number of gear teeth." },
+            module: { type: "number", default: 1.5, description: "Gear module in mm (pitch diameter = teeth * module)." },
+            faceWidth: { type: "number", default: 6.0, description: "Gear tooth face width / thickness in mm." },
+            boreDiameter: { type: "number", default: 5.0, description: "Center motor shaft bore diameter in mm." },
+            hubDiameter: { type: "number", default: 12.0, description: "Optional set-screw hub diameter in mm." },
+            hubHeight: { type: "number", default: 4.0, description: "Hub extension height in mm." }
+          }
+        }
+      },
+      {
+        name: "super_cad_enclosure",
+        description: "Generates parametric electronics project enclosures with corner fillets, internal PCB mounting standoffs, and snap/screw lid lip.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            length: { type: "number", default: 80.0, description: "Outer length in mm." },
+            width: { type: "number", default: 50.0, description: "Outer width in mm." },
+            height: { type: "number", default: 30.0, description: "Outer height in mm." },
+            wallThickness: { type: "number", default: 2.0, description: "Shell wall thickness in mm (default 2.0mm)." },
+            cornerRadius: { type: "number", default: 4.0, description: "Corner fillet radius in mm." },
+            standoffs: { type: "boolean", default: true, description: "Generate internal PCB mounting standoffs." },
+            standoffHoleD: { type: "number", default: 2.8, description: "Standoff screw pilot hole diameter in mm (default 2.8mm for M3)." }
+          }
+        }
+      },
+      {
+        name: "super_cad_reference_calibration",
+        description: "Calculates real-world millimeters from photo pixel measurements using reference objects (US coins, credit cards, ruler) and computes 3D printing fit clearances.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            referenceType: { type: "string", enum: ["quarter", "penny", "nickel", "dime", "credit_card_w", "credit_card_h", "custom_mm"], description: "Known reference object beside part." },
+            pixelSpan: { type: "number", description: "Pixel span of reference object measured in photo." },
+            customRefMm: { type: "number", description: "Reference dimension in mm if referenceType is custom_mm." },
+            measuredPixels: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  label: { type: "string" },
+                  pixelSpan: { type: "number" }
+                },
+                required: ["label", "pixelSpan"]
+              },
+              description: "Optional list of features measured in pixels."
+            }
+          },
+          required: ["referenceType", "pixelSpan"]
+        }
+      },
+      {
+        name: "super_cad_inspect_stl",
+        description: "Reads binary/ASCII STL files, verifies watertight mesh integrity, calculates volume via Gauss's Divergence Theorem, PLA/PETG/ABS filament weights, and optimal slicing orientation.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filePath: { type: "string", description: "Absolute path to the .stl file." }
+          },
+          required: ["filePath"]
+        }
+      },
+      {
+        name: "super_worker_pool_status",
+        description: "Queries the real-time status of the autonomous background task worker pool, active subprocess workers, total completed/failed tasks, and concurrency limits.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
 ];
 
@@ -2170,6 +2312,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🛰️ [Mobile GPS Telemetry]:\n` + JSON.stringify(gps || { status: "Awaiting mobile GPS sync" }, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name.startsWith("super_cad_")) {
+    const cadRes = orch.cadEngine.dispatchCad(name, args);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📐 [Gemini CAD Engine Result (${name})]:\n` + JSON.stringify(cadRes, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_worker_pool_status") {
+    const status = orch.getWorkerPoolStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Task Worker Pool Status]:\n` + JSON.stringify(status, null, 2)
         }
       ]
     };
