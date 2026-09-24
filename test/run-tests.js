@@ -870,7 +870,9 @@ async function run() {
       assert(typeof d.queueLength === "number");
     }
 
-    // Simulate thrashing trip and verify event dispatch
+    // Reset mock tracking and simulate thrashing trip
+    mockNarrationEvents.length = 0;
+    mockPulseTriggers.length = 0;
     sentinel.latestDrives = [{ name: "0 C:", readsPerSec: 3500, queueLength: 20, isThrashing: true }];
     sentinel.isThrashing = true;
     mockOrch.emitNarration("🚨 Disk Sentinel Alert: High seek thrashing on 0 C:", "warning");
@@ -1171,6 +1173,75 @@ async function run() {
     assert.strictEqual(tuneRes.pid, process.pid);
     assert.strictEqual(tuneRes.trimmed, true);
     assert(tuneRes.current.priority);
+  });
+
+  // Suite 17: Bare-Metal Kernel Guardianship & Sockets
+  console.log("\n\x1b[1m[Suite 17: Bare-Metal Kernel Guardianship & Sockets]\x1b[0m");
+
+  await itAsync("getSocketTable retrieves live TCP/UDP sockets and maps owning PIDs", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const sock = await kb.getSocketTable({ limit: 50 });
+
+    assert(sock !== null && typeof sock === "object");
+    assert.strictEqual(sock.success, true);
+    assert(Array.isArray(sock.sockets), "Expected sockets array");
+    assert(sock.totalCount > 0, "Expected non-zero total sockets count");
+    assert(sock.sockets.length > 0, "Expected sockets in table");
+
+    const first = sock.sockets[0];
+    assert(first.protocol.toUpperCase() === "TCP" || first.protocol.toUpperCase() === "UDP");
+    assert(typeof first.localPort === "number");
+    assert(typeof first.pid === "number");
+
+    // Test protocol filtering
+    const tcpOnly = await kb.getSocketTable({ protocol: "tcp", limit: 10 });
+    assert.strictEqual(tcpOnly.success, true);
+    assert(tcpOnly.sockets.every(s => s.protocol.toUpperCase() === "TCP"));
+  });
+
+  await itAsync("setPowerScheme switches active power profile via powrprof.dll", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.setPowerScheme("balanced");
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(res.activePowerScheme);
+    assert.strictEqual(res.activePowerScheme.name, "Balanced");
+    assert.strictEqual(res.activePowerScheme.guid, "381b4222-f694-41f0-9685-ff5bb260df2e");
+  });
+
+  await itAsync("manageJobSandbox encapsulates process under NT Job Object with CPU rate and memory limits", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const jobRes = await kb.manageJobSandbox({
+      target: process.pid,
+      cpuRatePct: 75,
+      maxMemoryMB: 2048,
+      killOnClose: false
+    });
+
+    assert(jobRes !== null && typeof jobRes === "object");
+    assert.strictEqual(jobRes.success, true);
+    assert(jobRes.jobName && jobRes.jobName.startsWith("GeminiJob_"));
+    assert.strictEqual(jobRes.pid, process.pid);
+    assert.strictEqual(jobRes.limitsApplied.cpuRatePct, 75);
+    assert.strictEqual(jobRes.limitsApplied.maxMemoryMB, 2048);
+  });
+
+  await itAsync("getUsnJournal queries NTFS Change Journal metadata and USN record boundaries", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const usnRes = await kb.getUsnJournal("C");
+
+    assert(usnRes !== null && typeof usnRes === "object");
+    assert.strictEqual(usnRes.success, true);
+    assert(usnRes.drive.toLowerCase().startsWith("c:"));
+    assert(typeof usnRes.journalId === "string" && usnRes.journalId.length > 0);
+    assert(typeof usnRes.firstUsn === "number" || typeof usnRes.firstUsn === "string");
+    assert(typeof usnRes.nextUsn === "number" || typeof usnRes.nextUsn === "string");
+    assert(typeof usnRes.maximumSizeMB === "string" || typeof usnRes.maximumSizeMB === "number");
   });
 
   console.log("\n=======================================================");

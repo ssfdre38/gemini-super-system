@@ -1282,6 +1282,80 @@ const SYSTEM_TOOLS = [
           type: "object",
           properties: {}
         }
+      },
+      {
+        name: "super_socket_table",
+        description: "Queries live Windows NT TCP and UDP socket tables with local/remote IP endpoints, ports, socket states (LISTENING, ESTABLISHED, CLOSE_WAIT, etc.), and owning Process ID (PID) & process name via sub-millisecond Win32 iphlpapi.dll.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            port: {
+              type: "number",
+              description: "Optional local or remote port filter (e.g. 18880, 8088, 11436)."
+            },
+            state: {
+              type: "string",
+              description: "Optional socket state filter (e.g. 'LISTENING', 'ESTABLISHED', 'CLOSE_WAIT')."
+            },
+            protocol: {
+              type: "string",
+              description: "Socket protocol filter: 'all' | 'tcp' | 'udp' (default: 'all')."
+            }
+          }
+        }
+      },
+      {
+        name: "super_power_scheme_set",
+        description: "Dynamically activates a Windows Power Profile scheme (e.g. 'high_performance', 'balanced', 'power_saver', 'ultimate_performance', or GUID) via Win32 powrprof.dll to dynamically governor CPU frequency and system throughput.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            scheme: {
+              type: "string",
+              description: "Power scheme friendly name ('high_performance', 'balanced', 'power_saver', 'ultimate_performance') or custom GUID string."
+            }
+          },
+          required: ["scheme"]
+        }
+      },
+      {
+        name: "super_job_sandbox",
+        description: "Applies native Windows NT Job Object sandbox containment to a target process (PID or name): enforces hard CPU rate limits (percentage), max physical memory ceilings (MB), and atomic tree destruction on job close (kill-on-close).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            target: {
+              type: ["string", "number"],
+              description: "PID or executable name (e.g. 'node', 11636, 'llama-server')."
+            },
+            cpuRatePct: {
+              type: "number",
+              description: "Hard CPU rate cap percentage (1-100)."
+            },
+            maxMemoryMB: {
+              type: "number",
+              description: "Maximum physical memory cap in MB."
+            },
+            killOnClose: {
+              type: "boolean",
+              description: "Atomically kill all child processes when the Job Object handle closes."
+            }
+          },
+          required: ["target"]
+        }
+      },
+      {
+        name: "super_usn_journal",
+        description: "Queries NTFS Update Sequence Number (USN) Change Journal metadata and volume Master File Table (MFT) integrity via direct DeviceIoControl (FSCTL_QUERY_USN_JOURNAL) without filesystem traversal.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            drive: {
+              type: "string",
+              description: "Drive letter to query (e.g. 'C', 'D'). Default is 'C'."
+            }
+          }
+        }
       }
 ];
 
@@ -2483,6 +2557,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⏱️ [Kernel Interrupts & DPC Telemetry]:\n` + JSON.stringify(irq, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_socket_table") {
+    const sockets = await orch.getSocketTable(args);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🌐 [Win32 Native Sockets & Port Mapping]:\n` + JSON.stringify(sockets, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_power_scheme_set") {
+    const pwr = await orch.setPowerScheme(args.scheme);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Win32 Power Scheme Governor]:\n` + JSON.stringify(pwr, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_job_sandbox") {
+    const job = await orch.manageJobSandbox(args);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🧱 [NT Job Object Sandbox & CPU Cap]:\n` + JSON.stringify(job, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_usn_journal") {
+    const usn = await orch.getUsnJournal(args.drive);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📁 [NTFS USN Change Journal & MFT]:\n` + JSON.stringify(usn, null, 2)
         }
       ]
     };

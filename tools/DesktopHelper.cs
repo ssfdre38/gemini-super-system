@@ -9,6 +9,7 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using System.Windows.Automation;
+using System.Net;
 using System.Net.NetworkInformation;
 
 namespace GeminiSuperDesktop {
@@ -662,6 +663,159 @@ namespace GeminiSuperDesktop {
 
         [DllImport("kernel32.dll")]
         public static extern IntPtr LocalFree(IntPtr hMem);
+
+        // IP Helper (iphlpapi.dll) Socket Table APIs
+        public enum TCP_TABLE_CLASS {
+            TCP_TABLE_BASIC_LISTENER = 0,
+            TCP_TABLE_BASIC_CONNECTIONS = 1,
+            TCP_TABLE_BASIC_ALL = 2,
+            TCP_TABLE_OWNER_PID_LISTENER = 3,
+            TCP_TABLE_OWNER_PID_CONNECTIONS = 4,
+            TCP_TABLE_OWNER_PID_ALL = 5,
+            TCP_TABLE_OWNER_MODULE_LISTENER = 6,
+            TCP_TABLE_OWNER_MODULE_CONNECTIONS = 7,
+            TCP_TABLE_OWNER_MODULE_ALL = 8
+        }
+
+        public enum UDP_TABLE_CLASS {
+            UDP_TABLE_BASIC,
+            UDP_TABLE_OWNER_PID,
+            UDP_TABLE_OWNER_MODULE
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MIB_TCPROW_OWNER_PID {
+            public uint dwState;
+            public uint dwLocalAddr;
+            public uint dwLocalPort;
+            public uint dwRemoteAddr;
+            public uint dwRemotePort;
+            public uint dwOwningPid;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MIB_TCP6ROW_OWNER_PID {
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
+            public byte[] ucLocalAddr;
+            public uint dwLocalScopeId;
+            public uint dwLocalPort;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
+            public byte[] ucRemoteAddr;
+            public uint dwRemoteScopeId;
+            public uint dwRemotePort;
+            public uint dwState;
+            public uint dwOwningPid;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MIB_UDPROW_OWNER_PID {
+            public uint dwLocalAddr;
+            public uint dwLocalPort;
+            public uint dwOwningPid;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MIB_UDP6ROW_OWNER_PID {
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)]
+            public byte[] ucLocalAddr;
+            public uint dwLocalScopeId;
+            public uint dwLocalPort;
+            public uint dwOwningPid;
+        }
+
+        [DllImport("iphlpapi.dll", SetLastError = true)]
+        public static extern uint GetExtendedTcpTable(IntPtr pTcpTable, ref int pdwSize, bool bOrder, int ulAf, TCP_TABLE_CLASS TableClass, uint Reserved);
+
+        [DllImport("iphlpapi.dll", SetLastError = true)]
+        public static extern uint GetExtendedUdpTable(IntPtr pUdpTable, ref int pdwSize, bool bOrder, int ulAf, UDP_TABLE_CLASS TableClass, uint Reserved);
+
+        // Power Setting API (powrprof.dll)
+        [DllImport("powrprof.dll", SetLastError = true)]
+        public static extern uint PowerSetActiveScheme(IntPtr UserRootPowerKey, ref Guid SchemeGuid);
+
+        // Job Object APIs (kernel32.dll)
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern IntPtr CreateJobObject(IntPtr lpJobAttributes, string lpName);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool AssignProcessToJobObject(IntPtr hJob, IntPtr hProcess);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool SetInformationJobObject(IntPtr hJob, int JobObjectInformationClass, IntPtr lpJobObjectInformation, uint cbJobObjectInformationLength);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool QueryInformationJobObject(IntPtr hJob, int JobObjectInformationClass, IntPtr lpJobObjectInformation, uint cbJobObjectInformationLength, out uint lpReturnLength);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct IO_COUNTERS {
+            public ulong ReadOperationCount;
+            public ulong WriteOperationCount;
+            public ulong OtherOperationCount;
+            public ulong ReadTransferCount;
+            public ulong WriteTransferCount;
+            public ulong OtherTransferCount;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct JOBOBJECT_BASIC_LIMIT_INFORMATION {
+            public long PerProcessUserTimeLimit;
+            public long PerJobUserTimeLimit;
+            public uint LimitFlags;
+            public UIntPtr MinimumWorkingSetSize;
+            public UIntPtr MaximumWorkingSetSize;
+            public uint ActiveProcessLimit;
+            public UIntPtr Affinity;
+            public uint PriorityClass;
+            public uint SchedulingClass;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct JOBOBJECT_EXTENDED_LIMIT_INFORMATION {
+            public JOBOBJECT_BASIC_LIMIT_INFORMATION BasicLimitInformation;
+            public IO_COUNTERS IoInfo;
+            public UIntPtr ProcessMemoryLimit;
+            public UIntPtr JobMemoryLimit;
+            public UIntPtr PeakProcessMemoryUsed;
+            public UIntPtr PeakJobMemoryUsed;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct JOBOBJECT_CPU_RATE_CONTROL_INFORMATION {
+            public uint ControlFlags;
+            public uint CpuRate;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct USN_JOURNAL_DATA_V0 {
+            public ulong UsnJournalID;
+            public long FirstUsn;
+            public long NextUsn;
+            public long LowestValidUsn;
+            public long MaxUsn;
+            public ulong MaximumSize;
+            public ulong AllocationDelta;
+        }
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+        public static extern IntPtr CreateFile(
+            string lpFileName,
+            uint dwDesiredAccess,
+            uint dwShareMode,
+            IntPtr lpSecurityAttributes,
+            uint dwCreationDisposition,
+            uint dwFlagsAndAttributes,
+            IntPtr hTemplateFile);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool DeviceIoControl(
+            IntPtr hDevice,
+            uint dwIoControlCode,
+            IntPtr lpInBuffer,
+            uint nInBufferSize,
+            IntPtr lpOutBuffer,
+            uint nOutBufferSize,
+            out uint lpBytesReturned,
+            IntPtr lpOverlapped);
 
         [DllImport("user32.dll")]
         public static extern IntPtr GetDesktopWindow();
@@ -1592,6 +1746,405 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static string ResolveTcpState(uint state) {
+            switch (state) {
+                case 1: return "CLOSED";
+                case 2: return "LISTENING";
+                case 3: return "SYN_SENT";
+                case 4: return "SYN_RECEIVED";
+                case 5: return "ESTABLISHED";
+                case 6: return "FIN_WAIT_1";
+                case 7: return "FIN_WAIT_2";
+                case 8: return "CLOSE_WAIT";
+                case 9: return "CLOSING";
+                case 10: return "LAST_ACK";
+                case 11: return "TIME_WAIT";
+                case 12: return "DELETE_TCB";
+                default: return "UNKNOWN";
+            }
+        }
+
+        static void GetSocketsCmd(int filterPort, string filterState, string filterProtocol, int limit = 0) {
+            try {
+                var list = new List<string>();
+                var procNames = new Dictionary<uint, string>();
+                string fState = (filterState ?? "").Trim().ToUpperInvariant();
+                string fProto = (filterProtocol ?? "all").Trim().ToLowerInvariant();
+
+                Func<uint, string> getProc = (pid) => {
+                    if (procNames.ContainsKey(pid)) return procNames[pid];
+                    string name = "Unknown";
+                    try {
+                        var p = Process.GetProcessById((int)pid);
+                        name = p.ProcessName;
+                    } catch {}
+                    procNames[pid] = name;
+                    return name;
+                };
+
+                int tableOffset = 4;
+                int totalCount = 0;
+
+                // 1. IPv4 TCP Sockets
+                if (fProto == "all" || fProto == "tcp") {
+                    int size = 0;
+                    uint ret = GetExtendedTcpTable(IntPtr.Zero, ref size, true, 2 /* AF_INET */, TCP_TABLE_CLASS.TCP_TABLE_OWNER_PID_ALL, 0);
+                    IntPtr pTable = IntPtr.Zero;
+                    try {
+                        for (int retry = 0; retry < 5; retry++) {
+                            if (pTable != IntPtr.Zero) { Marshal.FreeHGlobal(pTable); pTable = IntPtr.Zero; }
+                            size += 8192;
+                            pTable = Marshal.AllocHGlobal(size);
+                            ret = GetExtendedTcpTable(pTable, ref size, true, 2, TCP_TABLE_CLASS.TCP_TABLE_OWNER_PID_ALL, 0);
+                            if (ret == 0) break;
+                        }
+
+                        if (ret == 0 && pTable != IntPtr.Zero) {
+                            int numEntries = Marshal.ReadInt32(pTable);
+                            IntPtr pRow = (IntPtr)((long)pTable + tableOffset);
+                            int rowSize = Marshal.SizeOf(typeof(MIB_TCPROW_OWNER_PID));
+                            for (int i = 0; i < numEntries; i++) {
+                                MIB_TCPROW_OWNER_PID row = (MIB_TCPROW_OWNER_PID)Marshal.PtrToStructure(pRow, typeof(MIB_TCPROW_OWNER_PID));
+                                pRow = (IntPtr)((long)pRow + rowSize);
+
+                                ushort localPort = (ushort)(((row.dwLocalPort & 0xFF) << 8) | ((row.dwLocalPort >> 8) & 0xFF));
+                                ushort remotePort = (ushort)(((row.dwRemotePort & 0xFF) << 8) | ((row.dwRemotePort >> 8) & 0xFF));
+                                string localAddr = new IPAddress(BitConverter.GetBytes(row.dwLocalAddr)).ToString();
+                                string remoteAddr = new IPAddress(BitConverter.GetBytes(row.dwRemoteAddr)).ToString();
+                                string state = ResolveTcpState(row.dwState);
+
+                                if (filterPort > 0 && localPort != filterPort && remotePort != filterPort) continue;
+                                if (!string.IsNullOrEmpty(fState) && state.IndexOf(fState, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                                totalCount++;
+                                if (limit <= 0 || list.Count < limit) {
+                                    string pName = getProc(row.dwOwningPid);
+                                    list.Add(string.Format("{{\"protocol\": \"tcp\", \"ipVersion\": 4, \"localAddress\": \"{0}\", \"localPort\": {1}, \"remoteAddress\": \"{2}\", \"remotePort\": {3}, \"state\": \"{4}\", \"pid\": {5}, \"process\": \"{6}\"}}",
+                                        EscapeJson(localAddr), localPort, EscapeJson(remoteAddr), remotePort, EscapeJson(state), row.dwOwningPid, EscapeJson(pName)));
+                                }
+                            }
+                        }
+                    } finally {
+                        if (pTable != IntPtr.Zero) Marshal.FreeHGlobal(pTable);
+                    }
+
+                    // 2. IPv6 TCP Sockets
+                    int size6 = 0;
+                    uint ret6 = GetExtendedTcpTable(IntPtr.Zero, ref size6, true, 23 /* AF_INET6 */, TCP_TABLE_CLASS.TCP_TABLE_OWNER_PID_ALL, 0);
+                    IntPtr pTable6 = IntPtr.Zero;
+                    try {
+                        for (int retry = 0; retry < 5; retry++) {
+                            if (pTable6 != IntPtr.Zero) { Marshal.FreeHGlobal(pTable6); pTable6 = IntPtr.Zero; }
+                            size6 += 8192;
+                            pTable6 = Marshal.AllocHGlobal(size6);
+                            ret6 = GetExtendedTcpTable(pTable6, ref size6, true, 23, TCP_TABLE_CLASS.TCP_TABLE_OWNER_PID_ALL, 0);
+                            if (ret6 == 0) break;
+                        }
+
+                        if (ret6 == 0 && pTable6 != IntPtr.Zero) {
+                            int numEntries = Marshal.ReadInt32(pTable6);
+                            IntPtr pRow = (IntPtr)((long)pTable6 + tableOffset);
+                            int rowSize = Marshal.SizeOf(typeof(MIB_TCP6ROW_OWNER_PID));
+                            for (int i = 0; i < numEntries; i++) {
+                                MIB_TCP6ROW_OWNER_PID row = (MIB_TCP6ROW_OWNER_PID)Marshal.PtrToStructure(pRow, typeof(MIB_TCP6ROW_OWNER_PID));
+                                pRow = (IntPtr)((long)pRow + rowSize);
+
+                                ushort localPort = (ushort)(((row.dwLocalPort & 0xFF) << 8) | ((row.dwLocalPort >> 8) & 0xFF));
+                                ushort remotePort = (ushort)(((row.dwRemotePort & 0xFF) << 8) | ((row.dwRemotePort >> 8) & 0xFF));
+                                string localAddr = new IPAddress(row.ucLocalAddr).ToString();
+                                string remoteAddr = new IPAddress(row.ucRemoteAddr).ToString();
+                                string state = ResolveTcpState(row.dwState);
+
+                                if (filterPort > 0 && localPort != filterPort && remotePort != filterPort) continue;
+                                if (!string.IsNullOrEmpty(fState) && state.IndexOf(fState, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                                totalCount++;
+                                if (limit <= 0 || list.Count < limit) {
+                                    string pName = getProc(row.dwOwningPid);
+                                    list.Add(string.Format("{{\"protocol\": \"tcp\", \"ipVersion\": 6, \"localAddress\": \"{0}\", \"localPort\": {1}, \"remoteAddress\": \"{2}\", \"remotePort\": {3}, \"state\": \"{4}\", \"pid\": {5}, \"process\": \"{6}\"}}",
+                                        EscapeJson(localAddr), localPort, EscapeJson(remoteAddr), remotePort, EscapeJson(state), row.dwOwningPid, EscapeJson(pName)));
+                                }
+                            }
+                        }
+                    } finally {
+                        if (pTable6 != IntPtr.Zero) Marshal.FreeHGlobal(pTable6);
+                    }
+                }
+
+                // 3. IPv4 UDP Sockets
+                if (fProto == "all" || fProto == "udp") {
+                    int sizeUdp = 0;
+                    GetExtendedUdpTable(IntPtr.Zero, ref sizeUdp, true, 2 /* AF_INET */, UDP_TABLE_CLASS.UDP_TABLE_OWNER_PID, 0);
+                    if (sizeUdp > 0) {
+                        IntPtr pTableUdp = Marshal.AllocHGlobal(sizeUdp);
+                        try {
+                            if (GetExtendedUdpTable(pTableUdp, ref sizeUdp, true, 2, UDP_TABLE_CLASS.UDP_TABLE_OWNER_PID, 0) == 0) {
+                                int numEntries = Marshal.ReadInt32(pTableUdp);
+                                IntPtr pRow = (IntPtr)((long)pTableUdp + tableOffset);
+                                int rowSize = Marshal.SizeOf(typeof(MIB_UDPROW_OWNER_PID));
+                                for (int i = 0; i < numEntries; i++) {
+                                    MIB_UDPROW_OWNER_PID row = (MIB_UDPROW_OWNER_PID)Marshal.PtrToStructure(pRow, typeof(MIB_UDPROW_OWNER_PID));
+                                    pRow = (IntPtr)((long)pRow + rowSize);
+
+                                    ushort localPort = (ushort)(((row.dwLocalPort & 0xFF) << 8) | ((row.dwLocalPort >> 8) & 0xFF));
+                                    string localAddr = new IPAddress(BitConverter.GetBytes(row.dwLocalAddr)).ToString();
+
+                                    if (filterPort > 0 && localPort != filterPort) continue;
+                                    if (!string.IsNullOrEmpty(fState) && "UDP".IndexOf(fState, StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                                    totalCount++;
+                                    if (limit <= 0 || list.Count < limit) {
+                                        string pName = getProc(row.dwOwningPid);
+                                        list.Add(string.Format("{{\"protocol\": \"udp\", \"ipVersion\": 4, \"localAddress\": \"{0}\", \"localPort\": {1}, \"remoteAddress\": \"*\", \"remotePort\": 0, \"state\": \"UDP\", \"pid\": {2}, \"process\": \"{3}\"}}",
+                                            EscapeJson(localAddr), localPort, row.dwOwningPid, EscapeJson(pName)));
+                                    }
+                                }
+                            }
+                        } finally {
+                            Marshal.FreeHGlobal(pTableUdp);
+                        }
+                    }
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"totalCount\": {0}, \"count\": {1}, \"sockets\": [{2}]}}",
+                    totalCount, list.Count, string.Join(",", list.ToArray())));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void SetPowerSchemeCmd(string schemeOrGuid) {
+            try {
+                if (string.IsNullOrEmpty(schemeOrGuid)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Scheme name or GUID required\"}");
+                    return;
+                }
+
+                Guid targetGuid;
+                string s = schemeOrGuid.Trim().ToLowerInvariant();
+                if (s == "balanced") {
+                    targetGuid = new Guid("381b4222-f694-41f0-9685-ff5bb260df2e");
+                } else if (s == "high" || s == "high_performance" || s == "highperformance") {
+                    targetGuid = new Guid("8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c");
+                } else if (s == "saver" || s == "power_saver" || s == "powersaver") {
+                    targetGuid = new Guid("a1841308-3541-4fab-bc81-f71556f20b4a");
+                } else if (s == "ultimate" || s == "ultimate_performance" || s == "ultimateperformance") {
+                    targetGuid = new Guid("e9a42b02-d5df-448d-aa00-03f14749eb61");
+                } else {
+                    try {
+                        targetGuid = new Guid(schemeOrGuid);
+                    } catch {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Invalid scheme name or GUID: {0}\"}}", EscapeJson(schemeOrGuid)));
+                        return;
+                    }
+                }
+
+                string prevName = "Unknown";
+                string prevGuidStr = "";
+                IntPtr pPrev = IntPtr.Zero;
+                try {
+                    if (PowerGetActiveScheme(IntPtr.Zero, out pPrev) == 0 && pPrev != IntPtr.Zero) {
+                        Guid pg = (Guid)Marshal.PtrToStructure(pPrev, typeof(Guid));
+                        prevGuidStr = pg.ToString();
+                        StringBuilder sbPrev = new StringBuilder(256);
+                        uint bSz = (uint)sbPrev.Capacity * 2;
+                        if (PowerReadFriendlyName(IntPtr.Zero, ref pg, IntPtr.Zero, IntPtr.Zero, sbPrev, ref bSz) == 0) {
+                            prevName = sbPrev.ToString();
+                        }
+                    }
+                } catch {} finally {
+                    if (pPrev != IntPtr.Zero) LocalFree(pPrev);
+                }
+
+                uint res = PowerSetActiveScheme(IntPtr.Zero, ref targetGuid);
+                if (res != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"PowerSetActiveScheme failed with error code {0}\"}}", res));
+                    return;
+                }
+
+                string currName = "Unknown";
+                string currGuidStr = targetGuid.ToString();
+                IntPtr pCurr = IntPtr.Zero;
+                try {
+                    if (PowerGetActiveScheme(IntPtr.Zero, out pCurr) == 0 && pCurr != IntPtr.Zero) {
+                        Guid cg = (Guid)Marshal.PtrToStructure(pCurr, typeof(Guid));
+                        currGuidStr = cg.ToString();
+                        StringBuilder sbCurr = new StringBuilder(256);
+                        uint bSz = (uint)sbCurr.Capacity * 2;
+                        if (PowerReadFriendlyName(IntPtr.Zero, ref cg, IntPtr.Zero, IntPtr.Zero, sbCurr, ref bSz) == 0) {
+                            currName = sbCurr.ToString();
+                        }
+                    }
+                } catch {} finally {
+                    if (pCurr != IntPtr.Zero) LocalFree(pCurr);
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"previousScheme\": {{\"name\": \"{0}\", \"guid\": \"{1}\"}}, \"activePowerScheme\": {{\"name\": \"{2}\", \"guid\": \"{3}\"}}}}",
+                    EscapeJson(prevName), EscapeJson(prevGuidStr), EscapeJson(currName), EscapeJson(currGuidStr)));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void JobSandboxCmd(string targetQuery, int cpuRatePct, long maxMemMb, bool killOnClose) {
+            try {
+                Process targetProc = null;
+                int pid = 0;
+                if (int.TryParse(targetQuery, out pid)) {
+                    try { targetProc = Process.GetProcessById(pid); } catch {}
+                } else {
+                    string cleanName = targetQuery.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) ? targetQuery.Substring(0, targetQuery.Length - 4) : targetQuery;
+                    var procs = Process.GetProcessesByName(cleanName);
+                    if (procs != null && procs.Length > 0) targetProc = procs[0];
+                    else {
+                        var all = Process.GetProcesses();
+                        foreach (var p in all) {
+                            try {
+                                if (p.ProcessName.IndexOf(cleanName, StringComparison.OrdinalIgnoreCase) >= 0) {
+                                    targetProc = p;
+                                    break;
+                                }
+                            } catch {}
+                        }
+                    }
+                }
+
+                if (targetProc == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Process not found: {0}\"}}", EscapeJson(targetQuery)));
+                    return;
+                }
+
+                int targetPid = targetProc.Id;
+                string procName = targetProc.ProcessName;
+                string jobName = "GeminiJob_" + targetPid;
+
+                IntPtr hJob = CreateJobObject(IntPtr.Zero, jobName);
+                if (hJob == IntPtr.Zero) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"CreateJobObject failed with error {0}\"}}", err));
+                    return;
+                }
+
+                bool killSet = false;
+                bool memSet = false;
+                bool cpuSet = false;
+
+                if (killOnClose || maxMemMb > 0) {
+                    JOBOBJECT_EXTENDED_LIMIT_INFORMATION exLimits = new JOBOBJECT_EXTENDED_LIMIT_INFORMATION();
+                    uint flags = 0;
+                    if (killOnClose) {
+                        flags |= 0x2000;
+                        killSet = true;
+                    }
+                    if (maxMemMb > 0) {
+                        flags |= 0x0100;
+                        exLimits.ProcessMemoryLimit = new UIntPtr((ulong)maxMemMb * 1024UL * 1024UL);
+                        memSet = true;
+                    }
+                    exLimits.BasicLimitInformation.LimitFlags = flags;
+                    int structSize = Marshal.SizeOf(typeof(JOBOBJECT_EXTENDED_LIMIT_INFORMATION));
+                    IntPtr pInfo = Marshal.AllocHGlobal(structSize);
+                    try {
+                        Marshal.StructureToPtr(exLimits, pInfo, false);
+                        if (SetInformationJobObject(hJob, 9 /* JobObjectExtendedLimitInformation */, pInfo, (uint)structSize)) {
+                            // Limits applied
+                        }
+                    } finally {
+                        Marshal.FreeHGlobal(pInfo);
+                    }
+                }
+
+                if (cpuRatePct > 0) {
+                    int clampPct = Math.Min(Math.Max(cpuRatePct, 1), 100);
+                    JOBOBJECT_CPU_RATE_CONTROL_INFORMATION cpuInfo = new JOBOBJECT_CPU_RATE_CONTROL_INFORMATION();
+                    cpuInfo.ControlFlags = 0x1 | 0x4; // ENABLE | HARD_CAP
+                    cpuInfo.CpuRate = (uint)(clampPct * 100);
+                    int cpuSize = Marshal.SizeOf(typeof(JOBOBJECT_CPU_RATE_CONTROL_INFORMATION));
+                    IntPtr pCpu = Marshal.AllocHGlobal(cpuSize);
+                    try {
+                        Marshal.StructureToPtr(cpuInfo, pCpu, false);
+                        if (SetInformationJobObject(hJob, 15 /* JobObjectCpuRateControlInformation */, pCpu, (uint)cpuSize)) {
+                            cpuSet = true;
+                        }
+                    } finally {
+                        Marshal.FreeHGlobal(pCpu);
+                    }
+                }
+
+                bool assigned = AssignProcessToJobObject(hJob, targetProc.Handle);
+                int assignErr = assigned ? 0 : Marshal.GetLastWin32Error();
+
+                Console.WriteLine(string.Format("{{\"success\": {0}, \"pid\": {1}, \"process\": \"{2}\", \"jobName\": \"{3}\", \"assigned\": {4}, \"assignError\": {5}, \"limitsApplied\": {{\"cpuRatePct\": {6}, \"maxMemoryMB\": {7}, \"killOnJobClose\": {8}}}}}",
+                    assigned ? "true" : "false", targetPid, EscapeJson(procName), EscapeJson(jobName),
+                    assigned ? "true" : "false", assignErr,
+                    cpuSet ? cpuRatePct : 0, memSet ? maxMemMb : 0, killSet ? "true" : "false"));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void GetUsnJournalCmd(string driveQuery) {
+            try {
+                string d = string.IsNullOrEmpty(driveQuery) ? "C" : driveQuery.Trim().ToUpperInvariant();
+                if (d.EndsWith(":\\") || d.EndsWith(":/")) d = d.Substring(0, 1);
+                else if (d.EndsWith(":")) d = d.Substring(0, 1);
+                else if (d.StartsWith(@"\\.\")) d = d.Substring(4, 1);
+
+                string rootPath = d + @":\";
+                string devicePath = @"\\.\" + d + ":";
+
+                DriveInfo di = null;
+                try { di = new DriveInfo(rootPath); } catch {}
+                string fsFormat = (di != null && di.IsReady) ? di.DriveFormat : "Unknown";
+
+                const uint GENERIC_READ = 0x80000000;
+                const uint FILE_SHARE_READ = 1;
+                const uint FILE_SHARE_WRITE = 2;
+                const uint OPEN_EXISTING = 3;
+                const uint FILE_FLAG_BACKUP_SEMANTICS = 0x02000000;
+                const uint FSCTL_QUERY_USN_JOURNAL = 0x000900f4;
+
+                IntPtr hVol = CreateFile(devicePath, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, IntPtr.Zero, OPEN_EXISTING, FILE_FLAG_BACKUP_SEMANTICS, IntPtr.Zero);
+                if (hVol.ToInt64() == -1 || hVol == IntPtr.Zero) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"drive\": \"{0}:\", \"fileSystem\": \"{1}\", \"error\": \"Volume handle failed (Access denied or not NTFS). Win32 Error: {2}\", \"elevationRequired\": {3}}}",
+                        d, EscapeJson(fsFormat), err, err == 5 ? "true" : "false"));
+                    return;
+                }
+
+                try {
+                    int outSize = Marshal.SizeOf(typeof(USN_JOURNAL_DATA_V0));
+                    IntPtr pOut = Marshal.AllocHGlobal(outSize);
+                    try {
+                        uint bytesReturned = 0;
+                        bool ok = DeviceIoControl(hVol, FSCTL_QUERY_USN_JOURNAL, IntPtr.Zero, 0, pOut, (uint)outSize, out bytesReturned, IntPtr.Zero);
+                        if (!ok) {
+                            int err = Marshal.GetLastWin32Error();
+                            Console.WriteLine(string.Format("{{\"success\": false, \"drive\": \"{0}:\", \"fileSystem\": \"{1}\", \"error\": \"FSCTL_QUERY_USN_JOURNAL failed with error {2}\"}}",
+                                d, EscapeJson(fsFormat), err));
+                            return;
+                        }
+
+                        USN_JOURNAL_DATA_V0 ujd = (USN_JOURNAL_DATA_V0)Marshal.PtrToStructure(pOut, typeof(USN_JOURNAL_DATA_V0));
+                        double maxMb = Math.Round((double)ujd.MaximumSize / (1024.0 * 1024.0), 2);
+                        double deltaMb = Math.Round((double)ujd.AllocationDelta / (1024.0 * 1024.0), 2);
+
+                        string sMaxMb = maxMb.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+                        string sDeltaMb = deltaMb.ToString("F2", System.Globalization.CultureInfo.InvariantCulture);
+
+                        Console.WriteLine(string.Format("{{\"success\": true, \"drive\": \"{0}:\", \"fileSystem\": \"{1}\", \"status\": \"Active\", \"journalId\": \"0x{2:X}\", \"firstUsn\": {3}, \"nextUsn\": {4}, \"lowestValidUsn\": {5}, \"maxUsn\": {6}, \"maximumSizeMB\": {7}, \"allocationDeltaMB\": {8}}}",
+                            d, EscapeJson(fsFormat), ujd.UsnJournalID, ujd.FirstUsn, ujd.NextUsn, ujd.LowestValidUsn, ujd.MaxUsn, sMaxMb, sDeltaMb));
+                    } finally {
+                        Marshal.FreeHGlobal(pOut);
+                    }
+                } finally {
+                    CloseHandle(hVol);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void GetPresenceCmd() {
             try {
                 LASTINPUTINFO lii = new LASTINPUTINFO();
@@ -2139,6 +2692,26 @@ namespace GeminiSuperDesktop {
                 TuneProcessCmd(target, priority, affinity, trim);
             } else if (cmd == "kernel_interrupts" || cmd == "interrupts" || cmd == "dpc") {
                 GetKernelInterruptsCmd();
+            } else if (cmd == "sockets" || cmd == "ports" || cmd == "socket_table" || cmd == "tcp_table") {
+                int portFilter = 0;
+                if (args.Length >= 2) int.TryParse(args[1], out portFilter);
+                string stateFilter = args.Length >= 3 ? args[2] : "";
+                string protoFilter = args.Length >= 4 ? args[3] : "all";
+                int limit = 0;
+                if (args.Length >= 5) int.TryParse(args[4], out limit);
+                GetSocketsCmd(portFilter, stateFilter, protoFilter, limit);
+            } else if (cmd == "set_power_scheme" || cmd == "set_powerscheme" || cmd == "setpower" || cmd == "power_set") {
+                string scheme = args.Length >= 2 ? args[1] : "";
+                SetPowerSchemeCmd(scheme);
+            } else if ((cmd == "job_sandbox" || cmd == "jobsandbox" || cmd == "job_apply" || cmd == "sandbox_process") && args.Length >= 2) {
+                string target = args[1];
+                int cpuRate = args.Length >= 3 ? int.Parse(args[2]) : 0;
+                long maxMem = args.Length >= 4 ? long.Parse(args[3]) : 0;
+                bool killOnClose = args.Length >= 5 ? (args[4].Equals("true", StringComparison.OrdinalIgnoreCase) || args[4].Equals("kill", StringComparison.OrdinalIgnoreCase)) : false;
+                JobSandboxCmd(target, cpuRate, maxMem, killOnClose);
+            } else if (cmd == "usn_journal" || cmd == "usn" || cmd == "mft_journal") {
+                string drive = args.Length >= 2 ? args[1] : "C";
+                GetUsnJournalCmd(drive);
             } else if (cmd == "flash" || cmd == "flash_window") {
                 string target = args.Length >= 2 ? args[1] : "active";
                 int count = args.Length >= 3 ? int.Parse(args[2]) : 3;

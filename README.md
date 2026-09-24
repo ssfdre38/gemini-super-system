@@ -41,7 +41,11 @@
   - [23. Autonomous Task Worker Pool](#23--autonomous-task-worker-pool)
   - [24. True Dense Transformer Embedding Pipeline](#24--true-dense-transformer-embedding-pipeline)
   - [25. Native Parametric 3D CAD & Watertight Mesh Engine](#25--native-parametric-3d-cad--watertight-mesh-engine)
-  - [26. Native OS & Windows NT Kernel Layer Bridge](#26--native-os--windows-nt-kernel-layer-bridge)
+  - [26. Native OS & Windows NT Kernel Layer Bridge](#26-️-native-os--windows-nt-kernel-layer-bridge)
+  - [27. Win32 Native Sockets & Active Port Mapping](#27--win32-native-sockets--active-port-mapping-iphlpapidll)
+  - [28. NT Job Object Resource Sandbox & Hard Capping](#28--nt-job-object-resource-sandbox--hard-capping-kernel32dll)
+  - [29. Dynamic Power Profile & Frequency Governor Actuator](#29--dynamic-power-profile--frequency-governor-actuator-powrprofdll)
+  - [30. NTFS USN Change Journal & Master File Table Scanner](#30--ntfs-usn-change-journal--master-file-table-scanner-fsctl_query_usn_journal)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -181,7 +185,7 @@ Antigravity scrolled the chat via physical mouse wheel inputs, clicked the input
 
 ---
 
-## 🧰 MCP Tool Reference (17 Tools)
+## 🧰 MCP Tool Reference (69 Sovereign Tools)
 
 All tools are exposed natively over stdio to Antigravity, Gemini CLI, and any MCP-compliant client:
 
@@ -417,6 +421,46 @@ Bridges Gemini directly to the bare-metal Windows NT executive and kernel subsys
   - `super_process_tune`: Process priority class tuning, CPU affinity bitmasks, and working set trimming.
   - `super_power_status`: Real-time AC line, battery levels, and active power scheme GUID.
   - `super_kernel_interrupts`: DPC and Hardware Interrupt latency profiling.
+
+---
+
+## 27. 🔌 Win32 Native Sockets & Active Port Mapping (`iphlpapi.dll`)
+
+Exposes real-time operating system socket tables and network connection telemetry at bare-metal speeds:
+- **Instant TCP/UDP Endpoint Enumeration**: Direct Win32 P/Invoke to `GetExtendedTcpTable` and `GetExtendedUdpTable` (`iphlpapi.dll`), scanning both IPv4 and IPv6 tables in **sub-2ms** without slow PowerShell or netstat text parsing.
+- **Process Ownership Mapping**: Maps every listening and established socket directly to its owning Process ID (PID) and executable name, tracking connections across browser instances, daemons, background workers, and VPN tunnels.
+- **Dynamic Port & State Filters**: Supports filtering by local/remote port, protocol (`tcp`, `udp`, `all`), connection state (`LISTENING`, `ESTABLISHED`, `CLOSE_WAIT`, `TIME_WAIT`), and paging limits.
+- **Native MCP Tool**: `super_socket_table`.
+
+---
+
+## 28. 🧱 NT Job Object Resource Sandbox & Hard Capping (`kernel32.dll`)
+
+Empowers Gemini to encapsulate, governor, and enforce strict hardware boundaries on rogue or untrusted processes:
+- **Bare-Metal Job Object P/Invoke**: Directly interfaces with Windows NT Job Objects via `CreateJobObject`, `AssignProcessToJobObject`, and `SetInformationJobObject` (`kernel32.dll`).
+- **CPU Rate Hard Caps**: Enforces strict CPU percentage limits (`JOB_OBJECT_CPU_RATE_CONTROL_ENABLE | JOB_OBJECT_CPU_RATE_CONTROL_HARD_CAP`) so runaway builds, model inferences, or test workers cannot starve the host workstation.
+- **Working Set & Commit Ceilings**: Enforces physical and virtual RAM commit ceilings (`ProcessMemoryLimit` / `JobMemoryLimit`) to prevent out-of-memory lockups.
+- **Atomic Process Tree Destruction (`JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`)**: Ensures child processes and subprocess trees are completely and atomically terminated when the parent job is closed.
+- **Native MCP Tool**: `super_job_sandbox`.
+
+---
+
+## 29. ⚡ Dynamic Power Profile & Frequency Governor Actuator (`powrprof.dll`)
+
+Gives Gemini direct administrative agency over workstation energy, frequency throttling, and performance schemes:
+- **Dynamic Scheme Switching**: Seamlessly toggles the active Windows power scheme via `PowerSetActiveScheme` (`powrprof.dll`) between `High performance` (`8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c`), `Balanced` (`381b4222-f694-41f0-9685-ff5bb260df2e`), `Power saver` (`a1841308-3541-4fab-bc81-f71556f20b4a`), `Ultimate Performance` (`e9a42b02-d5df-448d-aa00-03f14749eb61`), or custom power plan GUIDs.
+- **Adaptive Workload Tuning**: Automatically ramps workstation power to maximum performance during heavy 3D CAD rendering, C++ compilation, or local LLM inference, and steps back down to balanced/power saver during idle monitoring.
+- **Native MCP Tool**: `super_power_scheme_set`.
+
+---
+
+## 30. 📜 NTFS USN Change Journal & Master File Table Scanner (`FSCTL_QUERY_USN_JOURNAL`)
+
+Provides sub-millisecond filesystem change telemetry directly from the NTFS kernel volume driver:
+- **Low-Level FSCTL Volume Query**: Interrogates NTFS volumes via `CreateFile` with `FILE_FLAG_BACKUP_SEMANTICS` and `DeviceIoControl` issuing `FSCTL_QUERY_USN_JOURNAL`.
+- **Zero-Walk Journal Tracking**: Obtains the 64-bit `UsnJournalID`, current and first Update Sequence Numbers (`nextUsn`, `firstUsn`), maximum allocation size, and delta cluster boundaries.
+- **Instant Delta Auditing**: Eliminates recursive directory walking and HDD spindle thrashing by observing the authoritative NTFS change journal for exact file creations, modifications, renames, and deletions.
+- **Native MCP Tool**: `super_usn_journal`.
 
 ---
 
