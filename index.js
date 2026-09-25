@@ -1775,6 +1775,71 @@ const SYSTEM_TOOLS = [
           },
           required: ["deviceInstanceId"]
         }
+      },
+      {
+        name: "super_named_pipe",
+        description: "High-speed Windows Named Pipe IPC operations (list, send, listen) via System.IO.Pipes for zero-overhead local daemon inter-process communication.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["list", "send", "listen"],
+              default: "list",
+              description: "Named pipe action: 'list' (enumerates local pipes), 'send' (connects and sends message to pipe), 'listen' (waits for incoming connection and reads message)."
+            },
+            pipeName: {
+              type: "string",
+              description: "Named pipe identifier (e.g. 'my_pipe' or '\\\\.\\pipe\\my_pipe'). Required for send and listen."
+            },
+            message: {
+              type: "string",
+              description: "Message string to send (for 'send') or reply string to send back (for 'listen')."
+            },
+            timeoutMs: {
+              type: "number",
+              default: 5000,
+              description: "Timeout in milliseconds for connection/read (default: 5000)."
+            },
+            search: {
+              type: "string",
+              description: "Substring filter when listing named pipes."
+            },
+            limit: {
+              type: "number",
+              default: 50,
+              description: "Maximum pipes to return when listing (default: 50)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_shared_memory",
+        description: "Zero-copy Windows Shared Memory operations (write, read, info, list, delete) via Memory-Mapped Files (MMF) for high-throughput cross-process buffer and state sharing.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["write", "read", "info", "list", "delete"],
+              default: "read",
+              description: "Shared memory action: 'write' (stores buffer/data), 'read' (retrieves data), 'info' (queries map stats), 'list' (enumerates active maps), 'delete' (removes map)."
+            },
+            mapName: {
+              type: "string",
+              description: "Name of the shared memory region (e.g. 'TensorBuffer', 'FrameCache', 'AgentIPC'). Required for write, read, info, delete."
+            },
+            data: {
+              type: "string",
+              description: "Data string or serialized buffer to write into shared memory."
+            },
+            size: {
+              type: "number",
+              default: 4096,
+              description: "Allocation capacity in bytes (default: 4096)."
+            }
+          }
+        }
       }
 ];
 
@@ -3315,6 +3380,40 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [Hardware Device Control (${action})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_named_pipe") {
+    const action = args?.action || "list";
+    const pipeName = args?.pipeName || "";
+    const message = args?.message || "";
+    const timeoutMs = args?.timeoutMs || 5000;
+    const search = args?.search || "";
+    const limit = args?.limit || 50;
+    const res = await orch.manageNamedPipe({ action, pipeName, message, timeoutMs, search, limit });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Named Pipe IPC (${action})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_shared_memory") {
+    const action = args?.action || "read";
+    const mapName = args?.mapName || "";
+    const data = args?.data || "";
+    const size = args?.size || 4096;
+    const res = await orch.manageSharedMemory({ action, mapName, data, size });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows NT Shared Memory (${action})]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

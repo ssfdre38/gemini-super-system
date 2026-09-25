@@ -52,6 +52,7 @@
   - [34. Sovereign Windows Audio Subsystem & Volume Mixer](#34--sovereign-windows-audio-subsystem--volume-mixer-wasapi--volume-mixer)
   - [35. Windows Diagnostics & Reliability Subsystem](#35-️-windows-diagnostics--reliability-subsystem-scm-services-eventlog-sentinel--registry-actuator)
   - [36. Plug & Play Device Graph & SetupAPI Hardware Actuator](#36--plug--play-device-graph--setupapi-hardware-actuator-setupapidll--cfgmgr32dll)
+  - [37. High-Speed Windows NT IPC — Named Pipes & Shared Memory](#37--high-speed-windows-nt-ipc--named-pipes--memory-mapped-shared-memory-systemiopipes--systemiomemorymappedfiles)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -191,7 +192,7 @@ Antigravity scrolled the chat via physical mouse wheel inputs, clicked the input
 
 ---
 
-## 🧰 MCP Tool Reference (69 Sovereign Tools)
+## 🧰 MCP Tool Reference (91 Sovereign Tools)
 
 All tools are exposed natively over stdio to Antigravity, Gemini CLI, and any MCP-compliant client:
 
@@ -535,6 +536,15 @@ Empowers the AI agent with bare-metal hardware discovery, PnP device tree naviga
 - **PnP Node Status & Problem Code Diagnostics (`CM_Get_DevNode_Status`)**: Interrogates the configuration manager device node state (`cfgmgr32.dll`), resolving live execution flags (`DN_STARTED`, `DN_DISABLEABLE`, `DN_REMOVABLE`, `DN_HAS_PROBLEM`) and mapping raw `CM_PROB_*` codes (e.g. Code 22 Disabled, Code 43 Stopped, Code 10 Failed to Start, Code 28 Missing Driver) into human-readable diagnostic explanations.
 - **Hardware Device State Actuation (`SetupDiCallClassInstaller`, `CM_Reenumerate_DevNode`)**: Enables, disables, restarts (power cycles), and re-enumerates hardware devices directly via `super_device_control`. Enables the AI agent to self-heal malfunctioning peripherals, cycle locked USB devices, or re-probe audio/camera endpoints automatically.
 - **Native MCP Tools**: `super_device_graph`, `super_device_control`.
+
+---
+
+## 37. ⚡ High-Speed Windows NT IPC — Named Pipes & Memory-Mapped Shared Memory (`System.IO.Pipes` & `System.IO.MemoryMappedFiles`)
+
+Provides ultra-fast local inter-process communication, zero-copy buffer sharing, and local daemon synchronization:
+- **Windows Named Pipe IPC Server & Client (`System.IO.Pipes`)**: Native enumeration, transmission, and listening across local named pipes via `super_named_pipe`. Supports zero-overhead daemon IPC for AI agent handshakes, subagent coordination, and local RPC endpoints (`\\.\pipe\*`) without network socket overhead or firewall prompts.
+- **Zero-Copy Memory-Mapped Shared Memory (`System.IO.MemoryMappedFiles`)**: Lightning-fast shared memory segments via `super_shared_memory`. Supports write, read, inspection, listing, and deletion of named memory mappings (`MemoryMappedFile.CreateFromFile`) with zero serialization penalty, enabling high-frequency tensor caches, frame buffers, and real-time cross-process state synchronization.
+- **Native MCP Tools**: `super_named_pipe`, `super_shared_memory`.
 
 ---
 

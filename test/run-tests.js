@@ -415,21 +415,17 @@ async function run() {
 
     try {
       const testPayload = `Gemini_Super_Test_${Date.now()}`;
-      let setRes = await clip.setText(testPayload);
-      for (let attempt = 0; attempt < 3 && !setRes.success; attempt++) {
-        await new Promise(r => setTimeout(r, 150));
-        setRes = await clip.setText(testPayload);
-      }
-      assert.strictEqual(setRes.success, true);
-
-      // Allow Windows OLE clipboard broker to settle handover
-      await new Promise(r => setTimeout(r, 120));
-
-      let getRes = await clip.getText();
-      for (let attempt = 0; attempt < 4 && (!getRes.hasText || getRes.text !== testPayload); attempt++) {
+      let getRes = null;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await clip.setText(testPayload);
         await new Promise(r => setTimeout(r, 150));
         getRes = await clip.getText();
+        if (getRes && getRes.success && getRes.hasText && getRes.text === testPayload) {
+          break;
+        }
+        await new Promise(r => setTimeout(r, 200));
       }
+      assert(getRes !== null);
       assert.strictEqual(getRes.success, true);
       assert.strictEqual(getRes.hasText, true);
       assert.strictEqual(getRes.text, testPayload);
@@ -1723,10 +1719,85 @@ async function run() {
     assert(badRes.error && badRes.error.includes("not found"));
   });
 
-  it("All 89 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 22: Windows NT IPC: Named Pipes & Shared Memory Subsystem
+  console.log("\n\x1b[1m[Suite 22: Windows NT IPC: Named Pipes & Shared Memory Subsystem]\x1b[0m");
+
+  await itAsync("manageNamedPipe enumerates active Windows named pipes and filters by pattern", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const pipes = await kb.manageNamedPipe({ action: "list", limit: 20 });
+
+    assert(pipes !== null && typeof pipes === "object");
+    assert.strictEqual(pipes.success, true);
+    assert(Array.isArray(pipes.pipes));
+    assert(pipes.count > 0, "Expected at least one active named pipe");
+    assert(pipes.totalPipes >= pipes.count);
+
+    const firstPipe = pipes.pipes[0];
+    assert(typeof firstPipe.name === "string" && firstPipe.name.length > 0);
+  });
+
+  await itAsync("manageSharedMemory writes, reads, queries info, lists, and deletes memory-mapped regions", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const mapName = "GeminiSuperTestIPC";
+    const testData = JSON.stringify({ version: "2.4.0", timestamp: Date.now(), message: "IPC_VERIFIED" });
+
+    // 1. Write
+    const writeRes = await kb.manageSharedMemory({
+      action: "write",
+      mapName,
+      data: testData,
+      size: 4096
+    });
+    assert(writeRes !== null && typeof writeRes === "object");
+    assert.strictEqual(writeRes.success, true);
+    assert.strictEqual(writeRes.mapName, mapName);
+    assert.strictEqual(writeRes.bytesWritten, Buffer.byteLength(testData, "utf8"));
+
+    // 2. Read back
+    const readRes = await kb.manageSharedMemory({
+      action: "read",
+      mapName
+    });
+    assert(readRes !== null && typeof readRes === "object");
+    assert.strictEqual(readRes.success, true);
+    assert.strictEqual(readRes.mapName, mapName);
+    assert.strictEqual(readRes.data, testData);
+
+    // 3. Info
+    const infoRes = await kb.manageSharedMemory({
+      action: "info",
+      mapName
+    });
+    assert(infoRes !== null && typeof infoRes === "object");
+    assert.strictEqual(infoRes.success, true);
+    assert.strictEqual(infoRes.exists, true);
+    assert(infoRes.sizeBytes >= 4096);
+
+    // 4. List
+    const listRes = await kb.manageSharedMemory({
+      action: "list"
+    });
+    assert(listRes !== null && typeof listRes === "object");
+    assert.strictEqual(listRes.success, true);
+    assert(Array.isArray(listRes.maps));
+    assert(listRes.maps.some(m => m.name === mapName));
+
+    // 5. Delete / Cleanup
+    const delRes = await kb.manageSharedMemory({
+      action: "delete",
+      mapName
+    });
+    assert(delRes !== null && typeof delRes === "object");
+    assert.strictEqual(delRes.success, true);
+    assert.strictEqual(delRes.deleted, true);
+  });
+
+  it("All 91 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 89);
+    assert.strictEqual(SYSTEM_TOOLS.length, 91);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -1749,6 +1820,8 @@ async function run() {
     assert(toolNames.includes("super_registry"));
     assert(toolNames.includes("super_device_graph"));
     assert(toolNames.includes("super_device_control"));
+    assert(toolNames.includes("super_named_pipe"));
+    assert(toolNames.includes("super_shared_memory"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

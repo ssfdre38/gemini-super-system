@@ -15,6 +15,8 @@ using System.Management;
 using System.ServiceProcess;
 using System.Diagnostics.Eventing.Reader;
 using Microsoft.Win32;
+using System.IO.Pipes;
+using System.IO.MemoryMappedFiles;
 
 namespace GeminiSuperDesktop {
     [StructLayout(LayoutKind.Sequential)]
@@ -2686,6 +2688,9 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        [DllImport("ole32.dll")]
+        static extern int OleFlushClipboard();
+
         static void ClipboardSetCmd(string text) {
             Exception lastEx = null;
             for (int attempt = 0; attempt < 5; attempt++) {
@@ -2694,6 +2699,7 @@ namespace GeminiSuperDesktop {
                         Clipboard.Clear();
                         Clipboard.SetDataObject(text, true, 10, 100);
                         Application.DoEvents();
+                        try { OleFlushClipboard(); } catch {}
                     });
                     Console.WriteLine(string.Format("{{\"success\": true, \"charCount\": {0}}}", text.Length));
                     return;
@@ -2762,6 +2768,7 @@ namespace GeminiSuperDesktop {
             try {
                 RunSta(() => {
                     Clipboard.Clear();
+                    try { OleFlushClipboard(); } catch {}
                 });
                 Console.WriteLine("{\"success\": true}");
             } catch (Exception ex) {
@@ -4631,6 +4638,205 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static void NamedPipeCmd(string action, string pipeName, string message, int timeoutMs, string search, int limit) {
+            try {
+                if (string.IsNullOrEmpty(action)) action = "list";
+                string act = action.Trim().ToLowerInvariant();
+
+                if (act == "list") {
+                    if (limit <= 0) limit = 50;
+                    string[] allPipes = new string[0];
+                    try {
+                        allPipes = Directory.GetFiles(@"\\.\pipe\");
+                    } catch {}
+
+                    var sb = new StringBuilder();
+                    sb.Append("{\"success\": true, \"pipes\": [");
+                    bool first = true;
+                    int count = 0;
+                    string s = (search ?? "").Trim().ToLowerInvariant();
+
+                    for (int i = 0; i < allPipes.Length; i++) {
+                        string p = allPipes[i];
+                        string shortName = p.StartsWith(@"\\.\pipe\") ? p.Substring(@"\\.\pipe\".Length) : p;
+
+                        if (!string.IsNullOrEmpty(s)) {
+                            if (shortName.ToLowerInvariant().IndexOf(s, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                        }
+
+                        if (!first) sb.Append(",");
+                        first = false;
+
+                        sb.Append(string.Format("{{\"name\": \"{0}\", \"path\": \"{1}\"}}", EscapeJson(shortName), EscapeJson(p)));
+                        count++;
+                        if (count >= limit) break;
+                    }
+
+                    sb.Append(string.Format("], \"count\": {0}, \"totalPipes\": {1}}}", count, allPipes.Length));
+                    Console.WriteLine(sb.ToString());
+                    return;
+                }
+
+                if (act == "send") {
+                    if (string.IsNullOrEmpty(pipeName)) {
+                        Console.WriteLine("{\"success\": false, \"error\": \"Pipe name is required for action 'send'\"}");
+                        return;
+                    }
+                    string cleanPipe = pipeName.StartsWith(@"\\.\pipe\") ? pipeName.Substring(@"\\.\pipe\".Length) : pipeName;
+                    int timeout = timeoutMs > 0 ? timeoutMs : 5000;
+
+                    using (var client = new NamedPipeClientStream(".", cleanPipe, PipeDirection.InOut)) {
+                        client.Connect(timeout);
+                        using (var reader = new StreamReader(client, Encoding.UTF8))
+                        using (var writer = new StreamWriter(client, Encoding.UTF8) { AutoFlush = true }) {
+                            writer.WriteLine(message ?? "");
+                            string reply = "";
+                            try {
+                                reply = reader.ReadLine() ?? "";
+                            } catch {}
+
+                            Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"send\", \"pipe\": \"{0}\", \"sent\": \"{1}\", \"response\": \"{2}\"}}",
+                                EscapeJson(cleanPipe), EscapeJson(message ?? ""), EscapeJson(reply)));
+                            return;
+                        }
+                    }
+                }
+
+                if (act == "listen") {
+                    if (string.IsNullOrEmpty(pipeName)) {
+                        Console.WriteLine("{\"success\": false, \"error\": \"Pipe name is required for action 'listen'\"}");
+                        return;
+                    }
+                    string cleanPipe = pipeName.StartsWith(@"\\.\pipe\") ? pipeName.Substring(@"\\.\pipe\".Length) : pipeName;
+                    int timeout = timeoutMs > 0 ? timeoutMs : 5000;
+
+                    using (var server = new NamedPipeServerStream(cleanPipe, PipeDirection.InOut, 1, PipeTransmissionMode.Byte, PipeOptions.Asynchronous)) {
+                        var ar = server.BeginWaitForConnection(null, null);
+                        if (!ar.AsyncWaitHandle.WaitOne(timeout)) {
+                            Console.WriteLine(string.Format("{{\"success\": false, \"action\": \"listen\", \"pipe\": \"{0}\", \"error\": \"Timed out waiting for client connection\"}}", EscapeJson(cleanPipe)));
+                            return;
+                        }
+                        server.EndWaitForConnection(ar);
+
+                        using (var reader = new StreamReader(server, Encoding.UTF8))
+                        using (var writer = new StreamWriter(server, Encoding.UTF8) { AutoFlush = true }) {
+                            string incoming = reader.ReadLine() ?? "";
+                            string reply = !string.IsNullOrEmpty(message) ? message : "ACK";
+                            try { writer.WriteLine(reply); } catch {}
+
+                            Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"listen\", \"pipe\": \"{0}\", \"received\": \"{1}\", \"replied\": \"{2}\"}}",
+                                EscapeJson(cleanPipe), EscapeJson(incoming), EscapeJson(reply)));
+                            return;
+                        }
+                    }
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Unknown named pipe action '{0}'\"}}", EscapeJson(act)));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void SharedMemoryCmd(string action, string mapName, string data, int size) {
+            try {
+                if (string.IsNullOrEmpty(action)) action = "read";
+                string act = action.Trim().ToLowerInvariant();
+
+                string shmDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data", "shm");
+                if (!Directory.Exists(shmDir)) Directory.CreateDirectory(shmDir);
+
+                if (act == "list") {
+                    string[] files = Directory.GetFiles(shmDir, "*.shm");
+                    var sb = new StringBuilder();
+                    sb.Append("{\"success\": true, \"maps\": [");
+                    for (int i = 0; i < files.Length; i++) {
+                        if (i > 0) sb.Append(",");
+                        var fi = new FileInfo(files[i]);
+                        string name = Path.GetFileNameWithoutExtension(fi.Name);
+                        sb.Append(string.Format("{{\"name\": \"{0}\", \"sizeBytes\": {1}, \"lastModified\": \"{2}\"}}",
+                            EscapeJson(name), fi.Length, fi.LastWriteTimeUtc.ToString("o")));
+                    }
+                    sb.Append(string.Format("], \"count\": {0}}}", files.Length));
+                    Console.WriteLine(sb.ToString());
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(mapName)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"mapName is required\"}");
+                    return;
+                }
+
+                string safeName = Path.GetFileName(mapName);
+                string filePath = Path.Combine(shmDir, safeName + ".shm");
+
+                if (act == "write") {
+                    byte[] bytes = Encoding.UTF8.GetBytes(data ?? "");
+                    int allocSize = size > 0 ? size : Math.Max(1024, bytes.Length + 64);
+                    if (allocSize < bytes.Length + 4) allocSize = bytes.Length + 64;
+
+                    using (var fs = new FileStream(filePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite)) {
+                        fs.SetLength(Math.Max(fs.Length, (long)allocSize));
+                        using (var mmf = MemoryMappedFile.CreateFromFile(fs, null, allocSize, MemoryMappedFileAccess.ReadWrite, null, HandleInheritability.None, false)) {
+                            using (var accessor = mmf.CreateViewAccessor(0, allocSize, MemoryMappedFileAccess.Write)) {
+                                accessor.Write(0, bytes.Length);
+                                accessor.WriteArray(4, bytes, 0, bytes.Length);
+                            }
+                        }
+                    }
+
+                    Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"write\", \"mapName\": \"{0}\", \"bytesWritten\": {1}, \"capacityBytes\": {2}}}",
+                        EscapeJson(safeName), bytes.Length, allocSize));
+                    return;
+                }
+
+                if (act == "read") {
+                    if (!File.Exists(filePath)) {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"mapName\": \"{0}\", \"error\": \"Shared memory map not found\"}}", EscapeJson(safeName)));
+                        return;
+                    }
+
+                    using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite)) {
+                        using (var mmf = MemoryMappedFile.CreateFromFile(fs, null, 0, MemoryMappedFileAccess.Read, null, HandleInheritability.None, false)) {
+                            using (var accessor = mmf.CreateViewAccessor(0, fs.Length, MemoryMappedFileAccess.Read)) {
+                                int len = accessor.ReadInt32(0);
+                                if (len < 0 || len > (fs.Length - 4)) len = (int)(fs.Length - 4);
+                                byte[] readBuf = new byte[len];
+                                accessor.ReadArray(4, readBuf, 0, len);
+                                string text = Encoding.UTF8.GetString(readBuf);
+
+                                Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"read\", \"mapName\": \"{0}\", \"bytesRead\": {1}, \"data\": \"{2}\"}}",
+                                    EscapeJson(safeName), len, EscapeJson(text)));
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                if (act == "info") {
+                    bool exists = File.Exists(filePath);
+                    long fileLen = exists ? new FileInfo(filePath).Length : 0;
+                    string lastMod = exists ? new FileInfo(filePath).LastWriteTimeUtc.ToString("o") : "";
+                    Console.WriteLine(string.Format("{{\"success\": true, \"mapName\": \"{0}\", \"exists\": {1}, \"sizeBytes\": {2}, \"lastModified\": \"{3}\"}}",
+                        EscapeJson(safeName), exists ? "true" : "false", fileLen, lastMod));
+                    return;
+                }
+
+                if (act == "delete") {
+                    if (File.Exists(filePath)) {
+                        File.Delete(filePath);
+                        Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"delete\", \"mapName\": \"{0}\", \"deleted\": true}}", EscapeJson(safeName)));
+                    } else {
+                        Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"delete\", \"mapName\": \"{0}\", \"deleted\": false, \"message\": \"Map did not exist\"}}", EscapeJson(safeName)));
+                    }
+                    return;
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Unknown shared memory action '{0}'\"}}", EscapeJson(act)));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void GetThermalVitalsCmd() {
             try {
                 int count = Environment.ProcessorCount;
@@ -5169,6 +5375,20 @@ namespace GeminiSuperDesktop {
                 string act = args.Length >= 2 ? args[1] : "reenumerate";
                 string devId = args.Length >= 3 ? args[2] : "";
                 DeviceControlCmd(act, devId);
+            } else if (cmd == "named_pipe" || cmd == "pipe" || cmd == "pipes") {
+                string act = args.Length >= 2 ? args[1] : "list";
+                string pipe = args.Length >= 3 ? args[2] : "";
+                string msg = args.Length >= 4 ? args[3] : "";
+                int timeout = args.Length >= 5 ? int.Parse(args[4]) : 5000;
+                string search = args.Length >= 6 ? args[5] : "";
+                int limit = args.Length >= 7 ? int.Parse(args[6]) : 50;
+                NamedPipeCmd(act, pipe, msg, timeout, search, limit);
+            } else if (cmd == "shared_memory" || cmd == "shm" || cmd == "mmf") {
+                string act = args.Length >= 2 ? args[1] : "read";
+                string map = args.Length >= 3 ? args[2] : "";
+                string data = args.Length >= 4 ? args[3] : "";
+                int size = args.Length >= 5 ? int.Parse(args[4]) : 0;
+                SharedMemoryCmd(act, map, data, size);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {
