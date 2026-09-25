@@ -3502,6 +3502,410 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        [StructLayout(LayoutKind.Sequential)]
+        struct RM_UNIQUE_PROCESS {
+            public int dwProcessId;
+            public System.Runtime.InteropServices.ComTypes.FILETIME ProcessStartTime;
+        }
+
+        const int CCH_RM_MAX_APP_NAME = 255;
+        const int CCH_RM_MAX_SVC_NAME = 63;
+        const int CCH_RM_SESSION_KEY = 32;
+
+        enum RM_APP_TYPE {
+            RmUnknownApp = 0,
+            RmMainWindow = 1,
+            RmOtherWindow = 2,
+            RmService = 3,
+            RmExplorer = 4,
+            RmConsole = 5,
+            RmCritical = 1000
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct RM_PROCESS_INFO {
+            public RM_UNIQUE_PROCESS Process;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CCH_RM_MAX_APP_NAME + 1)]
+            public string strAppName;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = CCH_RM_MAX_SVC_NAME + 1)]
+            public string strServiceShortName;
+            public RM_APP_TYPE ApplicationType;
+            public uint AppStatus;
+            public uint TSSessionId;
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool bRestartable;
+        }
+
+        [DllImport("rstrtmgr.dll", CharSet = CharSet.Unicode)]
+        static extern int RmStartSession(out uint pSessionHandle, int dwSessionFlags, StringBuilder strSessionKey);
+
+        [DllImport("rstrtmgr.dll", CharSet = CharSet.Unicode)]
+        static extern int RmJoinSession(out uint pSessionHandle, string strSessionKey);
+
+        [DllImport("rstrtmgr.dll", CharSet = CharSet.Unicode)]
+        static extern int RmRegisterResources(uint dwSessionHandle,
+            uint nFiles, string[] rgsFileNames,
+            uint nApplications, RM_UNIQUE_PROCESS[] rgApplications,
+            uint nServices, string[] rgsServiceNames);
+
+        [DllImport("rstrtmgr.dll", CharSet = CharSet.Unicode)]
+        static extern int RmGetList(uint dwSessionHandle,
+            out uint pnProcInfoNeeded,
+            ref uint pnProcInfo,
+            [In, Out] RM_PROCESS_INFO[] rgAffectedApps,
+            out uint lpdwRebootReasons);
+
+        [DllImport("rstrtmgr.dll")]
+        static extern int RmEndSession(uint dwSessionHandle);
+
+        [DllImport("rstrtmgr.dll")]
+        static extern int RmShutdown(uint dwSessionHandle, uint ActionFlags, IntPtr fnStatus);
+
+        [DllImport("rstrtmgr.dll")]
+        static extern int RmRestart(uint dwSessionHandle, uint dwRestartFlags, IntPtr fnStatus);
+
+        static string GetRmAppTypeName(RM_APP_TYPE t) {
+            switch (t) {
+                case RM_APP_TYPE.RmMainWindow: return "MainWindow";
+                case RM_APP_TYPE.RmOtherWindow: return "OtherWindow";
+                case RM_APP_TYPE.RmService: return "Service";
+                case RM_APP_TYPE.RmExplorer: return "Explorer";
+                case RM_APP_TYPE.RmConsole: return "Console";
+                case RM_APP_TYPE.RmCritical: return "Critical";
+                default: return "Unknown";
+            }
+        }
+
+        static void RestartManagerFindLocksCmd(string filesCsv) {
+            try {
+                char[] splitters = new char[] { '|', ';', ',' };
+                string[] rawParts = (filesCsv ?? "").Split(splitters, StringSplitOptions.RemoveEmptyEntries);
+                List<string> fileList = new List<string>();
+                foreach (var p in rawParts) {
+                    string trimmed = p.Trim().Trim('"', '\'');
+                    if (!string.IsNullOrEmpty(trimmed)) {
+                        try { fileList.Add(Path.GetFullPath(trimmed)); } catch { fileList.Add(trimmed); }
+                    }
+                }
+                if (fileList.Count == 0) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"No file paths provided\"}");
+                    return;
+                }
+
+                uint handle;
+                StringBuilder sbKey = new StringBuilder(CCH_RM_SESSION_KEY + 1);
+                int res = RmStartSession(out handle, 0, sbKey);
+                if (res != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"RmStartSession failed with code {0}\"}}", res));
+                    return;
+                }
+
+                try {
+                    string[] filesArr = fileList.ToArray();
+                    res = RmRegisterResources(handle, (uint)filesArr.Length, filesArr, 0, null, 0, null);
+                    if (res != 0) {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"RmRegisterResources failed with code {0}\"}}", res));
+                        return;
+                    }
+
+                    uint pnProcInfoNeeded = 0;
+                    uint pnProcInfo = 0;
+                    uint rebootReasons = 0;
+                    int getRes = RmGetList(handle, out pnProcInfoNeeded, ref pnProcInfo, null, out rebootReasons);
+
+                    var procList = new List<string>();
+                    if (pnProcInfoNeeded > 0) {
+                        RM_PROCESS_INFO[] apps = new RM_PROCESS_INFO[pnProcInfoNeeded];
+                        pnProcInfo = pnProcInfoNeeded;
+                        getRes = RmGetList(handle, out pnProcInfoNeeded, ref pnProcInfo, apps, out rebootReasons);
+                        if (getRes == 0) {
+                            for (int i = 0; i < pnProcInfo; i++) {
+                                int pid = apps[i].Process.dwProcessId;
+                                string appName = apps[i].strAppName ?? "";
+                                string svcName = apps[i].strServiceShortName ?? "";
+                                string appTypeStr = GetRmAppTypeName(apps[i].ApplicationType);
+                                uint appStatus = apps[i].AppStatus;
+                                uint tsSessionId = apps[i].TSSessionId;
+                                bool isRestartable = apps[i].bRestartable;
+
+                                string exePath = "";
+                                string winTitle = "";
+                                try {
+                                    Process proc = Process.GetProcessById(pid);
+                                    if (string.IsNullOrEmpty(appName)) appName = proc.ProcessName;
+                                    try { exePath = proc.MainModule.FileName ?? ""; } catch {}
+                                    try { winTitle = proc.MainWindowTitle ?? ""; } catch {}
+                                } catch {}
+
+                                procList.Add(string.Format(
+                                    "{{\"processId\": {0}, \"appName\": \"{1}\", \"serviceShortName\": \"{2}\", " +
+                                    "\"applicationType\": \"{3}\", \"appStatus\": {4}, \"terminalServicesSessionId\": {5}, " +
+                                    "\"isRestartable\": {6}, \"executablePath\": \"{7}\", \"windowTitle\": \"{8}\"}}",
+                                    pid, EscapeJson(appName), EscapeJson(svcName),
+                                    EscapeJson(appTypeStr), appStatus, tsSessionId,
+                                    isRestartable ? "true" : "false",
+                                    EscapeJson(exePath), EscapeJson(winTitle)
+                                ));
+                            }
+                        }
+                    }
+
+                    var fileJsonList = new List<string>();
+                    foreach (var f in fileList) fileJsonList.Add(string.Format("\"{0}\"", EscapeJson(f)));
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"files\": [{0}], \"lockCount\": {1}, \"rebootReasons\": {2}, \"processes\": [{3}]}}",
+                        string.Join(", ", fileJsonList.ToArray()),
+                        procList.Count,
+                        rebootReasons,
+                        string.Join(", ", procList.ToArray())
+                    ));
+                } finally {
+                    RmEndSession(handle);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void RestartManagerShutdownCmd(string filesCsv, bool force) {
+            try {
+                char[] splitters = new char[] { '|', ';', ',' };
+                string[] rawParts = (filesCsv ?? "").Split(splitters, StringSplitOptions.RemoveEmptyEntries);
+                List<string> fileList = new List<string>();
+                foreach (var p in rawParts) {
+                    string trimmed = p.Trim().Trim('"', '\'');
+                    if (!string.IsNullOrEmpty(trimmed)) {
+                        try { fileList.Add(Path.GetFullPath(trimmed)); } catch { fileList.Add(trimmed); }
+                    }
+                }
+                if (fileList.Count == 0) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"No file paths provided\"}");
+                    return;
+                }
+
+                uint handle;
+                StringBuilder sbKey = new StringBuilder(CCH_RM_SESSION_KEY + 1);
+                int res = RmStartSession(out handle, 0, sbKey);
+                if (res != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"RmStartSession failed with code {0}\"}}", res));
+                    return;
+                }
+
+                string sessionKey = sbKey.ToString();
+                string[] filesArr = fileList.ToArray();
+                res = RmRegisterResources(handle, (uint)filesArr.Length, filesArr, 0, null, 0, null);
+                if (res != 0) {
+                    RmEndSession(handle);
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"RmRegisterResources failed with code {0}\"}}", res));
+                    return;
+                }
+
+                uint pnProcInfoNeeded = 0;
+                uint pnProcInfo = 0;
+                uint rebootReasons = 0;
+                RmGetList(handle, out pnProcInfoNeeded, ref pnProcInfo, null, out rebootReasons);
+
+                var procList = new List<string>();
+                if (pnProcInfoNeeded > 0) {
+                    RM_PROCESS_INFO[] apps = new RM_PROCESS_INFO[pnProcInfoNeeded];
+                    pnProcInfo = pnProcInfoNeeded;
+                    if (RmGetList(handle, out pnProcInfoNeeded, ref pnProcInfo, apps, out rebootReasons) == 0) {
+                        for (int i = 0; i < pnProcInfo; i++) {
+                            int pid = apps[i].Process.dwProcessId;
+                            string appName = apps[i].strAppName ?? "";
+                            string svcName = apps[i].strServiceShortName ?? "";
+                            string appTypeStr = GetRmAppTypeName(apps[i].ApplicationType);
+                            procList.Add(string.Format("{{\"processId\": {0}, \"appName\": \"{1}\", \"serviceShortName\": \"{2}\", \"applicationType\": \"{3}\"}}",
+                                pid, EscapeJson(appName), EscapeJson(svcName), EscapeJson(appTypeStr)));
+                        }
+                    }
+                }
+
+                uint actionFlags = force ? 1u : 0u; // RmForceShutdown = 0x1, RmNormalShutdown = 0x0
+                int shutRes = RmShutdown(handle, actionFlags, IntPtr.Zero);
+
+                var fileJsonList = new List<string>();
+                foreach (var f in fileList) fileJsonList.Add(string.Format("\"{0}\"", EscapeJson(f)));
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": {0}, \"sessionKey\": \"{1}\", \"files\": [{2}], \"forced\": {3}, \"affectedCount\": {4}, \"shutdownCode\": {5}, \"affectedProcesses\": [{6}]}}",
+                    shutRes == 0 ? "true" : "false",
+                    EscapeJson(sessionKey),
+                    string.Join(", ", fileJsonList.ToArray()),
+                    force ? "true" : "false",
+                    procList.Count,
+                    shutRes,
+                    string.Join(", ", procList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void RestartManagerSessionCmd(string filesCsv, bool force) {
+            uint handle = 0;
+            try {
+                char[] splitters = new char[] { '|', ';', ',' };
+                string[] rawParts = (filesCsv ?? "").Split(splitters, StringSplitOptions.RemoveEmptyEntries);
+                List<string> fileList = new List<string>();
+                foreach (var p in rawParts) {
+                    string trimmed = p.Trim().Trim('"', '\'');
+                    if (!string.IsNullOrEmpty(trimmed)) {
+                        try { fileList.Add(Path.GetFullPath(trimmed)); } catch { fileList.Add(trimmed); }
+                    }
+                }
+                if (fileList.Count == 0) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"No file paths provided\"}");
+                    return;
+                }
+
+                StringBuilder sbKey = new StringBuilder(CCH_RM_SESSION_KEY + 1);
+                int res = RmStartSession(out handle, 0, sbKey);
+                if (res != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"RmStartSession failed with code {0}\"}}", res));
+                    return;
+                }
+
+                string sessionKey = sbKey.ToString();
+                string[] filesArr = fileList.ToArray();
+                res = RmRegisterResources(handle, (uint)filesArr.Length, filesArr, 0, null, 0, null);
+                if (res != 0) {
+                    RmEndSession(handle);
+                    handle = 0;
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"RmRegisterResources failed with code {0}\"}}", res));
+                    return;
+                }
+
+                uint pnProcInfoNeeded = 0;
+                uint pnProcInfo = 0;
+                uint rebootReasons = 0;
+                RmGetList(handle, out pnProcInfoNeeded, ref pnProcInfo, null, out rebootReasons);
+
+                var procList = new List<string>();
+                if (pnProcInfoNeeded > 0) {
+                    RM_PROCESS_INFO[] apps = new RM_PROCESS_INFO[pnProcInfoNeeded];
+                    pnProcInfo = pnProcInfoNeeded;
+                    if (RmGetList(handle, out pnProcInfoNeeded, ref pnProcInfo, apps, out rebootReasons) == 0) {
+                        for (int i = 0; i < pnProcInfo; i++) {
+                            int pid = apps[i].Process.dwProcessId;
+                            string appName = apps[i].strAppName ?? "";
+                            string svcName = apps[i].strServiceShortName ?? "";
+                            string appTypeStr = GetRmAppTypeName(apps[i].ApplicationType);
+                            procList.Add(string.Format("{{\"processId\": {0}, \"appName\": \"{1}\", \"serviceShortName\": \"{2}\", \"applicationType\": \"{3}\"}}",
+                                pid, EscapeJson(appName), EscapeJson(svcName), EscapeJson(appTypeStr)));
+                        }
+                    }
+                }
+
+                uint actionFlags = force ? 1u : 0u; // RmForceShutdown = 0x1, RmNormalShutdown = 0x0
+                int shutRes = RmShutdown(handle, actionFlags, IntPtr.Zero);
+
+                var fileJsonList = new List<string>();
+                foreach (var f in fileList) fileJsonList.Add(string.Format("\"{0}\"", EscapeJson(f)));
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": {0}, \"sessionKey\": \"{1}\", \"files\": [{2}], \"forced\": {3}, \"affectedCount\": {4}, \"shutdownCode\": {5}, \"affectedProcesses\": [{6}]}}",
+                    shutRes == 0 ? "true" : "false",
+                    EscapeJson(sessionKey),
+                    string.Join(", ", fileJsonList.ToArray()),
+                    force ? "true" : "false",
+                    procList.Count,
+                    shutRes,
+                    string.Join(", ", procList.ToArray())
+                ));
+                Console.Out.Flush();
+
+                if (shutRes != 0) {
+                    RmEndSession(handle);
+                    handle = 0;
+                    return;
+                }
+
+                // Interactive / Piped Conductor Session:
+                // Watchdog thread terminates after 5 minutes (300 seconds) if no input received
+                uint watchdogHandle = handle;
+                System.Threading.Thread watchdog = new System.Threading.Thread(() => {
+                    System.Threading.Thread.Sleep(300000);
+                    if (watchdogHandle != 0) {
+                        try { RmEndSession(watchdogHandle); } catch {}
+                        Environment.Exit(0);
+                    }
+                });
+                watchdog.IsBackground = true;
+                watchdog.Start();
+
+                string line;
+                while ((line = Console.ReadLine()) != null) {
+                    line = line.Trim().ToLowerInvariant();
+                    if (line == "restart") {
+                        int restartRes = RmRestart(handle, 0, IntPtr.Zero);
+                        RmEndSession(handle);
+                        handle = 0;
+                        watchdogHandle = 0;
+                        Console.WriteLine(string.Format(
+                            "{{\"success\": {0}, \"sessionKey\": \"{1}\", \"restartCode\": {2}, \"restarted\": {3}}}",
+                            restartRes == 0 ? "true" : "false",
+                            EscapeJson(sessionKey),
+                            restartRes,
+                            restartRes == 0 ? "true" : "false"
+                        ));
+                        Console.Out.Flush();
+                        return;
+                    } else if (line == "end" || line == "close" || line == "abort" || line == "quit") {
+                        RmEndSession(handle);
+                        handle = 0;
+                        watchdogHandle = 0;
+                        Console.WriteLine(string.Format("{{\"success\": true, \"sessionKey\": \"{0}\", \"closed\": true}}", EscapeJson(sessionKey)));
+                        Console.Out.Flush();
+                        return;
+                    }
+                }
+
+                // If stdin closed (EOF), clean up session
+                if (handle != 0) {
+                    RmEndSession(handle);
+                    handle = 0;
+                }
+            } catch (Exception ex) {
+                if (handle != 0) {
+                    try { RmEndSession(handle); } catch {}
+                }
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void RestartManagerRestartCmd(string sessionKey) {
+            try {
+                string cleanKey = (sessionKey ?? "").Trim().Trim('"', '\'');
+                if (string.IsNullOrEmpty(cleanKey)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"sessionKey is required\"}");
+                    return;
+                }
+
+                uint handle;
+                int res = RmJoinSession(out handle, cleanKey);
+                if (res != 0) {
+                    string hint = res == 1219 ? " (Session expired, closed, or secondary installer restriction)" : "";
+                    Console.WriteLine(string.Format("{{\"success\": false, \"sessionKey\": \"{0}\", \"error\": \"RmJoinSession failed with code {1}{2}\"}}", EscapeJson(cleanKey), res, hint));
+                    return;
+                }
+
+                int restartRes = RmRestart(handle, 0, IntPtr.Zero);
+                RmEndSession(handle);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": {0}, \"sessionKey\": \"{1}\", \"restartCode\": {2}, \"restarted\": {3}}}",
+                    restartRes == 0 ? "true" : "false",
+                    EscapeJson(cleanKey),
+                    restartRes,
+                    restartRes == 0 ? "true" : "false"
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void ClipboardGetCmd() {
             try {
                 string text = "";
@@ -6281,6 +6685,20 @@ namespace GeminiSuperDesktop {
                 string store = args.Length >= 4 ? args[3] : "";
                 string loc = args.Length >= 5 ? args[4] : "";
                 CertificateExportCmd(thumb, fmt, store, loc);
+            } else if (cmd == "rm_find_locks" || cmd == "restart_manager_find_locks" || cmd == "find_locks") {
+                string files = args.Length >= 2 ? args[1] : "";
+                RestartManagerFindLocksCmd(files);
+            } else if (cmd == "rm_session" || cmd == "restart_manager_session") {
+                string files = args.Length >= 2 ? args[1] : "";
+                bool force = args.Length >= 3 && (args[2].ToLowerInvariant() == "true" || args[2] == "1");
+                RestartManagerSessionCmd(files, force);
+            } else if (cmd == "rm_shutdown" || cmd == "restart_manager_shutdown") {
+                string files = args.Length >= 2 ? args[1] : "";
+                bool force = args.Length >= 3 && (args[2].ToLowerInvariant() == "true" || args[2] == "1");
+                RestartManagerShutdownCmd(files, force);
+            } else if (cmd == "rm_restart" || cmd == "restart_manager_restart") {
+                string key = args.Length >= 2 ? args[1] : "";
+                RestartManagerRestartCmd(key);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

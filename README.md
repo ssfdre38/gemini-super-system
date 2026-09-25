@@ -56,6 +56,7 @@
   - [38. Windows Advanced Firewall & Network Filtering Subsystem](#38-️-windows-advanced-firewall--network-filtering-subsystem-inetfwpolicy2--inetfwrule)
   - [39. Windows Task Scheduler Subsystem](#39-️-windows-task-scheduler-subsystem-scheduleservice--itaskservice--taskschdh)
   - [40. Windows Certificate & Cryptographic Trust Store Subsystem](#40--windows-certificate--cryptographic-trust-store-subsystem-crypt32dll--wincrypth--x509store)
+  - [41. Windows Restart Manager & File Lock Resolver Subsystem](#41--windows-restart-manager--file-lock-resolver-subsystem-rstrtmgrdll--restartmanagerh)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -579,6 +580,17 @@ Directly manages the Windows Cryptographic Certificate Stores and public-key inf
 - **Standards-Compliant RFC 7468 PEM & DER Export (`super_certificate_export`)**: Exports certificates in standardized RFC 7468 PEM format (`-----BEGIN CERTIFICATE-----...-----END CERTIFICATE-----`) and raw Base64 DER encoding for instant integration with TLS WebSockets, mTLS tunnels, HTTPS servers, and local inference API clients.
 - **Century Milestone**: Reaches exactly **100 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
 - **Native MCP Tools**: `super_certificate_store`, `super_certificate_info`, `super_certificate_export`.
+
+---
+
+## 41. 🔄 Windows Restart Manager & File Lock Resolver Subsystem (`Rstrtmgr.dll` / `restartmanager.h`)
+
+Directly manages the Windows Restart Manager API via native Win32 `rstrtmgr.dll` P/Invoke to eliminate sharing violations, `EBUSY` resource locks, and silent file update failures without process killing guessing or system reboots:
+- **Instant Locking Process Perception (`super_restart_manager_find_locks`)**: Inspects target files, DLLs, or executables in sub-10ms via `RmStartSession`, `RmRegisterResources`, and `RmGetList`. Discovers the exact PIDs, process names, executable paths, main window titles, application types (`MainWindow`, `Service`, `Explorer`, `Console`, `Critical`), Terminal Services session IDs, and whether the process supports restart persistence (`isRestartable`).
+- **Targeted Lock Shutdown (`super_restart_manager_shutdown`)**: Gracefully signals or force-terminates (`RmForceShutdown`) applications holding locks on specified files, generating a persistent 32-character `sessionKey` that allows restarting the exact application state after file mutation.
+- **Stateful Application Restoration (`super_restart_manager_restart`)**: Joins the Restart Manager session via `RmJoinSession(sessionKey)` and invokes `RmRestart` to relaunch the shut-down processes and restore operational workflows seamlessly.
+- **Century-Plus Expansion**: **103 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
+- **Native MCP Tools**: `super_restart_manager_find_locks`, `super_restart_manager_shutdown`, `super_restart_manager_restart`.
 
 ---
 

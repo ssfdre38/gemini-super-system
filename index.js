@@ -2104,6 +2104,55 @@ const SYSTEM_TOOLS = [
           },
           required: ["thumbprint"]
         }
+      },
+      {
+        name: "super_restart_manager_find_locks",
+        description: "Discovers applications, processes, and Windows services locking specified file(s) or paths using the Windows Restart Manager API (rstrtmgr.dll). Returns PIDs, process names, executable paths, and restartability.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            files: {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of absolute file paths to inspect for locking processes."
+            }
+          },
+          required: ["files"]
+        }
+      },
+      {
+        name: "super_restart_manager_shutdown",
+        description: "Shuts down processes locking the specified file(s) via Windows Restart Manager (rstrtmgr.dll) so files can be modified or updated. Returns a sessionKey to allow restarting them later.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            files: {
+              type: "array",
+              items: { type: "string" },
+              description: "Array of absolute file paths whose locking processes should be shut down."
+            },
+            force: {
+              type: "boolean",
+              default: false,
+              description: "Whether to forcefully terminate processes (RmForceShutdown) if graceful shutdown does not succeed. Defaults to false."
+            }
+          },
+          required: ["files"]
+        }
+      },
+      {
+        name: "super_restart_manager_restart",
+        description: "Restarts applications and services previously shut down by a Windows Restart Manager session (rstrtmgr.dll) using their sessionKey.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            sessionKey: {
+              type: "string",
+              description: "The 32-character session key returned from a previous super_restart_manager_shutdown call."
+            }
+          },
+          required: ["sessionKey"]
+        }
       }
 ];
 
@@ -3832,6 +3881,46 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [Windows Certificate Export (${format}: ${thumbprint})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_restart_manager_find_locks") {
+    const files = args?.files || args?.file || args?.path || [];
+    const res = await orch.findFileLocks(files);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Restart Manager (Locks Found: ${res.lockCount || 0})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_restart_manager_shutdown") {
+    const files = args?.files || args?.file || args?.path || [];
+    const force = Boolean(args?.force);
+    const res = await orch.shutdownFileLocks({ files, force });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Restart Manager Shutdown (Affected: ${res.affectedCount || 0}, Forced: ${force})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_restart_manager_restart") {
+    const sessionKey = args?.sessionKey || args?.key || "";
+    const res = await orch.restartFileLocks(sessionKey);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Restart Manager Restart (${sessionKey})]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

@@ -1993,10 +1993,74 @@ async function run() {
     assert(exp.pem.includes("-----END CERTIFICATE-----"));
   });
 
-  it("All 100 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 26: Windows Restart Manager & File Lock Resolver Subsystem (rstrtmgr.dll / restartmanager.h)
+  console.log("\x1b[1m[Suite 26: Windows Restart Manager & File Lock Resolver Subsystem]\x1b[0m");
+
+  await itAsync("KernelBridge.findFileLocks discovers processes locking active executables", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.findFileLocks(kb.binPath);
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(Array.isArray(res.files));
+    assert.strictEqual(res.files.length, 1);
+    assert(typeof res.lockCount === "number");
+    assert(res.lockCount >= 0);
+    assert(Array.isArray(res.processes));
+    if (res.lockCount > 0) {
+      const p0 = res.processes[0];
+      assert(typeof p0.processId === "number");
+      assert(typeof p0.applicationType === "string");
+      assert(typeof p0.isRestartable === "boolean");
+    }
+  });
+
+  await itAsync("KernelBridge.findFileLocks handles unlocked or non-existent files gracefully", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const tempFile = path.join(__dirname, "unlocked_sample_test_file_" + Date.now() + ".tmp");
+    fs.writeFileSync(tempFile, "UNLOCKED_CONTENT", "utf8");
+
+    try {
+      const res = await kb.findFileLocks(tempFile);
+      assert(res !== null && typeof res === "object");
+      assert.strictEqual(res.success, true);
+      assert.strictEqual(res.lockCount, 0);
+      assert(Array.isArray(res.processes));
+      assert.strictEqual(res.processes.length, 0);
+    } finally {
+      try { fs.unlinkSync(tempFile); } catch {}
+    }
+  });
+
+  await itAsync("KernelBridge.shutdownFileLocks and restartFileLocks manage session lifecycle", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const tempFile = path.join(__dirname, "shutdown_sample_test_file_" + Date.now() + ".tmp");
+    fs.writeFileSync(tempFile, "SHUTDOWN_TEST", "utf8");
+
+    try {
+      const shutRes = await kb.shutdownFileLocks({ files: [tempFile], force: false });
+      assert(shutRes !== null && typeof shutRes === "object");
+      assert.strictEqual(shutRes.success, true);
+      assert(typeof shutRes.sessionKey === "string");
+      assert(shutRes.sessionKey.length >= 32);
+      assert.strictEqual(shutRes.affectedCount, 0);
+
+      const restRes = await kb.restartFileLocks(shutRes.sessionKey);
+      assert(restRes !== null && typeof restRes === "object");
+      assert.strictEqual(restRes.success, true);
+      assert.strictEqual(restRes.restarted, true);
+    } finally {
+      try { fs.unlinkSync(tempFile); } catch {}
+    }
+  });
+
+  it("All 103 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 100);
+    assert.strictEqual(SYSTEM_TOOLS.length, 103);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -2030,6 +2094,9 @@ async function run() {
     assert(toolNames.includes("super_certificate_store"));
     assert(toolNames.includes("super_certificate_info"));
     assert(toolNames.includes("super_certificate_export"));
+    assert(toolNames.includes("super_restart_manager_find_locks"));
+    assert(toolNames.includes("super_restart_manager_shutdown"));
+    assert(toolNames.includes("super_restart_manager_restart"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
