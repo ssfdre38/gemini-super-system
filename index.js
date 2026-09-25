@@ -1525,6 +1525,96 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_audio_inspect",
+        description: "Inspects native WAV audio file format, RIFF headers, audio channels, sample rate, bit depth, exact duration, peak decibels (dBFS), RMS power, silence detection, and clipping telemetry.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filePath: {
+              type: "string",
+              description: "Path to the WAV audio file to inspect."
+            }
+          },
+          required: ["filePath"]
+        }
+      },
+      {
+        name: "super_audio_sequence",
+        description: "Plays structured musical tone sequences, chords, arpeggios, or system acoustic chimes via native Win32 hardware synthesizer with automatic headless/RDP fallback.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            sequence: {
+              type: "string",
+              default: "success",
+              description: "Named preset ('success', 'alert', 'error', 'sonar', 'chime', 'ready') or comma-separated note string (e.g. 'C4:150,E4:150,G4:150,C5:300')."
+            }
+          }
+        }
+      },
+      {
+        name: "super_audio_tts_wav",
+        description: "Renders text into a broadcast-quality uncompressed 16-bit PCM WAV audio file via native Windows SAPI speech engine with zero speaker output or external dependencies.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            text: {
+              type: "string",
+              description: "The text script to synthesize into audio."
+            },
+            outputPath: {
+              type: "string",
+              default: "speech_output.wav",
+              description: "Destination path for the generated WAV file."
+            },
+            voice: {
+              type: "string",
+              description: "Specific Windows TTS voice name filter (e.g. 'David', 'Zira')."
+            },
+            rate: {
+              type: "number",
+              default: 0,
+              description: "Speech tempo rate (-10 to +10, default: 0)."
+            },
+            volume: {
+              type: "number",
+              default: 100,
+              description: "Speech volume level (0 to 100, default: 100)."
+            }
+          },
+          required: ["text"]
+        }
+      },
+      {
+        name: "super_audio_duck",
+        description: "Intelligently attenuates (ducks) application or background audio session volumes for a specified duration before restoring them, enabling clear speech output and voice capture.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            target: {
+              type: "string",
+              default: "all",
+              description: "Target application name (e.g. 'Spotify', 'Chrome', 'vlc'), PID, or 'all'."
+            },
+            duckPercent: {
+              type: "number",
+              default: 20,
+              description: "Volume percentage during ducking (0 to 100, default: 20)."
+            },
+            durationMs: {
+              type: "number",
+              default: 2500,
+              description: "Ducking hold duration in milliseconds (100 to 60000, default: 2500)."
+            },
+            restorePercent: {
+              type: "number",
+              default: -1,
+              description: "Volume percentage to restore (-1 to restore to original pre-duck volume)."
+            }
+          }
+        }
       }
 ];
 
@@ -2923,6 +3013,65 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🔔 [Hardware Frequency Tone Beeper (${frequencyHz}Hz, ${durationMs}ms)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_audio_inspect") {
+    const filePath = args?.filePath;
+    const res = await orch.inspectAudioFile({ filePath });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔍 [WAV Audio File Format & Acoustic Inspection]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_audio_sequence") {
+    const sequence = args?.sequence || "success";
+    const res = await orch.playAudioSequence({ sequence });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎶 [Musical Tone Sequence Player (${sequence})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_audio_tts_wav") {
+    const text = args?.text;
+    const outputPath = args?.outputPath || "speech_output.wav";
+    const voice = args?.voice || "";
+    const rate = typeof args?.rate === "number" ? args.rate : 0;
+    const volume = typeof args?.volume === "number" ? args.volume : 100;
+    const res = await orch.renderSpeechToWav({ text, outputPath, voice, rate, volume });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎙️ [SAPI Native Speech-to-WAV Synthesizer]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_audio_duck") {
+    const target = args?.target || "all";
+    const duckPercent = typeof args?.duckPercent === "number" ? args.duckPercent : 20;
+    const durationMs = typeof args?.durationMs === "number" ? args.durationMs : 2500;
+    const restorePercent = typeof args?.restorePercent === "number" ? args.restorePercent : -1;
+    const res = await orch.duckAudio({ target, duckPercent, durationMs, restorePercent });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🦆 [Intelligent Audio Session Ducking]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

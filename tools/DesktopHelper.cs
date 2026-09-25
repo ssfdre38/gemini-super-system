@@ -3581,6 +3581,376 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static int ParseNoteFrequency(string noteName) {
+            if (string.IsNullOrEmpty(noteName)) return 0;
+            string n = noteName.Trim().ToUpperInvariant();
+            if (n == "R" || n == "REST" || n == "0" || n == "PAUSE") return 0;
+
+            int octave = 4;
+            string key = "";
+            char last = n[n.Length - 1];
+            if (char.IsDigit(last)) {
+                octave = last - '0';
+                key = n.Substring(0, n.Length - 1);
+            } else {
+                key = n;
+            }
+
+            int semitoneInOctave = 0;
+            if (key == "C") semitoneInOctave = 0;
+            else if (key == "C#" || key == "DB") semitoneInOctave = 1;
+            else if (key == "D") semitoneInOctave = 2;
+            else if (key == "D#" || key == "EB") semitoneInOctave = 3;
+            else if (key == "E") semitoneInOctave = 4;
+            else if (key == "F") semitoneInOctave = 5;
+            else if (key == "F#" || key == "GB") semitoneInOctave = 6;
+            else if (key == "G") semitoneInOctave = 7;
+            else if (key == "G#" || key == "AB") semitoneInOctave = 8;
+            else if (key == "A") semitoneInOctave = 9;
+            else if (key == "A#" || key == "BB") semitoneInOctave = 10;
+            else if (key == "B") semitoneInOctave = 11;
+            else {
+                int directHz;
+                if (int.TryParse(key, out directHz)) return directHz;
+                return 440;
+            }
+
+            int midiNote = (octave + 1) * 12 + semitoneInOctave;
+            double freq = 440.0 * Math.Pow(2.0, (midiNote - 69) / 12.0);
+            return (int)Math.Round(freq);
+        }
+
+        static void AudioInspectCmd(string filePath) {
+            try {
+                if (string.IsNullOrEmpty(filePath)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"WAV file path is required\"}");
+                    return;
+                }
+                string fullPath = Path.GetFullPath(filePath);
+                if (!File.Exists(fullPath)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"File not found: {0}\"}}", EscapeJson(fullPath)));
+                    return;
+                }
+
+                FileInfo fi = new FileInfo(fullPath);
+                using (var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var br = new BinaryReader(fs)) {
+                    byte[] riff = br.ReadBytes(4);
+                    if (Encoding.ASCII.GetString(riff) != "RIFF") {
+                        Console.WriteLine("{\"success\": false, \"error\": \"Not a valid RIFF file\"}");
+                        return;
+                    }
+                    uint chunkSize = br.ReadUInt32();
+                    byte[] wave = br.ReadBytes(4);
+                    if (Encoding.ASCII.GetString(wave) != "WAVE") {
+                        Console.WriteLine("{\"success\": false, \"error\": \"Not a valid WAVE file\"}");
+                        return;
+                    }
+
+                    ushort audioFormat = 0;
+                    ushort channels = 0;
+                    uint sampleRate = 0;
+                    uint byteRate = 0;
+                    ushort blockAlign = 0;
+                    ushort bitsPerSample = 0;
+                    uint dataSize = 0;
+                    long dataOffset = 0;
+
+                    while (fs.Position + 8 <= fs.Length) {
+                        string subchunkId = Encoding.ASCII.GetString(br.ReadBytes(4));
+                        uint subchunkSize = br.ReadUInt32();
+
+                        if (subchunkId == "fmt ") {
+                            long startFmt = fs.Position;
+                            audioFormat = br.ReadUInt16();
+                            channels = br.ReadUInt16();
+                            sampleRate = br.ReadUInt32();
+                            byteRate = br.ReadUInt32();
+                            blockAlign = br.ReadUInt16();
+                            bitsPerSample = br.ReadUInt16();
+                            fs.Position = startFmt + subchunkSize;
+                        } else if (subchunkId == "data") {
+                            dataSize = subchunkSize;
+                            dataOffset = fs.Position;
+                            break;
+                        } else {
+                            fs.Position += subchunkSize;
+                        }
+                    }
+
+                    if (channels == 0 || sampleRate == 0) {
+                        Console.WriteLine("{\"success\": false, \"error\": \"Missing or invalid fmt chunk in WAV file\"}");
+                        return;
+                    }
+
+                    double durationSec = byteRate > 0 ? (double)dataSize / (double)byteRate : 0.0;
+                    string formatName = "PCM";
+                    if (audioFormat == 3) formatName = "IEEE Float";
+                    else if (audioFormat == 6) formatName = "A-law";
+                    else if (audioFormat == 7) formatName = "Mu-law";
+                    else if (audioFormat == 0xFFFE) formatName = "Extensible";
+
+                    double peak = 0.0;
+                    double sumSq = 0.0;
+                    long samplesRead = 0;
+                    bool clipped = false;
+
+                    if (dataOffset > 0 && fs.Length >= dataOffset) {
+                        fs.Position = dataOffset;
+                        int samplesToScan = (int)Math.Min((long)100000, (dataSize / Math.Max(1, (bitsPerSample / 8))));
+                        if (bitsPerSample == 16) {
+                            for (int i = 0; i < samplesToScan && fs.Position + 2 <= fs.Length; i++) {
+                                short s = br.ReadInt16();
+                                if (s == short.MaxValue || s == short.MinValue) clipped = true;
+                                double v = Math.Abs((double)s / 32768.0);
+                                if (v > peak) peak = v;
+                                sumSq += v * v;
+                                samplesRead++;
+                            }
+                        } else if (bitsPerSample == 8) {
+                            for (int i = 0; i < samplesToScan && fs.Position < fs.Length; i++) {
+                                byte b = br.ReadByte();
+                                double v = Math.Abs(((double)b - 128.0) / 128.0);
+                                if (v > peak) peak = v;
+                                sumSq += v * v;
+                                samplesRead++;
+                            }
+                        }
+                    }
+
+                    double rms = samplesRead > 0 ? Math.Sqrt(sumSq / samplesRead) : 0.0;
+                    double peakDb = peak > 0.00001 ? Math.Round(20.0 * Math.Log10(peak), 1) : -96.0;
+                    double rmsDb = rms > 0.00001 ? Math.Round(20.0 * Math.Log10(rms), 1) : -96.0;
+                    bool isSilent = peakDb <= -60.0;
+
+                    Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                        "{{\"success\": true, \"filePath\": \"{0}\", \"format\": \"{1}\", \"formatTag\": {2}, \"channels\": {3}, \"sampleRate\": {4}, \"bitsPerSample\": {5}, \"byteRate\": {6}, \"blockAlign\": {7}, \"dataSize\": {8}, \"fileSize\": {9}, \"durationSeconds\": {10:F3}, \"peakDecibels\": {11:F1}, \"rmsDecibels\": {12:F1}, \"isSilent\": {13}, \"isClipped\": {14}}}",
+                        fullPath.Replace("\\", "/"), formatName, audioFormat, channels, sampleRate, bitsPerSample, byteRate, blockAlign, dataSize, fi.Length, durationSec, peakDb, rmsDb, isSilent ? "true" : "false", clipped ? "true" : "false"));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void AudioSequenceCmd(string sequenceInput) {
+            try {
+                if (string.IsNullOrEmpty(sequenceInput)) sequenceInput = "success";
+                string input = sequenceInput.Trim().ToLowerInvariant();
+
+                var notes = new List<KeyValuePair<int, int>>();
+
+                if (input == "success") {
+                    notes.Add(new KeyValuePair<int, int>(523, 100)); // C5
+                    notes.Add(new KeyValuePair<int, int>(659, 100)); // E5
+                    notes.Add(new KeyValuePair<int, int>(784, 100)); // G5
+                    notes.Add(new KeyValuePair<int, int>(1046, 250)); // C6
+                } else if (input == "alert") {
+                    notes.Add(new KeyValuePair<int, int>(880, 150));
+                    notes.Add(new KeyValuePair<int, int>(0, 50));
+                    notes.Add(new KeyValuePair<int, int>(880, 150));
+                    notes.Add(new KeyValuePair<int, int>(0, 50));
+                    notes.Add(new KeyValuePair<int, int>(880, 200));
+                } else if (input == "error") {
+                    notes.Add(new KeyValuePair<int, int>(330, 180));
+                    notes.Add(new KeyValuePair<int, int>(277, 180));
+                    notes.Add(new KeyValuePair<int, int>(220, 350));
+                } else if (input == "sonar") {
+                    notes.Add(new KeyValuePair<int, int>(1200, 120));
+                    notes.Add(new KeyValuePair<int, int>(1600, 200));
+                } else if (input == "chime") {
+                    notes.Add(new KeyValuePair<int, int>(587, 120));
+                    notes.Add(new KeyValuePair<int, int>(880, 150));
+                    notes.Add(new KeyValuePair<int, int>(1175, 300));
+                } else if (input == "ready") {
+                    notes.Add(new KeyValuePair<int, int>(440, 80));
+                    notes.Add(new KeyValuePair<int, int>(880, 150));
+                } else {
+                    string[] parts = sequenceInput.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var part in parts) {
+                        string[] tokens = part.Trim().Split(':');
+                        if (tokens.Length >= 1) {
+                            int f = ParseNoteFrequency(tokens[0]);
+                            int d = 150;
+                            if (tokens.Length >= 2) int.TryParse(tokens[1], out d);
+                            if (d < 10) d = 10;
+                            if (d > 3000) d = 3000;
+                            notes.Add(new KeyValuePair<int, int>(f, d));
+                        }
+                    }
+                }
+
+                int totalDuration = 0;
+                foreach (var n in notes) totalDuration += n.Value;
+
+                foreach (var n in notes) {
+                    if (n.Key <= 0) {
+                        Thread.Sleep(n.Value);
+                    } else {
+                        bool ok = Beep((uint)n.Key, (uint)n.Value);
+                        if (!ok) {
+                            MessageBeep(0);
+                            Thread.Sleep(n.Value);
+                        }
+                    }
+                }
+
+                Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{{\"success\": true, \"sequence\": \"{0}\", \"noteCount\": {1}, \"totalDurationMs\": {2}}}",
+                    EscapeJson(sequenceInput), notes.Count, totalDuration));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void AudioTtsWavCmd(string text, string outputPath, string voiceName, int rate, int volume) {
+            try {
+                if (string.IsNullOrEmpty(text)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Speech text is required\"}");
+                    return;
+                }
+                string outPath = Path.GetFullPath(string.IsNullOrEmpty(outputPath) ? "speech_output.wav" : outputPath);
+                string dir = Path.GetDirectoryName(outPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) Directory.CreateDirectory(dir);
+
+                Type voiceType = Type.GetTypeFromProgID("SAPI.SpVoice");
+                Type streamType = Type.GetTypeFromProgID("SAPI.SpFileStream");
+                if (voiceType == null || streamType == null) {
+                    Console.WriteLine("{\"success\": false, \"isHeadless\": true, \"error\": \"Windows SAPI subsystem not available\"}");
+                    return;
+                }
+
+                dynamic voice = Activator.CreateInstance(voiceType);
+                dynamic stream = Activator.CreateInstance(streamType);
+
+                if (!string.IsNullOrEmpty(voiceName)) {
+                    try {
+                        dynamic voices = voice.GetVoices();
+                        for (int i = 0; i < voices.Count; i++) {
+                            dynamic v = voices.Item(i);
+                            string desc = v.GetDescription();
+                            if (desc.IndexOf(voiceName, StringComparison.OrdinalIgnoreCase) >= 0) {
+                                voice.Voice = v;
+                                break;
+                            }
+                        }
+                    } catch {}
+                }
+
+                if (rate >= -10 && rate <= 10) voice.Rate = rate;
+                if (volume >= 0 && volume <= 100) voice.Volume = volume;
+
+                stream.Open(outPath, 3 /* SSFMCreateForWrite */, false);
+                voice.AudioOutputStream = stream;
+                voice.Speak(text);
+                stream.Close();
+
+                FileInfo fi = new FileInfo(outPath);
+                Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{{\"success\": true, \"path\": \"{0}\", \"fileSize\": {1}, \"text\": \"{2}\"}}",
+                    outPath.Replace("\\", "/"), fi.Length, EscapeJson(text)));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"isHeadless\": true, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void AudioDuckCmd(string target, float duckPercent, int durMs, float restorePercent) {
+            try {
+                if (string.IsNullOrEmpty(target)) target = "all";
+                if (duckPercent < 0f) duckPercent = 0f;
+                if (duckPercent > 100f) duckPercent = 100f;
+                if (durMs < 100) durMs = 100;
+                if (durMs > 60000) durMs = 60000;
+
+                var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+                IMMDevice defRender;
+                int hr = enumerator.GetDefaultAudioEndpoint(0, 1, out defRender);
+                if (hr != 0 || defRender == null) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"ducked\": false, \"isHeadless\": true, \"sessionsCount\": 0, \"error\": \"No default audio endpoint (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                Guid iidMgr = new Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F");
+                object objMgr;
+                hr = defRender.Activate(ref iidMgr, 1, IntPtr.Zero, out objMgr);
+                if (hr != 0 || objMgr == null) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"ducked\": false, \"isHeadless\": true, \"sessionsCount\": 0, \"error\": \"Failed to activate audio session manager (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                var mgr = (IAudioSessionManager2)objMgr;
+                IAudioSessionEnumerator sessionEnum;
+                hr = mgr.GetSessionEnumerator(out sessionEnum);
+                if (hr != 0 || sessionEnum == null) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"ducked\": false, \"isHeadless\": true, \"sessionsCount\": 0, \"error\": \"Failed to get session enumerator (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                int sCount;
+                sessionEnum.GetCount(out sCount);
+
+                uint targetPid = 0;
+                bool isNumeric = uint.TryParse(target, out targetPid);
+                bool duckAll = target.Equals("all", StringComparison.OrdinalIgnoreCase);
+
+                var duckedSessions = new List<string>();
+                var sessionsToRestore = new List<KeyValuePair<ISimpleAudioVolume, float>>();
+                Guid ctx = Guid.Empty;
+
+                for (int i = 0; i < sCount; i++) {
+                    IAudioSessionControl ctrl;
+                    if (sessionEnum.GetSession(i, out ctrl) == 0 && ctrl != null) {
+                        var ctrl2 = ctrl as IAudioSessionControl2;
+                        uint pid = 0;
+                        string procName = "System";
+                        if (ctrl2 != null) {
+                            ctrl2.GetProcessId(out pid);
+                            if (pid > 0) {
+                                try { procName = Process.GetProcessById((int)pid).ProcessName; } catch {}
+                            }
+                        }
+
+                        bool isMatch = duckAll;
+                        if (!duckAll) {
+                            if (isNumeric && (pid == targetPid || (targetPid < (uint)sCount && (uint)i == targetPid))) isMatch = true;
+                            else if (!string.IsNullOrEmpty(procName) && procName.IndexOf(target, StringComparison.OrdinalIgnoreCase) >= 0) isMatch = true;
+                        }
+
+                        if (isMatch) {
+                            var vol = ctrl as ISimpleAudioVolume;
+                            if (vol != null) {
+                                float origLevel = 1.0f;
+                                vol.GetMasterVolume(out origLevel);
+                                float duckScalar = duckPercent / 100.0f;
+                                vol.SetMasterVolume(duckScalar, ref ctx);
+                                sessionsToRestore.Add(new KeyValuePair<ISimpleAudioVolume, float>(vol, restorePercent >= 0f ? (restorePercent / 100.0f) : origLevel));
+                                duckedSessions.Add(procName);
+                            }
+                        }
+                    }
+                }
+
+                if (sessionsToRestore.Count > 0) {
+                    ThreadPool.QueueUserWorkItem((state) => {
+                        try {
+                            Thread.Sleep(durMs);
+                            Guid rCtx = Guid.Empty;
+                            foreach (var pair in sessionsToRestore) {
+                                try { pair.Key.SetMasterVolume(pair.Value, ref rCtx); } catch {}
+                            }
+                        } catch {}
+                    });
+
+                    Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                        "{{\"success\": true, \"ducked\": true, \"duckPercent\": {0:F1}, \"durationMs\": {1}, \"sessionsCount\": {2}, \"sessions\": \"{3}\"}}",
+                        duckPercent, durMs, duckedSessions.Count, EscapeJson(string.Join(", ", duckedSessions.ToArray()))));
+                } else {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"ducked\": false, \"isHeadless\": true, \"sessionsCount\": 0, \"message\": \"No active sessions matched '{0}'\"}}", EscapeJson(target)));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"isHeadless\": true, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void GetThermalVitalsCmd() {
             try {
                 int count = Environment.ProcessorCount;
@@ -4067,6 +4437,25 @@ namespace GeminiSuperDesktop {
                 int freq = args.Length >= 2 ? int.Parse(args[1]) : 880;
                 int dur = args.Length >= 3 ? int.Parse(args[2]) : 200;
                 AudioBeepCmd(freq, dur);
+            } else if (cmd == "audio_inspect" || cmd == "audioinspect" || cmd == "inspect_audio" || cmd == "inspect_wav") {
+                string filePath = args.Length >= 2 ? args[1] : "";
+                AudioInspectCmd(filePath);
+            } else if (cmd == "audio_sequence" || cmd == "audiosequence" || cmd == "melody" || cmd == "play_sequence") {
+                string seq = args.Length >= 2 ? args[1] : "success";
+                AudioSequenceCmd(seq);
+            } else if (cmd == "audio_tts_wav" || cmd == "audiottswav" || cmd == "tts_wav" || cmd == "speech_to_wav") {
+                string text = args.Length >= 2 ? args[1] : "";
+                string outPath = args.Length >= 3 ? args[2] : "speech_output.wav";
+                string voice = args.Length >= 4 ? args[3] : "";
+                int rate = args.Length >= 5 ? int.Parse(args[4]) : 0;
+                int vol = args.Length >= 6 ? int.Parse(args[5]) : 100;
+                AudioTtsWavCmd(text, outPath, voice, rate, vol);
+            } else if (cmd == "audio_duck" || cmd == "audioduck" || cmd == "duck_audio") {
+                string target = args.Length >= 2 ? args[1] : "all";
+                float duckPercent = args.Length >= 3 ? float.Parse(args[2]) : 20f;
+                int durMs = args.Length >= 4 ? int.Parse(args[3]) : 2500;
+                float restorePercent = args.Length >= 5 ? float.Parse(args[4]) : -1f;
+                AudioDuckCmd(target, duckPercent, durMs, restorePercent);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

@@ -508,7 +508,11 @@ Grants Gemini complete acoustic awareness, microphone perception, sound synthesi
 - **Granular Per-Process Volume & Mute Actuation (`ISimpleAudioVolume`)**: Programmatically ducks, adjusts, or mutes specific application volumes (e.g. lowering media players during voice calls or silencing noisy background tabs) by matching process name or PID.
 - **Native Sound Playback (`winmm.dll` `PlaySound`)**: Triggers asynchronous, non-blocking playback of WAV audio cues, chimes, or spoken feedback (`SND_ASYNC | SND_FILENAME | SND_PURGE`).
 - **Hardware/System Frequency Tone Synthesis (`kernel32.dll` `Beep` + `user32.dll` `MessageBeep`)**: Synthesizes exact pitch frequencies (Hz) and millisecond durations across hardware and virtual/RDP environments with automatic fallback.
-- **Native MCP Tools**: `super_audio_devices`, `super_audio_mic_listen`, `super_audio_mic_record_wav`, `super_audio_sessions`, `super_audio_session_set`, `super_audio_play`, `super_audio_beep`.
+- **WAV Audio File Format & Acoustic Inspection**: Low-level RIFF/WAVE header parser extracting audio formats (PCM, IEEE Float, Extensible), channel layouts, sample rates, bit depths, exact durations, peak decibels (dBFS), RMS power, silence ratios, and clipping telemetry.
+- **Melodic Tone Sequences & Acoustic Chimes**: Synthesizes multi-tone melodies, musical note strings (e.g. `C4:150,E4:150,G4:150,C5:300`), chords, or system acoustic presets (`success`, `alert`, `error`, `sonar`, `chime`, `ready`) without requiring external audio files.
+- **Broadcast Speech-to-WAV Rendering (Windows SAPI)**: Directly binds `SpVoice` to uncompressed `SpFileStream` PCM RIFF WAV outputs, generating offline speech files in milliseconds with zero acoustic bleed or speaker activation.
+- **Intelligent Audio Ducking & Smooth Mixer Fading**: Programmatically ducks background application audio sessions down to custom attenuation levels (e.g. 20%) for a hold duration before automatically restoring them, enabling clear speech output and voice capture.
+- **Native MCP Tools**: `super_audio_devices`, `super_audio_mic_listen`, `super_audio_mic_record_wav`, `super_audio_sessions`, `super_audio_session_set`, `super_audio_play`, `super_audio_beep`, `super_audio_inspect`, `super_audio_sequence`, `super_audio_tts_wav`, `super_audio_duck`.
 
 ---
 

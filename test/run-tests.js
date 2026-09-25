@@ -1507,10 +1507,101 @@ async function run() {
     assert.strictEqual(beepRes.durationMs, 50);
   });
 
-  it("All 80 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  await itAsync("renderSpeechToWav synthesizes text into a valid 16-bit PCM RIFF WAV audio file", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const testWavPath = path.resolve(__dirname, "temp_tts_test.wav");
+    if (fs.existsSync(testWavPath)) fs.unlinkSync(testWavPath);
+
+    const res = await kb.renderSpeechToWav({
+      text: "Unit test speech synthesis verification.",
+      outputPath: testWavPath
+    });
+
+    assert(res !== null && typeof res === "object");
+    if (res.success) {
+      assert(fs.existsSync(testWavPath));
+      assert(res.fileSize > 1000);
+      assert.strictEqual(typeof res.path, "string");
+    } else {
+      // In headless environments without SAPI voices
+      assert(res.isHeadless || Boolean(process.env.CI));
+    }
+  });
+
+  await itAsync("inspectAudioFile parses RIFF WAV header, channels, sample rate, and audio telemetry", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const testWavPath = path.resolve(__dirname, "temp_tts_test.wav");
+
+    if (fs.existsSync(testWavPath)) {
+      const inspectRes = await kb.inspectAudioFile({ filePath: testWavPath });
+      assert(inspectRes !== null && typeof inspectRes === "object");
+      assert.strictEqual(inspectRes.success, true);
+      assert.strictEqual(inspectRes.format, "PCM");
+      assert(inspectRes.sampleRate >= 8000);
+      assert(inspectRes.channels >= 1);
+      assert(inspectRes.durationSeconds > 0);
+      fs.unlinkSync(testWavPath);
+    } else {
+      // Create a minimal 44-byte test WAV to test parser
+      const sampleRate = 22050;
+      const numChannels = 1;
+      const bitsPerSample = 16;
+      const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+      const blockAlign = numChannels * (bitsPerSample / 8);
+      const dataSize = 1000;
+      const buffer = Buffer.alloc(44 + dataSize);
+
+      buffer.write("RIFF", 0);
+      buffer.writeUInt32LE(36 + dataSize, 4);
+      buffer.write("WAVE", 8);
+      buffer.write("fmt ", 12);
+      buffer.writeUInt32LE(16, 16);
+      buffer.writeUInt16LE(1, 20); // PCM
+      buffer.writeUInt16LE(numChannels, 22);
+      buffer.writeUInt32LE(sampleRate, 24);
+      buffer.writeUInt32LE(byteRate, 28);
+      buffer.writeUInt16LE(blockAlign, 32);
+      buffer.writeUInt16LE(bitsPerSample, 34);
+      buffer.write("data", 36);
+      buffer.writeUInt32LE(dataSize, 40);
+
+      fs.writeFileSync(testWavPath, buffer);
+      const inspectRes = await kb.inspectAudioFile({ filePath: testWavPath });
+      assert(inspectRes !== null && typeof inspectRes === "object");
+      assert.strictEqual(inspectRes.success, true);
+      assert.strictEqual(inspectRes.channels, 1);
+      assert.strictEqual(inspectRes.sampleRate, 22050);
+      fs.unlinkSync(testWavPath);
+    }
+  });
+
+  await itAsync("playAudioSequence plays structured musical sequence or preset with fallback", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const seqRes = await kb.playAudioSequence({ sequence: "C4:40,E4:40,G4:40" });
+
+    assert(seqRes !== null && typeof seqRes === "object");
+    assert.strictEqual(seqRes.success, true);
+    assert.strictEqual(seqRes.noteCount, 3);
+    assert(seqRes.totalDurationMs >= 100);
+  });
+
+  await itAsync("duckAudio attenuates active audio sessions with automated hold and restore", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const duckRes = await kb.duckAudio({ target: "all", duckPercent: 20, durationMs: 200 });
+
+    assert(duckRes !== null && typeof duckRes === "object");
+    assert.strictEqual(duckRes.success, true);
+    assert(typeof duckRes.sessionsCount === "number");
+  });
+
+  it("All 84 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 80);
+    assert.strictEqual(SYSTEM_TOOLS.length, 84);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -1524,6 +1615,10 @@ async function run() {
     assert(toolNames.includes("super_audio_session_set"));
     assert(toolNames.includes("super_audio_play"));
     assert(toolNames.includes("super_audio_beep"));
+    assert(toolNames.includes("super_audio_inspect"));
+    assert(toolNames.includes("super_audio_sequence"));
+    assert(toolNames.includes("super_audio_tts_wav"));
+    assert(toolNames.includes("super_audio_duck"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
