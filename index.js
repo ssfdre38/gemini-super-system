@@ -2257,6 +2257,40 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_system_architecture",
+        description: "Queries native system architecture, CPU topology, page size, address bounds, high-resolution precise file time, and Windows system directories via GetNativeSystemInfo / sysinfoapi.h.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_system_memory_status",
+        description: "Queries real-time physical, virtual, and commit memory status, memory load percentage, and available buffers via GlobalMemoryStatusEx / sysinfoapi.h.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_system_firmware_tables",
+        description: "Enumerates or inspects bare-metal system firmware tables (ACPI, SMBIOS/RSMB, raw firmware) via EnumSystemFirmwareTables and GetSystemFirmwareTable in kernel32.dll. Supports querying table signatures, OEM IDs, revisions, and raw table lengths.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            provider: {
+              type: "string",
+              enum: ["ACPI", "RSMB", "FIRM"],
+              description: "Firmware table provider. 'ACPI' for Advanced Configuration and Power Interface tables (default), 'RSMB' for raw SMBIOS tables, 'FIRM' for raw firmware."
+            },
+            table: {
+              type: "string",
+              description: "Optional 4-character table identifier (e.g. 'DBGP', 'FACP', 'APIC', 'HPET', 'MCFG', 'TPM2', 'BGRT'). When omitted, enumerates all table identifiers under the provider."
+            }
+          }
+        }
       }
 ];
 
@@ -4103,6 +4137,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [DWM Set Window Attribute ("${target}")]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_system_architecture") {
+    const res = await orch.getSystemArchitecture();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Native System Architecture]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_system_memory_status") {
+    const res = await orch.getSystemMemoryStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [System Memory Status]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_system_firmware_tables") {
+    const provider = args?.provider || "ACPI";
+    const table = args?.table || "";
+    const res = await orch.getSystemFirmwareTables({ provider, table });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [System Firmware Tables (${provider}${table ? " / " + table : ""})]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

@@ -2178,10 +2178,96 @@ async function run() {
     assert(nonExistent.error && nonExistent.error.includes("not found"));
   });
 
-  it("All 109 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n=======================================================");
+  console.log("   SUITE 29: Windows Native System Architecture & Firmware");
+  console.log("=======================================================\n");
+
+  await itAsync("KernelBridge.getSystemArchitecture queries CPU architecture, page size, and system paths", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getSystemArchitecture();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.processorArchitecture === "string");
+    assert(typeof res.architectureId === "number");
+    assert(typeof res.numberOfProcessors === "number");
+    assert(res.numberOfProcessors > 0);
+    assert(typeof res.pageSize === "number");
+    assert(res.pageSize > 0);
+    assert(typeof res.allocationGranularity === "number");
+    assert(typeof res.minimumApplicationAddress === "string");
+    assert(typeof res.maximumApplicationAddress === "string");
+    assert(typeof res.activeProcessorMask === "string");
+    assert(typeof res.processorLevel === "number");
+    assert(typeof res.processorRevision === "number");
+    assert(typeof res.productType === "number");
+    assert(typeof res.preciseFileTime === "number");
+    assert(typeof res.systemDirectory === "string");
+    assert(typeof res.windowsDirectory === "string");
+  });
+
+  await itAsync("KernelBridge.getSystemMemoryStatus queries physical, commit, and virtual memory metrics", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getSystemMemoryStatus();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.memoryLoadPercent === "number");
+    assert(res.memoryLoadPercent >= 0 && res.memoryLoadPercent <= 100);
+    assert(res.physical !== null && typeof res.physical === "object");
+    assert(typeof res.physical.totalMB === "number");
+    assert(typeof res.physical.availableMB === "number");
+    assert(typeof res.physical.usedMB === "number");
+    assert(typeof res.physical.totalGB === "number");
+    assert(typeof res.physical.availableGB === "number");
+    assert(res.commit !== null && typeof res.commit === "object");
+    assert(typeof res.commit.totalMB === "number");
+    assert(typeof res.commit.availableMB === "number");
+    assert(typeof res.commit.usedMB === "number");
+    assert(typeof res.commit.loadPercent === "number");
+    assert(res.virtual !== null && typeof res.virtual === "object");
+    assert(typeof res.virtual.totalGB === "number");
+    assert(typeof res.virtual.availableGB === "number");
+  });
+
+  await itAsync("KernelBridge.getSystemFirmwareTables enumerates and queries ACPI and SMBIOS tables", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    // 1. Enumerate ACPI tables
+    const acpiList = await kb.getSystemFirmwareTables({ provider: "ACPI" });
+    assert(acpiList !== null && typeof acpiList === "object");
+    assert.strictEqual(acpiList.success, true);
+    assert.strictEqual(acpiList.provider, "ACPI");
+    assert(Array.isArray(acpiList.tables));
+    assert(typeof acpiList.count === "number");
+
+    // 2. Query SMBIOS metadata
+    const rsmbRes = await kb.getSystemFirmwareTables({ provider: "RSMB" });
+    assert(rsmbRes !== null && typeof rsmbRes === "object");
+    assert.strictEqual(rsmbRes.success, true);
+    assert.strictEqual(rsmbRes.provider, "RSMB");
+    assert(typeof rsmbRes.smbiosVersion === "string");
+    assert(typeof rsmbRes.tableLength === "number");
+
+    // 3. Query specific ACPI table if any table exists
+    if (acpiList.tables.length > 0) {
+      const targetTable = acpiList.tables[0];
+      const tableDetail = await kb.getSystemFirmwareTables({ provider: "ACPI", table: targetTable });
+      assert(tableDetail !== null && typeof tableDetail === "object");
+      assert.strictEqual(tableDetail.success, true);
+      assert.strictEqual(tableDetail.table, targetTable);
+      assert(typeof tableDetail.length === "number");
+      assert(typeof tableDetail.revision === "number");
+    }
+  });
+
+  it("All 112 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 109);
+    assert.strictEqual(SYSTEM_TOOLS.length, 112);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -2224,6 +2310,9 @@ async function run() {
     assert(toolNames.includes("super_dwm_status"));
     assert(toolNames.includes("super_dwm_window_attributes"));
     assert(toolNames.includes("super_dwm_set_window_attribute"));
+    assert(toolNames.includes("super_system_architecture"));
+    assert(toolNames.includes("super_system_memory_status"));
+    assert(toolNames.includes("super_system_firmware_tables"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

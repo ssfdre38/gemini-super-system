@@ -893,6 +893,42 @@ namespace GeminiSuperDesktop {
         public static extern bool GlobalMemoryStatusEx(ref MEMORYSTATUSEX lpBuffer);
 
         [StructLayout(LayoutKind.Sequential)]
+        public struct SYSTEM_INFO {
+            public ushort wProcessorArchitecture;
+            public ushort wReserved;
+            public uint dwPageSize;
+            public IntPtr lpMinimumApplicationAddress;
+            public IntPtr lpMaximumApplicationAddress;
+            public IntPtr dwActiveProcessorMask;
+            public uint dwNumberOfProcessors;
+            public uint dwProcessorType;
+            public uint dwAllocationGranularity;
+            public ushort wProcessorLevel;
+            public ushort wProcessorRevision;
+        }
+
+        [DllImport("kernel32.dll")]
+        public static extern void GetNativeSystemInfo(out SYSTEM_INFO lpSystemInfo);
+
+        [DllImport("kernel32.dll")]
+        public static extern uint EnumSystemFirmwareTables(uint FirmwareTableProviderSignature, IntPtr pFirmwareTableEnumBuffer, uint BufferSize);
+
+        [DllImport("kernel32.dll")]
+        public static extern uint GetSystemFirmwareTable(uint FirmwareTableProviderSignature, uint FirmwareTableID, IntPtr pFirmwareTableBuffer, uint BufferSize);
+
+        [DllImport("kernel32.dll")]
+        public static extern void GetSystemTimePreciseAsFileTime(out long lpSystemTimeAsFileTime);
+
+        [DllImport("kernel32.dll")]
+        public static extern bool GetProductInfo(uint dwOSMajorVersion, uint dwOSMinorVersion, uint dwSpMajorVersion, uint dwSpMinorVersion, out uint pdwReturnedProductType);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+        public static extern uint GetSystemDirectory([Out] StringBuilder lpBuffer, uint uSize);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Auto)]
+        public static extern uint GetWindowsDirectory([Out] StringBuilder lpBuffer, uint uSize);
+
+        [StructLayout(LayoutKind.Sequential)]
         public struct SYSTEM_POWER_STATUS {
             public byte ACLineStatus;
             public byte BatteryFlag;
@@ -4525,6 +4561,186 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static void SystemArchitectureCmd() {
+            try {
+                SYSTEM_INFO si;
+                GetNativeSystemInfo(out si);
+
+                string archName = "UNKNOWN";
+                switch (si.wProcessorArchitecture) {
+                    case 0: archName = "x86"; break;
+                    case 5: archName = "ARM"; break;
+                    case 6: archName = "IA64"; break;
+                    case 9: archName = "x64"; break;
+                    case 12: archName = "ARM64"; break;
+                }
+
+                long preciseTime = 0;
+                try { GetSystemTimePreciseAsFileTime(out preciseTime); } catch {}
+
+                uint productType = 0;
+                try { GetProductInfo(10, 0, 0, 0, out productType); } catch {}
+
+                var sbSys = new StringBuilder(260);
+                try { GetSystemDirectory(sbSys, 260); } catch {}
+                var sbWin = new StringBuilder(260);
+                try { GetWindowsDirectory(sbWin, 260); } catch {}
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"processorArchitecture\": \"{0}\", \"architectureId\": {1}, \"numberOfProcessors\": {2}, \"pageSize\": {3}, \"allocationGranularity\": {4}, \"minimumApplicationAddress\": \"0x{5:X}\", \"maximumApplicationAddress\": \"0x{6:X}\", \"activeProcessorMask\": \"0x{7:X}\", \"processorLevel\": {8}, \"processorRevision\": {9}, \"productType\": {10}, \"preciseFileTime\": {11}, \"systemDirectory\": \"{12}\", \"windowsDirectory\": \"{13}\"}}",
+                    archName, si.wProcessorArchitecture, si.dwNumberOfProcessors, si.dwPageSize, si.dwAllocationGranularity,
+                    si.lpMinimumApplicationAddress.ToInt64(), si.lpMaximumApplicationAddress.ToInt64(),
+                    si.dwActiveProcessorMask.ToInt64(), si.wProcessorLevel, si.wProcessorRevision,
+                    productType, preciseTime,
+                    EscapeJson(sbSys.ToString()), EscapeJson(sbWin.ToString())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void SystemMemoryStatusCmd() {
+            try {
+                MEMORYSTATUSEX mem = new MEMORYSTATUSEX();
+                mem.dwLength = (uint)Marshal.SizeOf(typeof(MEMORYSTATUSEX));
+                if (!GlobalMemoryStatusEx(ref mem)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"GlobalMemoryStatusEx failed\"}");
+                    return;
+                }
+
+                double totPhysMB = Math.Round(mem.ullTotalPhys / (1024.0 * 1024.0), 1);
+                double availPhysMB = Math.Round(mem.ullAvailPhys / (1024.0 * 1024.0), 1);
+                double usedPhysMB = Math.Round((mem.ullTotalPhys - mem.ullAvailPhys) / (1024.0 * 1024.0), 1);
+                double totPhysGB = Math.Round(mem.ullTotalPhys / (1024.0 * 1024.0 * 1024.0), 2);
+                double availPhysGB = Math.Round(mem.ullAvailPhys / (1024.0 * 1024.0 * 1024.0), 2);
+
+                double totCommitMB = Math.Round(mem.ullTotalPageFile / (1024.0 * 1024.0), 1);
+                double availCommitMB = Math.Round(mem.ullAvailPageFile / (1024.0 * 1024.0), 1);
+                double usedCommitMB = Math.Round((mem.ullTotalPageFile - mem.ullAvailPageFile) / (1024.0 * 1024.0), 1);
+                double commitLoadPct = mem.ullTotalPageFile > 0 ? Math.Round((double)(mem.ullTotalPageFile - mem.ullAvailPageFile) / mem.ullTotalPageFile * 100.0, 1) : 0.0;
+
+                double totVirtGB = Math.Round(mem.ullTotalVirtual / (1024.0 * 1024.0 * 1024.0), 1);
+                double availVirtGB = Math.Round(mem.ullAvailVirtual / (1024.0 * 1024.0 * 1024.0), 1);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"memoryLoadPercent\": {0}, \"physical\": {{\"totalMB\": {1}, \"availableMB\": {2}, \"usedMB\": {3}, \"totalGB\": {4}, \"availableGB\": {5}}}, \"commit\": {{\"totalMB\": {6}, \"availableMB\": {7}, \"usedMB\": {8}, \"loadPercent\": {9}}}, \"virtual\": {{\"totalGB\": {10}, \"availableGB\": {11}}}}}",
+                    mem.dwMemoryLoad, totPhysMB, availPhysMB, usedPhysMB, totPhysGB, availPhysGB,
+                    totCommitMB, availCommitMB, usedCommitMB, commitLoadPct,
+                    totVirtGB, availVirtGB
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void SystemFirmwareTablesCmd(string provider, string targetTable) {
+            try {
+                string prov = string.IsNullOrEmpty(provider) ? "ACPI" : provider.Trim().ToUpperInvariant();
+                uint provSig = 0x41435049; // 'ACPI'
+                if (prov == "RSMB" || prov == "SMBIOS") {
+                    provSig = 0x52534D42; // 'RSMB'
+                } else if (prov == "FIRM" || prov == "BIOS") {
+                    provSig = 0x4649524D; // 'FIRM'
+                }
+
+                if (provSig == 0x52534D42) {
+                    uint rsmbSize = GetSystemFirmwareTable(provSig, 0, IntPtr.Zero, 0);
+                    if (rsmbSize < 8) {
+                        Console.WriteLine("{\"success\": false, \"error\": \"SMBIOS table not available\"}");
+                        return;
+                    }
+                    IntPtr pBuf = Marshal.AllocHGlobal((int)rsmbSize);
+                    try {
+                        uint fetched = GetSystemFirmwareTable(provSig, 0, pBuf, rsmbSize);
+                        byte[] data = new byte[fetched];
+                        Marshal.Copy(pBuf, data, 0, (int)fetched);
+
+                        byte major = data.Length > 1 ? data[1] : (byte)0;
+                        byte minor = data.Length > 2 ? data[2] : (byte)0;
+                        byte dmi = data.Length > 3 ? data[3] : (byte)0;
+                        uint len = data.Length >= 8 ? BitConverter.ToUInt32(data, 4) : 0;
+
+                        Console.WriteLine(string.Format(
+                            "{{\"success\": true, \"provider\": \"RSMB\", \"smbiosVersion\": \"{0}.{1}\", \"dmiRevision\": {2}, \"tableLength\": {3}, \"rawBufferBytes\": {4}}}",
+                            major, minor, dmi, len, fetched
+                        ));
+                    } finally {
+                        Marshal.FreeHGlobal(pBuf);
+                    }
+                    return;
+                }
+
+                uint size = EnumSystemFirmwareTables(provSig, IntPtr.Zero, 0);
+                if (size == 0) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"provider\": \"{0}\", \"count\": 0, \"tables\": []}}", prov));
+                    return;
+                }
+
+                IntPtr pEnum = Marshal.AllocHGlobal((int)size);
+                var tableList = new List<string>();
+                var tableMap = new Dictionary<string, uint>();
+                try {
+                    uint fetched = EnumSystemFirmwareTables(provSig, pEnum, size);
+                    byte[] bytes = new byte[fetched];
+                    Marshal.Copy(pEnum, bytes, 0, (int)fetched);
+                    for (int i = 0; i + 3 < bytes.Length; i += 4) {
+                        string name = Encoding.ASCII.GetString(bytes, i, 4);
+                        uint dwordId = BitConverter.ToUInt32(bytes, i);
+                        tableList.Add("\"" + EscapeJson(name) + "\"");
+                        if (!tableMap.ContainsKey(name)) {
+                            tableMap[name] = dwordId;
+                        }
+                    }
+                } finally {
+                    Marshal.FreeHGlobal(pEnum);
+                }
+
+                if (!string.IsNullOrEmpty(targetTable) && provSig == 0x41435049) {
+                    string tblName = targetTable.Trim().ToUpperInvariant();
+                    if (!tableMap.ContainsKey(tblName)) {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Table '{0}' not found in ACPI tables\"}}", EscapeJson(tblName)));
+                        return;
+                    }
+                    uint tableDword = tableMap[tblName];
+                    uint tSize = GetSystemFirmwareTable(provSig, tableDword, IntPtr.Zero, 0);
+                    if (tSize == 0) {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Unable to fetch ACPI table '{0}'\"}}", EscapeJson(tblName)));
+                        return;
+                    }
+
+                    IntPtr pTbl = Marshal.AllocHGlobal((int)tSize);
+                    try {
+                        uint got = GetSystemFirmwareTable(provSig, tableDword, pTbl, tSize);
+                        byte[] tData = new byte[got];
+                        Marshal.Copy(pTbl, tData, 0, (int)got);
+
+                        string sig = Encoding.ASCII.GetString(tData, 0, Math.Min(4, tData.Length));
+                        uint length = tData.Length >= 8 ? BitConverter.ToUInt32(tData, 4) : got;
+                        byte rev = tData.Length >= 9 ? tData[8] : (byte)0;
+                        string oemId = tData.Length >= 16 ? Encoding.ASCII.GetString(tData, 10, 6).Trim() : "";
+                        string oemTableId = tData.Length >= 24 ? Encoding.ASCII.GetString(tData, 16, 8).Trim() : "";
+                        uint oemRev = tData.Length >= 28 ? BitConverter.ToUInt32(tData, 24) : 0;
+                        string creatorId = tData.Length >= 32 ? Encoding.ASCII.GetString(tData, 28, 4).Trim() : "";
+
+                        Console.WriteLine(string.Format(
+                            "{{\"success\": true, \"provider\": \"{0}\", \"table\": \"{1}\", \"signature\": \"{2}\", \"length\": {3}, \"revision\": {4}, \"oemId\": \"{5}\", \"oemTableId\": \"{6}\", \"oemRevision\": {7}, \"creatorId\": \"{8}\"}}",
+                            prov, EscapeJson(tblName), EscapeJson(sig), length, rev, EscapeJson(oemId), EscapeJson(oemTableId), oemRev, EscapeJson(creatorId)
+                        ));
+                    } finally {
+                        Marshal.FreeHGlobal(pTbl);
+                    }
+                    return;
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"provider\": \"{0}\", \"count\": {1}, \"tables\": [{2}]}}",
+                    prov, tableMap.Count, string.Join(", ", tableList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void ClipboardGetCmd() {
             try {
                 string text = "";
@@ -7336,6 +7552,14 @@ namespace GeminiSuperDesktop {
                 string target = args.Length >= 2 ? args[1] : "active";
                 string jsonArgs = args.Length >= 3 ? args[2] : "{}";
                 DwmSetWindowAttributeCmd(target, jsonArgs);
+            } else if (cmd == "sys_arch" || cmd == "system_arch" || cmd == "system_architecture") {
+                SystemArchitectureCmd();
+            } else if (cmd == "sys_mem" || cmd == "system_memory" || cmd == "system_memory_status") {
+                SystemMemoryStatusCmd();
+            } else if (cmd == "sys_firmware" || cmd == "system_firmware" || cmd == "system_firmware_tables") {
+                string prov = args.Length >= 2 ? args[1] : "ACPI";
+                string table = args.Length >= 3 ? args[2] : "";
+                SystemFirmwareTablesCmd(prov, table);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

@@ -59,6 +59,7 @@
   - [41. Windows Restart Manager & File Lock Resolver Subsystem](#41--windows-restart-manager--file-lock-resolver-subsystem-rstrtmgrdll--restartmanagerh)
   - [42. Windows Management Instrumentation & Bare-Metal Hardware CIM Subsystem](#42--windows-management-instrumentation--bare-metal-hardware-cim-subsystem-wmi--wbemclih--wbemidlh--systemmanagement)
   - [43. Desktop Window Manager & Composition Subsystem](#43--desktop-window-manager--composition-subsystem-dwm--dwmapih--dwmapidll)
+  - [44. Windows Native System Architecture & Firmware Subsystem](#44--windows-native-system-architecture--firmware-subsystem-sysinfoapih--kernel32dll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -615,6 +616,17 @@ Directly interfaces with the Windows Desktop Window Manager (DWM) composition en
 - **Dynamic Window Aesthetics Actuator (`super_dwm_set_window_attribute`)**: Actuates window composition attributes on the fly via `DwmSetWindowAttribute`. Enables toggling immersive dark mode on title bars, configuring Windows 11 rounded corner policies (`default`, `do_not_round`, `round`, `round_small`), applying Mica or Acrylic materials, setting custom border and caption colors (`COLORREF`), and forcibly disabling animation transitions for maximum UI responsiveness.
 - **Milestone Expansion**: **109 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
 - **Native MCP Tools**: `super_dwm_status`, `super_dwm_window_attributes`, `super_dwm_set_window_attribute`.
+
+---
+
+## 44. 🧬 Windows Native System Architecture & Firmware Subsystem (`sysinfoapi.h` / `kernel32.dll`)
+
+Directly queries bare-metal CPU topology, memory status, and motherboard firmware tables via native Win32 `kernel32.dll` P/Invoke without external tools or WMI overhead:
+- **Native CPU & Architecture Perception (`super_system_architecture`)**: Directly calls `GetNativeSystemInfo`, `GetSystemTimePreciseAsFileTime`, `GetProductInfo`, and system directory queries. Extracts native processor architecture (`x64`, `ARM64`, `x86`, `ARM`), core and logical processor counts, hardware page size (`4096`), memory allocation granularity (`65536`), minimum and maximum application virtual address bounds, active processor bitmask, precise sub-microsecond system file time, and canonical Windows/System32 paths.
+- **Real-Time Memory & Commit Status (`super_system_memory_status`)**: Interfaces with `GlobalMemoryStatusEx` to report real-time physical RAM (total, available, used in MB/GB), total memory load percentage, commit charge limits and usage, and 64-bit virtual memory address space metrics.
+- **Bare-Metal ACPI & SMBIOS Firmware Parser (`super_system_firmware_tables`)**: Invokes `EnumSystemFirmwareTables` and `GetSystemFirmwareTable` to inspect bare-metal firmware. Enumerates all hardware ACPI tables (`DBGP`, `MCFG`, `FACP`, `APIC`, `DMAR`, `HPET`, `SSDT`, `TPM2`, `BGRT`, etc.) with table signature, length, OEM ID, and revision parsing, as well as raw SMBIOS (`'RSMB'`) structures (BIOS/DMI version and total byte length).
+- **Milestone Expansion**: **112 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
+- **Native MCP Tools**: `super_system_architecture`, `super_system_memory_status`, `super_system_firmware_tables`.
 
 ---
 
