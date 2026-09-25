@@ -2153,6 +2153,46 @@ const SYSTEM_TOOLS = [
           },
           required: ["sessionKey"]
         }
+      },
+      {
+        name: "super_wmi_query",
+        description: "Executes raw WQL (WMI Query Language) queries against any Windows WMI/CIM namespace (root\\cimv2, root\\wmi, root\\standardcimv2) directly via System.Management with sub-millisecond execution.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "WQL query string to execute (e.g. 'SELECT * FROM Win32_OperatingSystem', 'SELECT Caption, DeviceID FROM Win32_LogicalDisk')."
+            },
+            namespace: {
+              type: "string",
+              default: "root\\cimv2",
+              description: "Target WMI namespace (default: 'root\\cimv2')."
+            },
+            limit: {
+              type: "number",
+              default: 100,
+              description: "Maximum number of records to return (1-1000, default: 100)."
+            }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "super_wmi_hardware_spec",
+        description: "Retrieves a comprehensive bare-metal hardware passport via WMI/CIM, including motherboard/baseboard, BIOS version/date, CPU core architecture and cache sizes, physical RAM DIMM modules (capacities, clock speeds, part numbers), and video controllers.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_wmi_os_health",
+        description: "Queries deep Windows operating system installation metrics, total/free virtual and physical memory, pagefile allocation and peak usage, and startup command items via WMI/CIM.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
 ];
 
@@ -3921,6 +3961,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [Windows Restart Manager Restart (${sessionKey})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wmi_query") {
+    const query = args?.query || "";
+    const namespace = args?.namespace || "root\\cimv2";
+    const limit = typeof args?.limit === "number" ? args.limit : 100;
+    const res = await orch.queryWmi({ query, namespace, limit });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [WMI Query (${namespace}: ${res.count || 0} records)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wmi_hardware_spec") {
+    const res = await orch.getWmiHardwareSpec();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [WMI Bare-Metal Hardware Passport (${res.totalRamGB || 0}GB RAM, ${res.dimmCount || 0} DIMMs)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wmi_os_health") {
+    const res = await orch.getWmiOsHealth();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [WMI OS Health & Telemetry]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

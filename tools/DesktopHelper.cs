@@ -3906,6 +3906,296 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static string FormatWmiValue(object val) {
+            if (val == null) return "null";
+            if (val is bool) return ((bool)val) ? "true" : "false";
+            if (val is byte || val is sbyte || val is short || val is ushort || val is int || val is uint || val is long || val is ulong)
+                return val.ToString();
+            if (val is float || val is double || val is decimal) {
+                double d = Convert.ToDouble(val);
+                return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            if (val is Array) {
+                var arr = (Array)val;
+                var items = new List<string>();
+                foreach (var item in arr) items.Add(FormatWmiValue(item));
+                return "[" + string.Join(", ", items.ToArray()) + "]";
+            }
+            return "\"" + EscapeJson(val.ToString().Trim()) + "\"";
+        }
+
+        static string GetWmiString(ManagementObject mo, string prop) {
+            try {
+                if (mo == null) return "";
+                object val = mo[prop];
+                return val != null ? val.ToString().Trim() : "";
+            } catch {
+                return "";
+            }
+        }
+
+        static void WmiQueryCmd(string wqlQuery, string ns, int limit) {
+            try {
+                string query = (wqlQuery ?? "").Trim();
+                if (string.IsNullOrEmpty(query)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Query parameter is required\"}");
+                    return;
+                }
+                string targetNamespace = string.IsNullOrEmpty(ns) ? "root\\cimv2" : ns.Trim();
+                int maxRecords = limit > 0 ? Math.Min(limit, 1000) : 100;
+
+                ManagementScope scope = new ManagementScope(targetNamespace);
+                scope.Connect();
+
+                SelectQuery sQuery = new SelectQuery(query);
+                var records = new List<string>();
+
+                using (ManagementObjectSearcher searcher = new ManagementObjectSearcher(scope, sQuery))
+                using (ManagementObjectCollection collection = searcher.Get()) {
+                    int count = 0;
+                    foreach (ManagementObject mo in collection) {
+                        if (count >= maxRecords) break;
+                        var propList = new List<string>();
+                        foreach (PropertyData prop in mo.Properties) {
+                            try {
+                                propList.Add(string.Format("\"{0}\": {1}", EscapeJson(prop.Name), FormatWmiValue(prop.Value)));
+                            } catch {}
+                        }
+                        records.Add("{" + string.Join(", ", propList.ToArray()) + "}");
+                        count++;
+                    }
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"namespace\": \"{0}\", \"query\": \"{1}\", \"count\": {2}, \"records\": [{3}]}}",
+                    EscapeJson(targetNamespace),
+                    EscapeJson(query),
+                    records.Count,
+                    string.Join(", ", records.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WmiHardwareSpecCmd() {
+            try {
+                ManagementScope scope = new ManagementScope("root\\cimv2");
+                scope.Connect();
+
+                // 1. Motherboard / Baseboard
+                var baseboardList = new List<string>();
+                try {
+                    using (var s = new ManagementObjectSearcher(scope, new SelectQuery("SELECT Manufacturer, Product, SerialNumber, Version, Status FROM Win32_BaseBoard")))
+                    using (var col = s.Get()) {
+                        foreach (ManagementObject mo in col) {
+                            baseboardList.Add(string.Format(
+                                "{{\"manufacturer\": \"{0}\", \"product\": \"{1}\", \"serialNumber\": \"{2}\", \"version\": \"{3}\", \"status\": \"{4}\"}}",
+                                EscapeJson(GetWmiString(mo, "Manufacturer")),
+                                EscapeJson(GetWmiString(mo, "Product")),
+                                EscapeJson(GetWmiString(mo, "SerialNumber")),
+                                EscapeJson(GetWmiString(mo, "Version")),
+                                EscapeJson(GetWmiString(mo, "Status"))
+                            ));
+                        }
+                    }
+                } catch {}
+
+                // 2. BIOS
+                var biosList = new List<string>();
+                try {
+                    using (var s = new ManagementObjectSearcher(scope, new SelectQuery("SELECT Manufacturer, SMBIOSBIOSVersion, ReleaseDate, SerialNumber, Version FROM Win32_BIOS")))
+                    using (var col = s.Get()) {
+                        foreach (ManagementObject mo in col) {
+                            biosList.Add(string.Format(
+                                "{{\"manufacturer\": \"{0}\", \"smbiosVersion\": \"{1}\", \"releaseDate\": \"{2}\", \"serialNumber\": \"{3}\", \"version\": \"{4}\"}}",
+                                EscapeJson(GetWmiString(mo, "Manufacturer")),
+                                EscapeJson(GetWmiString(mo, "SMBIOSBIOSVersion")),
+                                EscapeJson(GetWmiString(mo, "ReleaseDate")),
+                                EscapeJson(GetWmiString(mo, "SerialNumber")),
+                                EscapeJson(GetWmiString(mo, "Version"))
+                            ));
+                        }
+                    }
+                } catch {}
+
+                // 3. Processors
+                var cpuList = new List<string>();
+                try {
+                    using (var s = new ManagementObjectSearcher(scope, new SelectQuery("SELECT Name, Manufacturer, NumberOfCores, NumberOfLogicalProcessors, MaxClockSpeed, L2CacheSize, L3CacheSize, Architecture, SocketDesignation FROM Win32_Processor")))
+                    using (var col = s.Get()) {
+                        foreach (ManagementObject mo in col) {
+                            cpuList.Add(string.Format(
+                                "{{\"name\": \"{0}\", \"manufacturer\": \"{1}\", \"cores\": {2}, \"logicalProcessors\": {3}, \"maxClockSpeedMHz\": {4}, \"l2CacheKB\": {5}, \"l3CacheKB\": {6}, \"socket\": \"{7}\"}}",
+                                EscapeJson(GetWmiString(mo, "Name")),
+                                EscapeJson(GetWmiString(mo, "Manufacturer")),
+                                mo["NumberOfCores"] != null ? mo["NumberOfCores"].ToString() : "0",
+                                mo["NumberOfLogicalProcessors"] != null ? mo["NumberOfLogicalProcessors"].ToString() : "0",
+                                mo["MaxClockSpeed"] != null ? mo["MaxClockSpeed"].ToString() : "0",
+                                mo["L2CacheSize"] != null ? mo["L2CacheSize"].ToString() : "0",
+                                mo["L3CacheSize"] != null ? mo["L3CacheSize"].ToString() : "0",
+                                EscapeJson(GetWmiString(mo, "SocketDesignation"))
+                            ));
+                        }
+                    }
+                } catch {}
+
+                // 4. Memory Modules (Physical RAM DIMMs)
+                var memList = new List<string>();
+                double totalRamBytes = 0;
+                try {
+                    using (var s = new ManagementObjectSearcher(scope, new SelectQuery("SELECT BankLabel, DeviceLocator, Capacity, Speed, ConfiguredClockSpeed, Manufacturer, PartNumber, FormFactor FROM Win32_PhysicalMemory")))
+                    using (var col = s.Get()) {
+                        foreach (ManagementObject mo in col) {
+                            ulong cap = 0;
+                            if (mo["Capacity"] != null) ulong.TryParse(mo["Capacity"].ToString(), out cap);
+                            totalRamBytes += cap;
+                            double capGB = Math.Round((double)cap / (1024.0 * 1024.0 * 1024.0), 2);
+
+                            memList.Add(string.Format(
+                                "{{\"bank\": \"{0}\", \"slot\": \"{1}\", \"capacityGB\": {2:F2}, \"speedMHz\": {3}, \"configuredSpeedMHz\": {4}, \"manufacturer\": \"{5}\", \"partNumber\": \"{6}\"}}",
+                                EscapeJson(GetWmiString(mo, "BankLabel")),
+                                EscapeJson(GetWmiString(mo, "DeviceLocator")),
+                                capGB,
+                                mo["Speed"] != null ? mo["Speed"].ToString() : "0",
+                                mo["ConfiguredClockSpeed"] != null ? mo["ConfiguredClockSpeed"].ToString() : "0",
+                                EscapeJson(GetWmiString(mo, "Manufacturer")),
+                                EscapeJson(GetWmiString(mo, "PartNumber"))
+                            ));
+                        }
+                    }
+                } catch {}
+
+                // 5. Video Controllers (GPUs)
+                var gpuList = new List<string>();
+                try {
+                    using (var s = new ManagementObjectSearcher(scope, new SelectQuery("SELECT Name, AdapterRAM, DriverVersion, VideoProcessor, CurrentHorizontalResolution, CurrentVerticalResolution, VideoModeDescription FROM Win32_VideoController")))
+                    using (var col = s.Get()) {
+                        foreach (ManagementObject mo in col) {
+                            ulong vramBytes = 0;
+                            if (mo["AdapterRAM"] != null) ulong.TryParse(mo["AdapterRAM"].ToString(), out vramBytes);
+                            double vramMB = Math.Round((double)vramBytes / (1024.0 * 1024.0), 1);
+
+                            gpuList.Add(string.Format(
+                                "{{\"name\": \"{0}\", \"vramMB\": {1:F1}, \"driverVersion\": \"{2}\", \"processor\": \"{3}\", \"resolution\": \"{4}x{5}\", \"mode\": \"{6}\"}}",
+                                EscapeJson(GetWmiString(mo, "Name")),
+                                vramMB,
+                                EscapeJson(GetWmiString(mo, "DriverVersion")),
+                                EscapeJson(GetWmiString(mo, "VideoProcessor")),
+                                mo["CurrentHorizontalResolution"] != null ? mo["CurrentHorizontalResolution"].ToString() : "0",
+                                mo["CurrentVerticalResolution"] != null ? mo["CurrentVerticalResolution"].ToString() : "0",
+                                EscapeJson(GetWmiString(mo, "VideoModeDescription"))
+                            ));
+                        }
+                    }
+                } catch {}
+
+                double totalRamGB = Math.Round(totalRamBytes / (1024.0 * 1024.0 * 1024.0), 2);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"totalRamGB\": {0:F2}, \"dimmCount\": {1}, \"baseboard\": [{2}], \"bios\": [{3}], \"processors\": [{4}], \"memoryModules\": [{5}], \"videoControllers\": [{6}]}}",
+                    totalRamGB,
+                    memList.Count,
+                    string.Join(", ", baseboardList.ToArray()),
+                    string.Join(", ", biosList.ToArray()),
+                    string.Join(", ", cpuList.ToArray()),
+                    string.Join(", ", memList.ToArray()),
+                    string.Join(", ", gpuList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WmiOsHealthCmd() {
+            try {
+                ManagementScope scope = new ManagementScope("root\\cimv2");
+                scope.Connect();
+
+                // 1. Operating System
+                var osList = new List<string>();
+                try {
+                    using (var s = new ManagementObjectSearcher(scope, new SelectQuery("SELECT Caption, Version, BuildNumber, OSArchitecture, InstallDate, LastBootUpTime, TotalVisibleMemorySize, FreePhysicalMemory, TotalVirtualMemorySize, FreeVirtualMemory, NumberOfProcesses FROM Win32_OperatingSystem")))
+                    using (var col = s.Get()) {
+                        foreach (ManagementObject mo in col) {
+                            ulong totVisKB = 0, freePhysKB = 0, totVirtKB = 0, freeVirtKB = 0;
+                            if (mo["TotalVisibleMemorySize"] != null) ulong.TryParse(mo["TotalVisibleMemorySize"].ToString(), out totVisKB);
+                            if (mo["FreePhysicalMemory"] != null) ulong.TryParse(mo["FreePhysicalMemory"].ToString(), out freePhysKB);
+                            if (mo["TotalVirtualMemorySize"] != null) ulong.TryParse(mo["TotalVirtualMemorySize"].ToString(), out totVirtKB);
+                            if (mo["FreeVirtualMemory"] != null) ulong.TryParse(mo["FreeVirtualMemory"].ToString(), out freeVirtKB);
+
+                            double totVisMB = Math.Round((double)totVisKB / 1024.0, 1);
+                            double freePhysMB = Math.Round((double)freePhysKB / 1024.0, 1);
+                            double totVirtMB = Math.Round((double)totVirtKB / 1024.0, 1);
+                            double freeVirtMB = Math.Round((double)freeVirtKB / 1024.0, 1);
+
+                            osList.Add(string.Format(
+                                "{{\"caption\": \"{0}\", \"version\": \"{1}\", \"buildNumber\": \"{2}\", \"architecture\": \"{3}\", \"installDate\": \"{4}\", \"lastBootUpTime\": \"{5}\", \"totalVisibleMemoryMB\": {6:F1}, \"freePhysicalMemoryMB\": {7:F1}, \"totalVirtualMemoryMB\": {8:F1}, \"freeVirtualMemoryMB\": {9:F1}, \"processCount\": {10}}}",
+                                EscapeJson(GetWmiString(mo, "Caption")),
+                                EscapeJson(GetWmiString(mo, "Version")),
+                                EscapeJson(GetWmiString(mo, "BuildNumber")),
+                                EscapeJson(GetWmiString(mo, "OSArchitecture")),
+                                EscapeJson(GetWmiString(mo, "InstallDate")),
+                                EscapeJson(GetWmiString(mo, "LastBootUpTime")),
+                                totVisMB, freePhysMB, totVirtMB, freeVirtMB,
+                                mo["NumberOfProcesses"] != null ? mo["NumberOfProcesses"].ToString() : "0"
+                            ));
+                        }
+                    }
+                } catch {}
+
+                // 2. Page File Usage
+                var pageFileList = new List<string>();
+                try {
+                    using (var s = new ManagementObjectSearcher(scope, new SelectQuery("SELECT Name, AllocatedBaseSize, CurrentUsage, PeakUsage FROM Win32_PageFileUsage")))
+                    using (var col = s.Get()) {
+                        foreach (ManagementObject mo in col) {
+                            uint allocMB = 0, curMB = 0, peakMB = 0;
+                            if (mo["AllocatedBaseSize"] != null) uint.TryParse(mo["AllocatedBaseSize"].ToString(), out allocMB);
+                            if (mo["CurrentUsage"] != null) uint.TryParse(mo["CurrentUsage"].ToString(), out curMB);
+                            if (mo["PeakUsage"] != null) uint.TryParse(mo["PeakUsage"].ToString(), out peakMB);
+                            double pct = allocMB > 0 ? Math.Round((double)curMB / allocMB * 100.0, 1) : 0.0;
+
+                            pageFileList.Add(string.Format(
+                                "{{\"name\": \"{0}\", \"allocatedMB\": {1}, \"currentUsageMB\": {2}, \"peakUsageMB\": {3}, \"percentUsed\": {4}}}",
+                                EscapeJson(GetWmiString(mo, "Name")),
+                                allocMB, curMB, peakMB,
+                                pct.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)
+                            ));
+                        }
+                    }
+                } catch {}
+
+                // 3. Startup Commands
+                var startupList = new List<string>();
+                try {
+                    using (var s = new ManagementObjectSearcher(scope, new SelectQuery("SELECT Name, Command, Location, User FROM Win32_StartupCommand")))
+                    using (var col = s.Get()) {
+                        int count = 0;
+                        foreach (ManagementObject mo in col) {
+                            if (count++ >= 50) break;
+                            startupList.Add(string.Format(
+                                "{{\"name\": \"{0}\", \"command\": \"{1}\", \"location\": \"{2}\", \"user\": \"{3}\"}}",
+                                EscapeJson(GetWmiString(mo, "Name")),
+                                EscapeJson(GetWmiString(mo, "Command")),
+                                EscapeJson(GetWmiString(mo, "Location")),
+                                EscapeJson(GetWmiString(mo, "User"))
+                            ));
+                        }
+                    }
+                } catch {}
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"operatingSystem\": [{0}], \"pageFiles\": [{1}], \"startupItems\": [{2}]}}",
+                    string.Join(", ", osList.ToArray()),
+                    string.Join(", ", pageFileList.ToArray()),
+                    string.Join(", ", startupList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void ClipboardGetCmd() {
             try {
                 string text = "";
@@ -6699,6 +6989,15 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "rm_restart" || cmd == "restart_manager_restart") {
                 string key = args.Length >= 2 ? args[1] : "";
                 RestartManagerRestartCmd(key);
+            } else if (cmd == "wmi_query" || cmd == "wmi" || cmd == "wql") {
+                string q = args.Length >= 2 ? args[1] : "";
+                string ns = args.Length >= 3 ? args[2] : "root\\cimv2";
+                int limit = args.Length >= 4 ? int.Parse(args[3]) : 100;
+                WmiQueryCmd(q, ns, limit);
+            } else if (cmd == "wmi_hardware" || cmd == "wmi_hardware_spec" || cmd == "hardware_spec") {
+                WmiHardwareSpecCmd();
+            } else if (cmd == "wmi_os_health" || cmd == "os_health" || cmd == "os_telemetry") {
+                WmiOsHealthCmd();
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

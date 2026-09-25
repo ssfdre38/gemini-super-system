@@ -57,6 +57,7 @@
   - [39. Windows Task Scheduler Subsystem](#39-️-windows-task-scheduler-subsystem-scheduleservice--itaskservice--taskschdh)
   - [40. Windows Certificate & Cryptographic Trust Store Subsystem](#40--windows-certificate--cryptographic-trust-store-subsystem-crypt32dll--wincrypth--x509store)
   - [41. Windows Restart Manager & File Lock Resolver Subsystem](#41--windows-restart-manager--file-lock-resolver-subsystem-rstrtmgrdll--restartmanagerh)
+  - [42. Windows Management Instrumentation & Bare-Metal Hardware CIM Subsystem](#42--windows-management-instrumentation--bare-metal-hardware-cim-subsystem-wmi--wbemclih--wbemidlh--systemmanagement)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -591,6 +592,17 @@ Directly manages the Windows Restart Manager API via native Win32 `rstrtmgr.dll`
 - **Stateful Application Restoration (`super_restart_manager_restart`)**: Joins the Restart Manager session via `RmJoinSession(sessionKey)` and invokes `RmRestart` to relaunch the shut-down processes and restore operational workflows seamlessly.
 - **Century-Plus Expansion**: **103 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
 - **Native MCP Tools**: `super_restart_manager_find_locks`, `super_restart_manager_shutdown`, `super_restart_manager_restart`.
+
+---
+
+## 42. 🖥️ Windows Management Instrumentation & Bare-Metal Hardware CIM Subsystem (`Wmi` / `wbemcli.h` / `wbemidl.h` / `System.Management`)
+
+Directly manages the Windows Management Instrumentation (WMI) Common Information Model (CIM) infrastructure via native .NET 4.0 `System.Management.dll` without spawning `wmic.exe` or PowerShell:
+- **Direct WQL Query Execution (`super_wmi_query`)**: Executes high-speed WQL queries against `root\cimv2` or any custom WMI namespace (`root\wmi`, `root\default`, `root\standardcimv2`) with optional projection property filtering and result limiting in sub-25ms.
+- **Bare-Metal Hardware Passport Telemetry (`super_wmi_hardware_spec`)**: Extracts comprehensive physical hardware telemetry in a single pass across `Win32_BaseBoard` (motherboard manufacturer, product, serial), `Win32_BIOS` (version, release date, SMBIOS version), `Win32_Processor` (name, physical cores, logical processors, socket, clock speed, L2/L3 cache sizes), `Win32_PhysicalMemory` (per-DIMM capacity, speed, form factor, locator, part number), and `Win32_VideoController` (GPU model, VRAM capacity, driver version, resolution).
+- **Deep Operating System & Virtual Memory Health (`super_wmi_os_health`)**: Telemetry across `Win32_OperatingSystem` (caption, build, kernel version, install date, last boot time, uptime seconds, free physical memory, total virtual memory, free virtual memory) and `Win32_PageFileUsage` (pagefile name, allocated size, current usage, peak usage).
+- **Milestone Expansion**: **106 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
+- **Native MCP Tools**: `super_wmi_query`, `super_wmi_hardware_spec`, `super_wmi_os_health`.
 
 ---
 

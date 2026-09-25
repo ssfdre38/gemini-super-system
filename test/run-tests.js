@@ -2057,10 +2057,61 @@ async function run() {
     }
   });
 
-  it("All 103 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("[Suite 27: Windows Management Instrumentation & CIM Query Subsystem]");
+
+  await itAsync("KernelBridge.queryWmi executes raw WQL query with projection and limit", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.queryWmi({ query: "SELECT Caption, Version FROM Win32_OperatingSystem", limit: 5 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.namespace, "root\\cimv2");
+    assert(typeof res.count === "number");
+    assert(Array.isArray(res.records));
+    assert(res.records.length > 0);
+    const rec0 = res.records[0];
+    assert(typeof rec0.Caption === "string");
+    assert(typeof rec0.Version === "string");
+  });
+
+  await itAsync("KernelBridge.getWmiHardwareSpec retrieves comprehensive hardware passport", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWmiHardwareSpec();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.totalRamGB === "number");
+    assert(typeof res.dimmCount === "number");
+    assert(Array.isArray(res.baseboard));
+    assert(Array.isArray(res.bios));
+    assert(Array.isArray(res.processors));
+    assert(res.processors.length > 0);
+    assert(typeof res.processors[0].cores === "number");
+    assert(res.processors[0].cores > 0);
+    assert(Array.isArray(res.memoryModules));
+    assert(Array.isArray(res.videoControllers));
+  });
+
+  await itAsync("KernelBridge.getWmiOsHealth retrieves OS telemetry and memory metrics", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWmiOsHealth();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(Array.isArray(res.operatingSystem));
+    assert(res.operatingSystem.length > 0);
+    assert(typeof res.operatingSystem[0].totalVisibleMemoryMB === "number");
+    assert(Array.isArray(res.pageFiles));
+    assert(Array.isArray(res.startupItems));
+  });
+
+  it("All 106 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 103);
+    assert.strictEqual(SYSTEM_TOOLS.length, 106);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -2097,6 +2148,9 @@ async function run() {
     assert(toolNames.includes("super_restart_manager_find_locks"));
     assert(toolNames.includes("super_restart_manager_shutdown"));
     assert(toolNames.includes("super_restart_manager_restart"));
+    assert(toolNames.includes("super_wmi_query"));
+    assert(toolNames.includes("super_wmi_hardware_spec"));
+    assert(toolNames.includes("super_wmi_os_health"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
