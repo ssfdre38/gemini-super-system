@@ -58,6 +58,7 @@
   - [40. Windows Certificate & Cryptographic Trust Store Subsystem](#40--windows-certificate--cryptographic-trust-store-subsystem-crypt32dll--wincrypth--x509store)
   - [41. Windows Restart Manager & File Lock Resolver Subsystem](#41--windows-restart-manager--file-lock-resolver-subsystem-rstrtmgrdll--restartmanagerh)
   - [42. Windows Management Instrumentation & Bare-Metal Hardware CIM Subsystem](#42--windows-management-instrumentation--bare-metal-hardware-cim-subsystem-wmi--wbemclih--wbemidlh--systemmanagement)
+  - [43. Desktop Window Manager & Composition Subsystem](#43--desktop-window-manager--composition-subsystem-dwm--dwmapih--dwmapidll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -603,6 +604,17 @@ Directly manages the Windows Management Instrumentation (WMI) Common Information
 - **Deep Operating System & Virtual Memory Health (`super_wmi_os_health`)**: Telemetry across `Win32_OperatingSystem` (caption, build, kernel version, install date, last boot time, uptime seconds, free physical memory, total virtual memory, free virtual memory) and `Win32_PageFileUsage` (pagefile name, allocated size, current usage, peak usage).
 - **Milestone Expansion**: **106 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
 - **Native MCP Tools**: `super_wmi_query`, `super_wmi_hardware_spec`, `super_wmi_os_health`.
+
+---
+
+## 43. 🪟 Desktop Window Manager & Composition Subsystem (`Dwm` / `dwmapi.h` / `dwmapi.dll`)
+
+Directly interfaces with the Windows Desktop Window Manager (DWM) composition engine via native `dwmapi.dll` P/Invoke for pixel-perfect frame perception and real-time visual actuation:
+- **Composition Engine & Vsync Telemetry (`super_dwm_status`)**: Real-time perception of DWM composition state, system accent colorization (`#RRGGBB` and ARGB channel breakdown), opaque/glass blend enablement, and compositor vsync flush latency (`DwmFlush`) in sub-1ms.
+- **Deep Frame & Visual Style Perception (`super_dwm_window_attributes`)**: Inspects any target window via `DwmGetWindowAttribute`. Discovers exact physical extended frame bounds (`DWMWA_EXTENDED_FRAME_BOUNDS`) excluding invisible drop shadows, true window client bounds, cloaked flags and reasons (`DWMWA_CLOAKED`: App, Shell, Inherited), immersive dark mode title bar state, corner rounding preference, system backdrop materials (Mica, Acrylic, Tabbed), caption/border colors, and visible border thickness.
+- **Dynamic Window Aesthetics Actuator (`super_dwm_set_window_attribute`)**: Actuates window composition attributes on the fly via `DwmSetWindowAttribute`. Enables toggling immersive dark mode on title bars, configuring Windows 11 rounded corner policies (`default`, `do_not_round`, `round`, `round_small`), applying Mica or Acrylic materials, setting custom border and caption colors (`COLORREF`), and forcibly disabling animation transitions for maximum UI responsiveness.
+- **Milestone Expansion**: **109 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
+- **Native MCP Tools**: `super_dwm_status`, `super_dwm_window_attributes`, `super_dwm_set_window_attribute`.
 
 ---
 

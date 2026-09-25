@@ -482,12 +482,51 @@ namespace GeminiSuperDesktop {
         [DllImport("dwmapi.dll")]
         public static extern int DwmGetWindowAttribute(IntPtr hwnd, uint dwAttribute, out RECT pvAttribute, int cbAttribute);
 
+        [DllImport("dwmapi.dll", EntryPoint = "DwmGetWindowAttribute")]
+        public static extern int DwmGetWindowAttributeUint(IntPtr hwnd, uint dwAttribute, out uint pvAttribute, int cbAttribute);
+
         [DllImport("dwmapi.dll")]
         public static extern int DwmGetColorizationColor(out uint pcrColorization, out bool pfOpaqueBlend);
 
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmIsCompositionEnabled(out bool pfEnabled);
+
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmFlush();
+
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmSetWindowAttribute(IntPtr hwnd, uint dwAttribute, ref int pvAttribute, int cbAttribute);
+
+        [DllImport("dwmapi.dll", EntryPoint = "DwmSetWindowAttribute")]
+        public static extern int DwmSetWindowAttributeColor(IntPtr hwnd, uint dwAttribute, ref uint pvAttribute, int cbAttribute);
+
+        const uint DWMWA_NCRENDERING_ENABLED = 1;
+        const uint DWMWA_NCRENDERING_POLICY = 2;
+        const uint DWMWA_TRANSITIONS_FORCEDISABLED = 3;
+        const uint DWMWA_ALLOW_NCPAINT = 4;
+        const uint DWMWA_CAPTION_BUTTON_BOUNDS = 5;
+        const uint DWMWA_NONCLIENT_RTL_LAYOUT = 6;
+        const uint DWMWA_FORCE_ICONIC_REPRESENTATION = 7;
+        const uint DWMWA_FLIP3D_POLICY = 8;
         const uint DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+        const uint DWMWA_HAS_ICONIC_BITMAP = 10;
+        const uint DWMWA_DISALLOW_PEEK = 11;
+        const uint DWMWA_EXCLUDED_FROM_PEEK = 12;
+        const uint DWMWA_CLOAK = 13;
         const uint DWMWA_CLOAKED = 14;
+        const uint DWMWA_FREEZE_REPRESENTATION = 15;
+        const uint DWMWA_PASSIVE_UPDATE_MODE = 16;
+        const uint DWMWA_USE_HOSTBACKDROPBRUSH = 17;
         const uint DWMWA_USE_IMMERSIVE_DARK_MODE = 20;
+        const uint DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+        const uint DWMWA_BORDER_COLOR = 34;
+        const uint DWMWA_CAPTION_COLOR = 35;
+        const uint DWMWA_TEXT_COLOR = 36;
+        const uint DWMWA_VISIBLE_FRAME_BORDER_THICKNESS = 37;
+        const uint DWMWA_SYSTEMBACKDROP_TYPE = 38;
+
+        const uint DWMWA_COLOR_DEFAULT = 0xFFFFFFFF;
+        const uint DWMWA_COLOR_NONE = 0xFFFFFFFE;
 
         [DllImport("user32.dll")]
         public static extern bool EnumDisplayMonitors(IntPtr hdc, IntPtr lprcClip, MonitorEnumProc lpfnEnum, IntPtr dwData);
@@ -4196,6 +4235,296 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static void DwmStatusCmd() {
+            try {
+                bool isComp = false;
+                int hrComp = DwmIsCompositionEnabled(out isComp);
+
+                uint colorization = 0;
+                bool opaqueBlend = false;
+                int hrColor = DwmGetColorizationColor(out colorization, out opaqueBlend);
+
+                uint alpha = (colorization >> 24) & 0xFF;
+                uint red = (colorization >> 16) & 0xFF;
+                uint green = (colorization >> 8) & 0xFF;
+                uint blue = colorization & 0xFF;
+                string hexColor = string.Format("#{0:X2}{1:X2}{2:X2}", red, green, blue);
+
+                var sw = Stopwatch.StartNew();
+                int hrFlush = DwmFlush();
+                sw.Stop();
+                double latencyMs = Math.Round(sw.Elapsed.TotalMilliseconds, 2);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"isCompositionEnabled\": {0}, \"colorizationColor\": {{\"raw\": \"0x{1:X8}\", \"hex\": \"{2}\", \"alpha\": {3}, \"red\": {4}, \"green\": {5}, \"blue\": {6}, \"opaqueBlend\": {7}}}, \"flush\": {{\"hr\": {8}, \"latencyMs\": {9}}}}}",
+                    isComp ? "true" : "false",
+                    colorization,
+                    hexColor,
+                    alpha, red, green, blue,
+                    opaqueBlend ? "true" : "false",
+                    hrFlush,
+                    latencyMs
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static string FormatDwmColor(uint col) {
+            if (col == DWMWA_COLOR_DEFAULT) return "\"default\"";
+            if (col == DWMWA_COLOR_NONE) return "\"none\"";
+            uint r = col & 0xFF;
+            uint g = (col >> 8) & 0xFF;
+            uint b = (col >> 16) & 0xFF;
+            return string.Format("\"#{0:X2}{1:X2}{2:X2}\"", r, g, b);
+        }
+
+        static bool ResolveHwnd(string query, out IntPtr targetHwnd, out string actualTitle) {
+            targetHwnd = IntPtr.Zero;
+            actualTitle = "";
+            IntPtr hDesk = EnsureInteractiveDesktop();
+
+            if (string.IsNullOrEmpty(query) || query.Equals("active", StringComparison.OrdinalIgnoreCase) || query.Equals("foreground", StringComparison.OrdinalIgnoreCase)) {
+                IntPtr hFore = GetForegroundWindow();
+                if (hFore != IntPtr.Zero) {
+                    targetHwnd = hFore;
+                    var sb = new StringBuilder(256);
+                    GetWindowText(hFore, sb, sb.Capacity);
+                    actualTitle = sb.ToString();
+                    return true;
+                }
+            }
+
+            if (query != null && query.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) {
+                try {
+                    long h = Convert.ToInt64(query, 16);
+                    targetHwnd = new IntPtr(h);
+                    var sb = new StringBuilder(256);
+                    GetWindowText(targetHwnd, sb, sb.Capacity);
+                    actualTitle = sb.ToString();
+                    return true;
+                } catch {}
+            }
+
+            return FindWindow(hDesk, query, out targetHwnd, out actualTitle);
+        }
+
+        static void DwmWindowAttributesCmd(string query) {
+            try {
+                IntPtr targetHwnd;
+                string actualTitle;
+                if (!ResolveHwnd(query, out targetHwnd, out actualTitle)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Window not found matching query\"}");
+                    return;
+                }
+
+                uint pid = 0;
+                GetWindowThreadProcessId(targetHwnd, out pid);
+                string procName = "";
+                try { procName = Process.GetProcessById((int)pid).ProcessName; } catch {}
+
+                RECT winRect;
+                GetWindowRect(targetHwnd, out winRect);
+
+                RECT frameRect = winRect;
+                RECT extRect;
+                if (DwmGetWindowAttribute(targetHwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out extRect, Marshal.SizeOf(typeof(RECT))) == 0) {
+                    frameRect = extRect;
+                }
+
+                int cloaked = 0;
+                try { DwmGetWindowAttribute(targetHwnd, DWMWA_CLOAKED, out cloaked, sizeof(int)); } catch {}
+
+                var cloakedReasons = new List<string>();
+                if ((cloaked & 1) != 0) cloakedReasons.Add("\"app\"");
+                if ((cloaked & 2) != 0) cloakedReasons.Add("\"shell\"");
+                if ((cloaked & 4) != 0) cloakedReasons.Add("\"inherited\"");
+
+                int ncRendering = 0;
+                try { DwmGetWindowAttribute(targetHwnd, DWMWA_NCRENDERING_ENABLED, out ncRendering, sizeof(int)); } catch {}
+
+                int darkMode = 0;
+                try { DwmGetWindowAttribute(targetHwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, out darkMode, sizeof(int)); } catch {}
+
+                int cornerPref = 0;
+                try { DwmGetWindowAttribute(targetHwnd, DWMWA_WINDOW_CORNER_PREFERENCE, out cornerPref, sizeof(int)); } catch {}
+                string cornerName = "default";
+                if (cornerPref == 1) cornerName = "do_not_round";
+                else if (cornerPref == 2) cornerName = "round";
+                else if (cornerPref == 3) cornerName = "round_small";
+
+                uint borderColor = DWMWA_COLOR_DEFAULT;
+                try { DwmGetWindowAttributeUint(targetHwnd, DWMWA_BORDER_COLOR, out borderColor, sizeof(uint)); } catch {}
+
+                uint captionColor = DWMWA_COLOR_DEFAULT;
+                try { DwmGetWindowAttributeUint(targetHwnd, DWMWA_CAPTION_COLOR, out captionColor, sizeof(uint)); } catch {}
+
+                uint textColor = DWMWA_COLOR_DEFAULT;
+                try { DwmGetWindowAttributeUint(targetHwnd, DWMWA_TEXT_COLOR, out textColor, sizeof(uint)); } catch {}
+
+                uint borderThickness = 0;
+                try { DwmGetWindowAttributeUint(targetHwnd, DWMWA_VISIBLE_FRAME_BORDER_THICKNESS, out borderThickness, sizeof(uint)); } catch {}
+
+                int backdropType = 0;
+                try { DwmGetWindowAttribute(targetHwnd, DWMWA_SYSTEMBACKDROP_TYPE, out backdropType, sizeof(int)); } catch {}
+                string backdropName = "auto";
+                if (backdropType == 1) backdropName = "none";
+                else if (backdropType == 2) backdropName = "mica";
+                else if (backdropType == 3) backdropName = "acrylic";
+                else if (backdropType == 4) backdropName = "tabbed";
+
+                int winW = winRect.Right - winRect.Left;
+                int winH = winRect.Bottom - winRect.Top;
+                int frameW = frameRect.Right - frameRect.Left;
+                int frameH = frameRect.Bottom - frameRect.Top;
+
+                int shadowLeft = frameRect.Left - winRect.Left;
+                int shadowTop = frameRect.Top - winRect.Top;
+                int shadowRight = winRect.Right - frameRect.Right;
+                int shadowBottom = winRect.Bottom - frameRect.Bottom;
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"hwnd\": \"0x{0:X}\", \"title\": \"{1}\", \"process\": \"{2}\", \"pid\": {3}, " +
+                    "\"extendedFrameBounds\": {{\"left\": {4}, \"top\": {5}, \"right\": {6}, \"bottom\": {7}, \"width\": {8}, \"height\": {9}}}, " +
+                    "\"windowRect\": {{\"left\": {10}, \"top\": {11}, \"right\": {12}, \"bottom\": {13}, \"width\": {14}, \"height\": {15}}}, " +
+                    "\"dropShadowMargin\": {{\"left\": {16}, \"top\": {17}, \"right\": {18}, \"bottom\": {19}}}, " +
+                    "\"cloaked\": {{\"isCloaked\": {20}, \"flags\": {21}, \"reasons\": [{22}]}}, " +
+                    "\"ncRenderingEnabled\": {23}, \"immersiveDarkMode\": {24}, \"cornerPreference\": \"{25}\", " +
+                    "\"backdropType\": \"{26}\", \"borderColor\": {27}, \"captionColor\": {28}, \"textColor\": {29}, " +
+                    "\"visibleBorderThickness\": {30}}}",
+                    targetHwnd.ToInt64(), EscapeJson(actualTitle), EscapeJson(procName), pid,
+                    frameRect.Left, frameRect.Top, frameRect.Right, frameRect.Bottom, frameW, frameH,
+                    winRect.Left, winRect.Top, winRect.Right, winRect.Bottom, winW, winH,
+                    shadowLeft, shadowTop, shadowRight, shadowBottom,
+                    cloaked != 0 ? "true" : "false", cloaked, string.Join(", ", cloakedReasons.ToArray()),
+                    ncRendering != 0 ? "true" : "false", darkMode != 0 ? "true" : "false", cornerName,
+                    backdropName, FormatDwmColor(borderColor), FormatDwmColor(captionColor), FormatDwmColor(textColor),
+                    borderThickness
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static uint ParseColorRef(string colorStr) {
+            if (string.IsNullOrEmpty(colorStr)) return DWMWA_COLOR_DEFAULT;
+            string s = colorStr.Trim().ToLowerInvariant();
+            if (s == "default" || s == "reset") return DWMWA_COLOR_DEFAULT;
+            if (s == "none") return DWMWA_COLOR_NONE;
+            if (s.StartsWith("#")) s = s.Substring(1);
+            if (s.Length == 6) {
+                uint r = Convert.ToByte(s.Substring(0, 2), 16);
+                uint g = Convert.ToByte(s.Substring(2, 2), 16);
+                uint b = Convert.ToByte(s.Substring(4, 2), 16);
+                return r | (g << 8) | (b << 16);
+            }
+            return DWMWA_COLOR_DEFAULT;
+        }
+
+        static string ExtractJsonValue(string json, string key) {
+            if (string.IsNullOrEmpty(json)) return null;
+            int idx = json.IndexOf(key, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) return null;
+            int colon = json.IndexOf(':', idx + key.Length);
+            if (colon < 0) return null;
+            string remainder = json.Substring(colon + 1).Trim();
+            if (remainder.StartsWith("\"")) {
+                int endQuote = remainder.IndexOf('\"', 1);
+                if (endQuote > 1) return remainder.Substring(1, endQuote - 1).Trim();
+            } else {
+                int endComma = remainder.IndexOfAny(new char[] { ',', '}', ' ', '\r', '\n' });
+                if (endComma >= 0) return remainder.Substring(0, endComma).Trim();
+                return remainder;
+            }
+            return null;
+        }
+
+        static void DwmSetWindowAttributeCmd(string query, string jsonArgs) {
+            try {
+                IntPtr targetHwnd;
+                string actualTitle;
+                if (!ResolveHwnd(query, out targetHwnd, out actualTitle)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Window not found matching query\"}");
+                    return;
+                }
+
+                var applied = new List<string>();
+                string args = jsonArgs ?? "";
+
+                // 1. Dark Mode
+                string darkStr = ExtractJsonValue(args, "immersiveDarkMode");
+                if (darkStr != null) {
+                    bool dark = darkStr.Equals("true", StringComparison.OrdinalIgnoreCase) || darkStr == "1";
+                    int val = dark ? 1 : 0;
+                    int hr = DwmSetWindowAttribute(targetHwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, ref val, sizeof(int));
+                    applied.Add(string.Format("{{\"attribute\": \"immersiveDarkMode\", \"value\": {0}, \"hr\": {1}, \"success\": {2}}}", val, hr, hr == 0 ? "true" : "false"));
+                }
+
+                // 2. Corner Preference
+                string cornerStr = ExtractJsonValue(args, "cornerPreference");
+                if (cornerStr != null) {
+                    int cornerVal = 0;
+                    if (cornerStr.Equals("do_not_round", StringComparison.OrdinalIgnoreCase) || cornerStr == "1") cornerVal = 1;
+                    else if (cornerStr.Equals("round_small", StringComparison.OrdinalIgnoreCase) || cornerStr == "3") cornerVal = 3;
+                    else if (cornerStr.Equals("round", StringComparison.OrdinalIgnoreCase) || cornerVal == 2) cornerVal = 2;
+                    int hr = DwmSetWindowAttribute(targetHwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref cornerVal, sizeof(int));
+                    applied.Add(string.Format("{{\"attribute\": \"cornerPreference\", \"value\": {0}, \"hr\": {1}, \"success\": {2}}}", cornerVal, hr, hr == 0 ? "true" : "false"));
+                }
+
+                // 3. System Backdrop Type (Mica / Acrylic)
+                string backdropStr = ExtractJsonValue(args, "backdropType");
+                if (backdropStr != null) {
+                    int backdropVal = 0;
+                    if (backdropStr.Equals("none", StringComparison.OrdinalIgnoreCase) || backdropStr == "1") backdropVal = 1;
+                    else if (backdropStr.Equals("mica", StringComparison.OrdinalIgnoreCase) || backdropStr.Equals("main_window", StringComparison.OrdinalIgnoreCase) || backdropStr == "2") backdropVal = 2;
+                    else if (backdropStr.Equals("acrylic", StringComparison.OrdinalIgnoreCase) || backdropStr.Equals("transient_window", StringComparison.OrdinalIgnoreCase) || backdropStr == "3") backdropVal = 3;
+                    else if (backdropStr.Equals("tabbed", StringComparison.OrdinalIgnoreCase) || backdropStr == "4") backdropVal = 4;
+                    int hr = DwmSetWindowAttribute(targetHwnd, DWMWA_SYSTEMBACKDROP_TYPE, ref backdropVal, sizeof(int));
+                    applied.Add(string.Format("{{\"attribute\": \"backdropType\", \"value\": {0}, \"hr\": {1}, \"success\": {2}}}", backdropVal, hr, hr == 0 ? "true" : "false"));
+                }
+
+                // 4. Border Color
+                string borderStr = ExtractJsonValue(args, "borderColor");
+                if (borderStr != null) {
+                    uint colorRef = ParseColorRef(borderStr);
+                    int hr = DwmSetWindowAttributeColor(targetHwnd, DWMWA_BORDER_COLOR, ref colorRef, sizeof(uint));
+                    applied.Add(string.Format("{{\"attribute\": \"borderColor\", \"color\": \"{0}\", \"hr\": {1}, \"success\": {2}}}", EscapeJson(borderStr), hr, hr == 0 ? "true" : "false"));
+                }
+
+                // 5. Caption Color
+                string captionStr = ExtractJsonValue(args, "captionColor");
+                if (captionStr != null) {
+                    uint colorRef = ParseColorRef(captionStr);
+                    int hr = DwmSetWindowAttributeColor(targetHwnd, DWMWA_CAPTION_COLOR, ref colorRef, sizeof(uint));
+                    applied.Add(string.Format("{{\"attribute\": \"captionColor\", \"color\": \"{0}\", \"hr\": {1}, \"success\": {2}}}", EscapeJson(captionStr), hr, hr == 0 ? "true" : "false"));
+                }
+
+                // 6. Text Color
+                string textStr = ExtractJsonValue(args, "textColor");
+                if (textStr != null) {
+                    uint colorRef = ParseColorRef(textStr);
+                    int hr = DwmSetWindowAttributeColor(targetHwnd, DWMWA_TEXT_COLOR, ref colorRef, sizeof(uint));
+                    applied.Add(string.Format("{{\"attribute\": \"textColor\", \"color\": \"{0}\", \"hr\": {1}, \"success\": {2}}}", EscapeJson(textStr), hr, hr == 0 ? "true" : "false"));
+                }
+
+                // 7. Transitions Forced Disabled
+                string transStr = ExtractJsonValue(args, "transitionsForcedDisabled");
+                if (transStr != null) {
+                    bool dis = transStr.Equals("true", StringComparison.OrdinalIgnoreCase) || transStr == "1";
+                    int val = dis ? 1 : 0;
+                    int hr = DwmSetWindowAttribute(targetHwnd, DWMWA_TRANSITIONS_FORCEDISABLED, ref val, sizeof(int));
+                    applied.Add(string.Format("{{\"attribute\": \"transitionsForcedDisabled\", \"value\": {0}, \"hr\": {1}, \"success\": {2}}}", val, hr, hr == 0 ? "true" : "false"));
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"hwnd\": \"0x{0:X}\", \"title\": \"{1}\", \"results\": [{2}]}}",
+                    targetHwnd.ToInt64(), EscapeJson(actualTitle), string.Join(", ", applied.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void ClipboardGetCmd() {
             try {
                 string text = "";
@@ -6998,6 +7327,15 @@ namespace GeminiSuperDesktop {
                 WmiHardwareSpecCmd();
             } else if (cmd == "wmi_os_health" || cmd == "os_health" || cmd == "os_telemetry") {
                 WmiOsHealthCmd();
+            } else if (cmd == "dwm_status" || cmd == "dwm") {
+                DwmStatusCmd();
+            } else if (cmd == "dwm_window" || cmd == "dwm_window_attributes" || cmd == "dwm_attributes") {
+                string target = args.Length >= 2 ? args[1] : "active";
+                DwmWindowAttributesCmd(target);
+            } else if (cmd == "dwm_set_window" || cmd == "dwm_set_attribute" || cmd == "dwm_actuate") {
+                string target = args.Length >= 2 ? args[1] : "active";
+                string jsonArgs = args.Length >= 3 ? args[2] : "{}";
+                DwmSetWindowAttributeCmd(target, jsonArgs);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

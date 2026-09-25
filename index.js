@@ -2193,6 +2193,70 @@ const SYSTEM_TOOLS = [
           type: "object",
           properties: {}
         }
+      },
+      {
+        name: "super_dwm_status",
+        description: "Queries Windows Desktop Window Manager (DWM) composition engine status, accent colorization (hex and ARGB channels), glass/opaque blend enablement, and compositor vsync flush latency via dwmapi.dll.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_dwm_window_attributes",
+        description: "Performs deep DWM inspection of any target window via dwmapi.dll (DwmGetWindowAttribute). Extracts exact physical extended frame bounds (excluding drop shadows), cloaked status and reasons (app, shell, inherited), immersive dark mode state, corner rounding preference, system backdrop material (Mica, Acrylic, Tabbed), caption/border colors, and visible border thickness.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            window: {
+              type: "string",
+              description: "Target window identifier: window handle ('0x1A2B' or decimal), window title query, process name, or 'active' (default)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_dwm_set_window_attribute",
+        description: "Actuates DWM window visual aesthetics and composition attributes via dwmapi.dll (DwmSetWindowAttribute). Allows toggling immersive dark mode titlebars, configuring rounded corner policy, applying Windows 11 Mica/Acrylic backdrops, setting custom border/caption/text colors, and forcibly disabling window animation transitions.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            window: {
+              type: "string",
+              description: "Target window identifier: window handle ('0x1A2B' or decimal), window title query, process name, or 'active' (default)."
+            },
+            immersiveDarkMode: {
+              type: "boolean",
+              description: "Enable (true) or disable (false) immersive dark mode on the window frame and caption."
+            },
+            cornerPreference: {
+              type: "string",
+              enum: ["default", "do_not_round", "round", "round_small"],
+              description: "Corner rounding preference for the top-level window."
+            },
+            backdropType: {
+              type: "string",
+              enum: ["auto", "none", "mica", "acrylic", "tabbed"],
+              description: "System backdrop material to render behind window non-client area."
+            },
+            borderColor: {
+              type: "string",
+              description: "Thin window border color as hex (e.g. '#00FF00', '#1E1E1E') or 'default'."
+            },
+            captionColor: {
+              type: "string",
+              description: "Window caption/title bar background color as hex or 'default'."
+            },
+            textColor: {
+              type: "string",
+              description: "Window title text color as hex or 'default'."
+            },
+            transitionsForcedDisabled: {
+              type: "boolean",
+              description: "Forcibly disable window animation transitions for instant responsiveness."
+            }
+          }
+        }
       }
 ];
 
@@ -4000,6 +4064,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [WMI OS Health & Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dwm_status") {
+    const res = await orch.getDwmStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Desktop Window Manager Status]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dwm_window_attributes") {
+    const target = args?.window || "active";
+    const res = await orch.getDwmWindowAttributes(target);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [DWM Window Attributes ("${target}")]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dwm_set_window_attribute") {
+    const target = args?.window || "active";
+    const { window, ...options } = args || {};
+    const res = await orch.setDwmWindowAttribute(target, options);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [DWM Set Window Attribute ("${target}")]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

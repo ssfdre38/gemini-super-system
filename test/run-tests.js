@@ -2108,10 +2108,80 @@ async function run() {
     assert(Array.isArray(res.startupItems));
   });
 
-  it("All 106 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("[Suite 28: Desktop Window Manager & Composition Subsystem]");
+
+  await itAsync("KernelBridge.getDwmStatus queries composition, colorization, and flush latency", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getDwmStatus();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.isCompositionEnabled === "boolean");
+    assert(res.colorizationColor !== null && typeof res.colorizationColor === "object");
+    assert(typeof res.colorizationColor.hex === "string");
+    assert(typeof res.colorizationColor.alpha === "number");
+    assert(typeof res.colorizationColor.red === "number");
+    assert(typeof res.colorizationColor.green === "number");
+    assert(typeof res.colorizationColor.blue === "number");
+    assert(typeof res.colorizationColor.opaqueBlend === "boolean");
+    assert(res.flush !== null && typeof res.flush === "object");
+    assert(typeof res.flush.latencyMs === "number");
+  });
+
+  await itAsync("KernelBridge.getDwmWindowAttributes inspects frame bounds, cloaked state, and styling", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getDwmWindowAttributes("active");
+
+    assert(res !== null && typeof res === "object");
+    if (!res.success) {
+      assert(
+        Boolean(process.env.CI) || res.error?.includes("No foreground window") || res.error?.includes("Window not found"),
+        `Unexpected DWM window failure: ${res.error}`
+      );
+    } else {
+      assert(typeof res.hwnd === "string");
+      assert(typeof res.title === "string");
+      assert(typeof res.extendedFrameBounds === "object");
+      assert(typeof res.extendedFrameBounds.width === "number");
+      assert(typeof res.extendedFrameBounds.height === "number");
+      assert(typeof res.cloaked === "object");
+      assert(typeof res.cloaked.isCloaked === "boolean");
+      assert(typeof res.ncRenderingEnabled === "boolean");
+      assert(typeof res.immersiveDarkMode === "boolean");
+      assert(typeof res.cornerPreference === "string");
+      assert(typeof res.backdropType === "string");
+    }
+  });
+
+  await itAsync("KernelBridge.setDwmWindowAttribute actuates window attributes and handles invalid targets gracefully", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    // 1. Actuate active window if available
+    const actRes = await kb.setDwmWindowAttribute("active", {
+      cornerPreference: "default",
+      transitionsForcedDisabled: false
+    });
+    assert(actRes !== null && typeof actRes === "object");
+    if (actRes.success) {
+      assert(Array.isArray(actRes.results));
+    }
+
+    // 2. Non-existent window handling
+    const nonExistent = await kb.setDwmWindowAttribute("NonExistentWindow_99999", {
+      cornerPreference: "round"
+    });
+    assert(nonExistent !== null && typeof nonExistent === "object");
+    assert.strictEqual(nonExistent.success, false);
+    assert(nonExistent.error && nonExistent.error.includes("not found"));
+  });
+
+  it("All 109 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 106);
+    assert.strictEqual(SYSTEM_TOOLS.length, 109);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -2151,6 +2221,9 @@ async function run() {
     assert(toolNames.includes("super_wmi_query"));
     assert(toolNames.includes("super_wmi_hardware_spec"));
     assert(toolNames.includes("super_wmi_os_health"));
+    assert(toolNames.includes("super_dwm_status"));
+    assert(toolNames.includes("super_dwm_window_attributes"));
+    assert(toolNames.includes("super_dwm_set_window_attribute"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
