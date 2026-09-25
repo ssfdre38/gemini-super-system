@@ -17,6 +17,7 @@ using System.Diagnostics.Eventing.Reader;
 using Microsoft.Win32;
 using System.IO.Pipes;
 using System.IO.MemoryMappedFiles;
+using System.Security.Cryptography.X509Certificates;
 
 namespace GeminiSuperDesktop {
     [StructLayout(LayoutKind.Sequential)]
@@ -3226,6 +3227,281 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static StoreName ParseStoreName(string s) {
+            string lower = (s ?? "my").Trim().ToLowerInvariant();
+            if (lower == "root") return StoreName.Root;
+            if (lower == "ca" || lower == "certificateauthority" || lower == "intermediate") return StoreName.CertificateAuthority;
+            if (lower == "authroot") return StoreName.AuthRoot;
+            if (lower == "trustedpublisher") return StoreName.TrustedPublisher;
+            if (lower == "addressbook" || lower == "people") return StoreName.AddressBook;
+            return StoreName.My;
+        }
+
+        static StoreLocation ParseStoreLocation(string s) {
+            string lower = (s ?? "localmachine").Trim().ToLowerInvariant();
+            if (lower == "currentuser" || lower == "user") return StoreLocation.CurrentUser;
+            return StoreLocation.LocalMachine;
+        }
+
+        static X509Certificate2 FindCertificateByThumbprint(string thumbprint, string storeNameStr, string storeLocationStr, out string foundStore, out string foundLocation) {
+            foundStore = "";
+            foundLocation = "";
+            if (string.IsNullOrEmpty(thumbprint)) return null;
+            string cleanThumb = (thumbprint ?? "").Replace(" ", "").Replace(":", "").Trim('"', '\'').ToUpperInvariant();
+
+            if (!string.IsNullOrEmpty(storeNameStr) && !string.IsNullOrEmpty(storeLocationStr)) {
+                StoreName sn = ParseStoreName(storeNameStr);
+                StoreLocation sl = ParseStoreLocation(storeLocationStr);
+                X509Store store = new X509Store(sn, sl);
+                try {
+                    store.Open(OpenFlags.ReadOnly);
+                    foreach (var c in store.Certificates) {
+                        if (c.Thumbprint.ToUpperInvariant() == cleanThumb) {
+                            foundStore = store.Name;
+                            foundLocation = store.Location.ToString();
+                            return c;
+                        }
+                    }
+                } catch {} finally {
+                    store.Close();
+                }
+                return null;
+            }
+
+            StoreLocation[] locs = new StoreLocation[] { StoreLocation.LocalMachine, StoreLocation.CurrentUser };
+            StoreName[] names = new StoreName[] { StoreName.My, StoreName.Root, StoreName.CertificateAuthority, StoreName.AuthRoot, StoreName.TrustedPublisher };
+
+            foreach (var l in locs) {
+                foreach (var n in names) {
+                    X509Store s = new X509Store(n, l);
+                    try {
+                        s.Open(OpenFlags.ReadOnly);
+                        foreach (var c in s.Certificates) {
+                            if (c.Thumbprint.ToUpperInvariant() == cleanThumb) {
+                                foundStore = s.Name;
+                                foundLocation = s.Location.ToString();
+                                return c;
+                            }
+                        }
+                    } catch {} finally {
+                        s.Close();
+                    }
+                }
+            }
+            return null;
+        }
+
+        static void CertificateStoreListCmd(string storeNameStr, string storeLocationStr, string searchFilter, int expiringDays, bool hasKeyOnly, int limit) {
+            try {
+                if (limit <= 0) limit = 50;
+                StoreName sn = ParseStoreName(storeNameStr);
+                StoreLocation sl = ParseStoreLocation(storeLocationStr);
+                string qFilter = (searchFilter ?? "").Trim().Trim('"', '\'').ToLowerInvariant();
+
+                X509Store store = new X509Store(sn, sl);
+                store.Open(OpenFlags.ReadOnly);
+
+                var list = new List<string>();
+                int totalMatched = 0;
+                DateTime nowUtc = DateTime.UtcNow;
+
+                try {
+                    foreach (X509Certificate2 c in store.Certificates) {
+                        try {
+                            string subject = c.Subject ?? "";
+                            string issuer = c.Issuer ?? "";
+                            string thumb = c.Thumbprint ?? "";
+                            bool hasKey = c.HasPrivateKey;
+
+                            if (hasKeyOnly && !hasKey) continue;
+
+                            DateTime notBefore = c.NotBefore;
+                            DateTime notAfter = c.NotAfter;
+                            bool isExpired = notAfter < nowUtc;
+                            int daysUntil = (int)Math.Round((notAfter - nowUtc).TotalDays);
+
+                            if (expiringDays > 0) {
+                                if (isExpired || daysUntil > expiringDays) continue;
+                            }
+
+                            if (!string.IsNullOrEmpty(qFilter)) {
+                                bool m = subject.ToLowerInvariant().Contains(qFilter) ||
+                                         issuer.ToLowerInvariant().Contains(qFilter) ||
+                                         thumb.ToLowerInvariant().Contains(qFilter);
+                                if (!m) continue;
+                            }
+
+                            totalMatched++;
+                            if (list.Count < limit) {
+                                string keyAlgo = "";
+                                try {
+                                    keyAlgo = c.PublicKey.Oid.FriendlyName ?? c.PublicKey.Oid.Value;
+                                    if (c.PublicKey.Key != null) {
+                                        keyAlgo += " (" + c.PublicKey.Key.KeySize + " bits)";
+                                    }
+                                } catch {}
+
+                                string sigAlgo = "";
+                                try { sigAlgo = c.SignatureAlgorithm.FriendlyName ?? c.SignatureAlgorithm.Value ?? ""; } catch {}
+
+                                list.Add(string.Format(
+                                    "{{\"subject\": \"{0}\", \"issuer\": \"{1}\", \"thumbprint\": \"{2}\", " +
+                                    "\"notBefore\": \"{3:o}\", \"notAfter\": \"{4:o}\", \"isExpired\": {5}, \"daysUntilExpiration\": {6}, " +
+                                    "\"hasPrivateKey\": {7}, \"keyAlgorithm\": \"{8}\", \"signatureAlgorithm\": \"{9}\"}}",
+                                    EscapeJson(subject), EscapeJson(issuer), EscapeJson(thumb),
+                                    notBefore, notAfter, isExpired ? "true" : "false", daysUntil,
+                                    hasKey ? "true" : "false", EscapeJson(keyAlgo), EscapeJson(sigAlgo)
+                                ));
+                            }
+                        } catch {}
+                    }
+                } finally {
+                    store.Close();
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"storeName\": \"{0}\", \"storeLocation\": \"{1}\", \"count\": {2}, \"totalMatched\": {3}, \"certificates\": [{4}]}}",
+                    sn.ToString(), sl.ToString(), list.Count, totalMatched, string.Join(", ", list.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void CertificateInfoCmd(string thumbprint, string storeNameStr, string storeLocationStr) {
+            try {
+                string foundStore, foundLocation;
+                X509Certificate2 c = FindCertificateByThumbprint(thumbprint, storeNameStr, storeLocationStr, out foundStore, out foundLocation);
+                if (c == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Certificate not found with thumbprint: {0}\"}}", EscapeJson(thumbprint ?? "")));
+                    return;
+                }
+
+                string subject = c.Subject ?? "";
+                string issuer = c.Issuer ?? "";
+                string thumb = c.Thumbprint ?? "";
+                string serial = c.SerialNumber ?? "";
+                int version = c.Version;
+                DateTime notBefore = c.NotBefore;
+                DateTime notAfter = c.NotAfter;
+                bool isExpired = notAfter < DateTime.UtcNow;
+                int daysUntil = (int)Math.Round((notAfter - DateTime.UtcNow).TotalDays);
+                bool hasKey = c.HasPrivateKey;
+
+                string keyAlgo = "";
+                int keySize = 0;
+                try {
+                    keyAlgo = c.PublicKey.Oid.FriendlyName ?? c.PublicKey.Oid.Value ?? "";
+                    if (c.PublicKey.Key != null) keySize = c.PublicKey.Key.KeySize;
+                } catch {}
+
+                string sigAlgo = "";
+                try { sigAlgo = c.SignatureAlgorithm.FriendlyName ?? c.SignatureAlgorithm.Value ?? ""; } catch {}
+
+                var ekus = new List<string>();
+                string san = "";
+                foreach (var ext in c.Extensions) {
+                    try {
+                        var ekuExt = ext as X509EnhancedKeyUsageExtension;
+                        if (ekuExt != null) {
+                            foreach (var oid in ekuExt.EnhancedKeyUsages) {
+                                ekus.Add(string.Format("\"{0} ({1})\"", EscapeJson(oid.FriendlyName ?? ""), EscapeJson(oid.Value ?? "")));
+                            }
+                        }
+                        if (ext.Oid.Value == "2.5.29.17") { // SAN
+                            san = ext.Format(false) ?? "";
+                        }
+                    } catch {}
+                }
+
+                bool chainValid = false;
+                int chainCount = 0;
+                var chainErrors = new List<string>();
+                try {
+                    X509Chain chain = new X509Chain();
+                    chainValid = chain.Build(c);
+                    chainCount = chain.ChainElements.Count;
+                    foreach (var s in chain.ChainStatus) {
+                        chainErrors.Add(string.Format("\"{0}: {1}\"", EscapeJson(s.Status.ToString()), EscapeJson(s.StatusInformation ?? "")));
+                    }
+                } catch {}
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"subject\": \"{0}\", \"issuer\": \"{1}\", \"thumbprint\": \"{2}\", \"serialNumber\": \"{3}\", " +
+                    "\"version\": {4}, \"storeName\": \"{5}\", \"storeLocation\": \"{6}\", \"notBefore\": \"{7:o}\", \"notAfter\": \"{8:o}\", " +
+                    "\"isExpired\": {9}, \"daysUntilExpiration\": {10}, \"hasPrivateKey\": {11}, " +
+                    "\"publicKey\": {{\"algorithm\": \"{12}\", \"keySize\": {13}}}, \"signatureAlgorithm\": \"{14}\", " +
+                    "\"enhancedKeyUsages\": [{15}], \"subjectAlternativeNames\": \"{16}\", " +
+                    "\"chain\": {{\"isValid\": {17}, \"elementsCount\": {18}, \"chainStatus\": [{19}]}}}}",
+                    EscapeJson(subject), EscapeJson(issuer), EscapeJson(thumb), EscapeJson(serial),
+                    version, EscapeJson(foundStore), EscapeJson(foundLocation), notBefore, notAfter,
+                    isExpired ? "true" : "false", daysUntil, hasKey ? "true" : "false",
+                    EscapeJson(keyAlgo), keySize, EscapeJson(sigAlgo),
+                    string.Join(", ", ekus.ToArray()), EscapeJson(san),
+                    chainValid ? "true" : "false", chainCount, string.Join(", ", chainErrors.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void CertificateExportCmd(string thumbprint, string format, string storeNameStr, string storeLocationStr) {
+            try {
+                string foundStore, foundLocation;
+                X509Certificate2 c = FindCertificateByThumbprint(thumbprint, storeNameStr, storeLocationStr, out foundStore, out foundLocation);
+                if (c == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Certificate not found with thumbprint: {0}\"}}", EscapeJson(thumbprint ?? "")));
+                    return;
+                }
+
+                string fmt = (format ?? "pem").Trim().ToLowerInvariant();
+                byte[] raw = c.Export(X509ContentType.Cert);
+                string b64 = Convert.ToBase64String(raw);
+
+                if (fmt == "base64") {
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"thumbprint\": \"{0}\", \"subject\": \"{1}\", \"format\": \"base64\", \"data\": \"{2}\"}}",
+                        EscapeJson(c.Thumbprint ?? ""), EscapeJson(c.Subject ?? ""), b64
+                    ));
+                    return;
+                }
+
+                StringBuilder sb = new StringBuilder();
+                sb.AppendLine("-----BEGIN CERTIFICATE-----");
+                for (int i = 0; i < b64.Length; i += 64) {
+                    sb.AppendLine(b64.Substring(i, Math.Min(64, b64.Length - i)));
+                }
+                sb.Append("-----END CERTIFICATE-----");
+                string pem = sb.ToString();
+
+                var chainList = new List<string>();
+                if (fmt == "chain") {
+                    try {
+                        X509Chain chain = new X509Chain();
+                        chain.Build(c);
+                        foreach (var el in chain.ChainElements) {
+                            byte[] elRaw = el.Certificate.Export(X509ContentType.Cert);
+                            string elB64 = Convert.ToBase64String(elRaw);
+                            StringBuilder elSb = new StringBuilder();
+                            elSb.AppendLine("-----BEGIN CERTIFICATE-----");
+                            for (int i = 0; i < elB64.Length; i += 64) {
+                                elSb.AppendLine(elB64.Substring(i, Math.Min(64, elB64.Length - i)));
+                            }
+                            elSb.Append("-----END CERTIFICATE-----");
+                            chainList.Add(string.Format("\"{0}\"", EscapeJson(elSb.ToString())));
+                        }
+                    } catch {}
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"thumbprint\": \"{0}\", \"subject\": \"{1}\", \"format\": \"{2}\", \"pem\": \"{3}\", \"chain\": [{4}]}}",
+                    EscapeJson(c.Thumbprint ?? ""), EscapeJson(c.Subject ?? ""), fmt, EscapeJson(pem), string.Join(", ", chainList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void ClipboardGetCmd() {
             try {
                 string text = "";
@@ -5986,6 +6262,25 @@ namespace GeminiSuperDesktop {
                 string act = args.Length >= 2 ? args[1] : "run";
                 string taskPath = args.Length >= 3 ? args[2] : "";
                 TaskSchedulerActionCmd(act, taskPath);
+            } else if (cmd == "cert_store_list" || cmd == "certificate_store" || cmd == "certs_list") {
+                string store = args.Length >= 2 ? args[1] : "My";
+                string loc = args.Length >= 3 ? args[2] : "LocalMachine";
+                string search = args.Length >= 4 ? args[3] : "";
+                int expDays = args.Length >= 5 ? int.Parse(args[4]) : 0;
+                bool hasKey = args.Length >= 6 && (args[5].ToLowerInvariant() == "true" || args[5] == "1");
+                int limit = args.Length >= 7 ? int.Parse(args[6]) : 50;
+                CertificateStoreListCmd(store, loc, search, expDays, hasKey, limit);
+            } else if (cmd == "cert_info" || cmd == "certificate_info") {
+                string thumb = args.Length >= 2 ? args[1] : "";
+                string store = args.Length >= 3 ? args[2] : "";
+                string loc = args.Length >= 4 ? args[3] : "";
+                CertificateInfoCmd(thumb, store, loc);
+            } else if (cmd == "cert_export" || cmd == "certificate_export") {
+                string thumb = args.Length >= 2 ? args[1] : "";
+                string fmt = args.Length >= 3 ? args[2] : "pem";
+                string store = args.Length >= 4 ? args[3] : "";
+                string loc = args.Length >= 5 ? args[4] : "";
+                CertificateExportCmd(thumb, fmt, store, loc);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

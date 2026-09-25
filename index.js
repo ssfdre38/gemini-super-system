@@ -2013,6 +2013,97 @@ const SYSTEM_TOOLS = [
           },
           required: ["action", "taskPath"]
         }
+      },
+      {
+        name: "super_certificate_store",
+        description: "Enumerates certificates across Windows Certificate Stores (LocalMachine / CurrentUser) via Crypt32.dll and X509Store, supporting filtering by store name, search query, expiration window, and private key presence.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            store: {
+              type: "string",
+              enum: ["My", "Root", "CertificateAuthority", "AuthRoot", "TrustedPublisher", "AddressBook"],
+              default: "My",
+              description: "Certificate store name: 'My' (Personal), 'Root' (Trusted Roots), 'CertificateAuthority' (Intermediate CAs), 'AuthRoot' (Third-Party Roots), 'TrustedPublisher', 'AddressBook' (default: 'My')."
+            },
+            location: {
+              type: "string",
+              enum: ["LocalMachine", "CurrentUser"],
+              default: "LocalMachine",
+              description: "Store location: 'LocalMachine' or 'CurrentUser' (default: 'LocalMachine')."
+            },
+            search: {
+              type: "string",
+              description: "Substring filter across certificate Subject, Issuer, or SHA-1 Thumbprint."
+            },
+            expiringDays: {
+              type: "number",
+              default: 0,
+              description: "If > 0, returns only certificates expiring within the specified number of days (default: 0 = all)."
+            },
+            hasPrivateKeyOnly: {
+              type: "boolean",
+              default: false,
+              description: "Filter only certificates that possess an accessible private key (e.g. active SSL/TLS server identities)."
+            },
+            limit: {
+              type: "number",
+              default: 50,
+              description: "Maximum certificates to return (default: 50)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_certificate_info",
+        description: "Inspects comprehensive X.509 certificate parameters via Crypt32.dll and X509Certificate2, including public key bit length and algorithm, Enhanced Key Usages (EKUs), Subject Alternative Names (SANs), serial number, and X.509 chain trust validation.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            thumbprint: {
+              type: "string",
+              description: "SHA-1 thumbprint of the target certificate."
+            },
+            store: {
+              type: "string",
+              description: "Optional certificate store hint (e.g. 'My', 'Root', 'CertificateAuthority')."
+            },
+            location: {
+              type: "string",
+              enum: ["LocalMachine", "CurrentUser"],
+              description: "Optional store location hint ('LocalMachine' or 'CurrentUser')."
+            }
+          },
+          required: ["thumbprint"]
+        }
+      },
+      {
+        name: "super_certificate_export",
+        description: "Exports an X.509 certificate or its complete trust chain in standard RFC 7468 PEM or Base64 format via Crypt32.dll for secure communication and client trust bootstrap.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            thumbprint: {
+              type: "string",
+              description: "SHA-1 thumbprint of the target certificate to export."
+            },
+            format: {
+              type: "string",
+              enum: ["pem", "base64", "chain"],
+              default: "pem",
+              description: "Export format: 'pem' (standard ASCII PEM block), 'base64' (raw DER Base64), or 'chain' (array of PEM certificates up to root). Default: 'pem'."
+            },
+            store: {
+              type: "string",
+              description: "Optional store hint."
+            },
+            location: {
+              type: "string",
+              description: "Optional store location hint."
+            }
+          },
+          required: ["thumbprint"]
+        }
       }
 ];
 
@@ -3692,6 +3783,55 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [Windows Task Scheduler Action (${action}: ${taskPath})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_certificate_store") {
+    const store = args?.store || "My";
+    const location = args?.location || "LocalMachine";
+    const search = args?.search || "";
+    const expiringDays = args?.expiringDays || 0;
+    const hasPrivateKeyOnly = Boolean(args?.hasPrivateKeyOnly);
+    const limit = args?.limit || 50;
+    const res = await orch.listCertificates({ store, location, search, expiringDays, hasKeyOnly: hasPrivateKeyOnly, limit });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Certificate Store (${location}\\${store}, Matched: ${res.totalMatched || res.count || 0})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_certificate_info") {
+    const thumbprint = args?.thumbprint || "";
+    const store = args?.store || "";
+    const location = args?.location || "";
+    const res = await orch.getCertificateInfo({ thumbprint, store, location });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Certificate Info (${thumbprint})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_certificate_export") {
+    const thumbprint = args?.thumbprint || "";
+    const format = args?.format || "pem";
+    const store = args?.store || "";
+    const location = args?.location || "";
+    const res = await orch.exportCertificate({ thumbprint, format, store, location });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Certificate Export (${format}: ${thumbprint})]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

@@ -1914,10 +1914,89 @@ async function run() {
     assert(act0.path.toLowerCase().includes("defrag.exe"));
   });
 
-  it("All 97 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 25: Windows Certificate & Cryptographic Trust Store Subsystem (Crypt32.dll / X509Store)
+  console.log("\x1b[1m[Suite 25: Windows Certificate & Cryptographic Trust Store Subsystem]\x1b[0m");
+
+  await itAsync("KernelBridge.listCertificates enumerates Root and My certificates", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.listCertificates({ store: "Root", location: "LocalMachine", limit: 5 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.storeName, "Root");
+    assert.strictEqual(res.storeLocation, "LocalMachine");
+    assert(typeof res.totalMatched === "number");
+    assert(res.totalMatched > 0);
+    assert(Array.isArray(res.certificates));
+    assert(res.certificates.length > 0 && res.certificates.length <= 5);
+
+    const c0 = res.certificates[0];
+    assert(typeof c0.thumbprint === "string" && c0.thumbprint.length >= 32);
+    assert(typeof c0.subject === "string" && c0.subject.length > 0);
+    assert(typeof c0.issuer === "string" && c0.issuer.length > 0);
+    assert(typeof c0.notBefore === "string");
+    assert(typeof c0.notAfter === "string");
+    assert(typeof c0.hasPrivateKey === "boolean");
+  });
+
+  await itAsync("KernelBridge.getCertificateInfo inspects detailed X.509 parameters, EKUs, and SANs", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    // First list Root to get a known thumbprint
+    const listRes = await kb.listCertificates({ store: "Root", location: "LocalMachine", limit: 1 });
+    assert(listRes.success && listRes.certificates.length > 0);
+    const targetThumbprint = listRes.certificates[0].thumbprint;
+
+    const info = await kb.getCertificateInfo({
+      thumbprint: targetThumbprint,
+      store: "Root",
+      location: "LocalMachine"
+    });
+
+    assert(info !== null && typeof info === "object");
+    assert.strictEqual(info.success, true);
+    assert.strictEqual(info.thumbprint.toUpperCase(), targetThumbprint.toUpperCase());
+    assert(typeof info.subject === "string");
+    assert(typeof info.issuer === "string");
+    assert(typeof info.serialNumber === "string");
+    assert(typeof info.signatureAlgorithm === "string");
+    assert(typeof info.publicKey === "object");
+    assert(typeof info.publicKey.keySize === "number");
+    assert(typeof info.hasPrivateKey === "boolean");
+    assert(Array.isArray(info.enhancedKeyUsages));
+    assert(typeof info.subjectAlternativeNames === "string");
+    assert(typeof info.chain === "object");
+    assert(typeof info.chain.isValid === "boolean");
+    assert(typeof info.chain.elementsCount === "number");
+  });
+
+  await itAsync("KernelBridge.exportCertificate exports valid RFC 7468 PEM block", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const listRes = await kb.listCertificates({ store: "Root", location: "LocalMachine", limit: 1 });
+    assert(listRes.success && listRes.certificates.length > 0);
+    const targetThumbprint = listRes.certificates[0].thumbprint;
+
+    const exp = await kb.exportCertificate({
+      thumbprint: targetThumbprint,
+      store: "Root",
+      location: "LocalMachine"
+    });
+
+    assert(exp !== null && typeof exp === "object");
+    assert.strictEqual(exp.success, true);
+    assert.strictEqual(exp.thumbprint.toUpperCase(), targetThumbprint.toUpperCase());
+    assert.strictEqual(exp.format.toLowerCase(), "pem");
+    assert(typeof exp.pem === "string");
+    assert(exp.pem.startsWith("-----BEGIN CERTIFICATE-----"));
+    assert(exp.pem.includes("-----END CERTIFICATE-----"));
+  });
+
+  it("All 100 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 97);
+    assert.strictEqual(SYSTEM_TOOLS.length, 100);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -1948,6 +2027,9 @@ async function run() {
     assert(toolNames.includes("super_task_scheduler_list"));
     assert(toolNames.includes("super_task_scheduler_info"));
     assert(toolNames.includes("super_task_scheduler_action"));
+    assert(toolNames.includes("super_certificate_store"));
+    assert(toolNames.includes("super_certificate_info"));
+    assert(toolNames.includes("super_certificate_export"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

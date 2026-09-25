@@ -55,6 +55,7 @@
   - [37. High-Speed Windows NT IPC — Named Pipes & Shared Memory](#37--high-speed-windows-nt-ipc--named-pipes--memory-mapped-shared-memory-systemiopipes--systemiomemorymappedfiles)
   - [38. Windows Advanced Firewall & Network Filtering Subsystem](#38-️-windows-advanced-firewall--network-filtering-subsystem-inetfwpolicy2--inetfwrule)
   - [39. Windows Task Scheduler Subsystem](#39-️-windows-task-scheduler-subsystem-scheduleservice--itaskservice--taskschdh)
+  - [40. Windows Certificate & Cryptographic Trust Store Subsystem](#40--windows-certificate--cryptographic-trust-store-subsystem-crypt32dll--wincrypth--x509store)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -567,6 +568,17 @@ Directly manages the Windows Task Scheduler engine via native COM dynamic dispat
 - **Deep Definition & Security Telemetry (`super_task_scheduler_info`)**: Inspects complete task definitions via `ITaskDefinition`—including registration metadata (author, description, URI), security principals (`UserId`, `RunLevel`, `LogonType`), power/battery execution constraints, launch triggers (`boot`, `logon`, `time`, `daily`, `event`), and execution actions.
 - **Lifecycle & Execution Actuation (`super_task_scheduler_action`)**: Runs scheduled tasks on demand (`IRegisteredTask::Run`), stops active instances (`Stop`), toggles schedules (`Enabled = true/false`), and deletes obsolete tasks (`DeleteTask`) directly through native Win32 COM.
 - **Native MCP Tools**: `super_task_scheduler_list`, `super_task_scheduler_info`, `super_task_scheduler_action`.
+
+---
+
+## 40. 📜 Windows Certificate & Cryptographic Trust Store Subsystem (`Crypt32.dll` / `wincrypt.h` / `X509Store`)
+
+Directly manages the Windows Cryptographic Certificate Stores and public-key infrastructure (PKI) via native `Crypt32.dll` / `System.Security.Cryptography.X509Certificates` without spawning `certutil.exe` or PowerShell:
+- **Comprehensive Trust Store Enumeration (`super_certificate_store`)**: Discovers and inspects certificates across both `LocalMachine` and `CurrentUser` contexts and standard stores (`Root`, `My`, `CertificateAuthority`, `AuthRoot`, `AddressBook`, `TrustedPublisher`, `Disallowed`). Supports filtering by subject query, thumbprint, issuer, or validity window (`validOnly`).
+- **Deep Cryptographic X.509 Telemetry (`super_certificate_info`)**: Analyzes full certificate anatomy including SHA-1/SHA-256 thumbprints, serial numbers, public key algorithms and sizes (RSA, ECDSA), signature algorithms, private key accessibility (`hasPrivateKey`), Enhanced Key Usages (EKUs such as Server Authentication, Client Authentication, Code Signing), Subject Alternative Names (SANs/DNS/IP), and executes local `X509Chain` trust validation with detailed status flags.
+- **Standards-Compliant RFC 7468 PEM & DER Export (`super_certificate_export`)**: Exports certificates in standardized RFC 7468 PEM format (`-----BEGIN CERTIFICATE-----...-----END CERTIFICATE-----`) and raw Base64 DER encoding for instant integration with TLS WebSockets, mTLS tunnels, HTTPS servers, and local inference API clients.
+- **Century Milestone**: Reaches exactly **100 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
+- **Native MCP Tools**: `super_certificate_store`, `super_certificate_info`, `super_certificate_export`.
 
 ---
 
