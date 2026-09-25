@@ -1598,10 +1598,91 @@ async function run() {
     assert(typeof duckRes.sessionsCount === "number");
   });
 
-  it("All 84 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 20: Windows NT Services, Event Log & Registry Subsystem
+  console.log("\n\x1b[1m[Suite 20: Windows NT Services, Event Log & Registry Subsystem]\x1b[0m");
+
+  await itAsync("manageService enumerates installed services and inspects service status", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const listRes = await kb.manageService({ action: "list", statusFilter: "running" });
+
+    assert(listRes !== null && typeof listRes === "object");
+    assert.strictEqual(listRes.success, true);
+    assert(Array.isArray(listRes.services));
+    assert(listRes.services.length > 0);
+
+    const s0 = listRes.services[0];
+    assert.strictEqual(typeof s0.name, "string");
+    assert.strictEqual(typeof s0.displayName, "string");
+    assert.strictEqual(s0.status, "Running");
+
+    const statusRes = await kb.manageService({ action: "status", name: s0.name });
+    assert(statusRes !== null && typeof statusRes === "object");
+    assert.strictEqual(statusRes.success, true);
+    assert.strictEqual(statusRes.name, s0.name);
+    assert(typeof statusRes.startType === "string");
+  });
+
+  await itAsync("queryEventLog queries live Windows Event Logs with channel and severity filtering", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const eventRes = await kb.queryEventLog({ channel: "System", hours: 48, limit: 5 });
+
+    assert(eventRes !== null && typeof eventRes === "object");
+    assert.strictEqual(eventRes.success, true);
+    assert.strictEqual(eventRes.channel, "System");
+    assert(Array.isArray(eventRes.events));
+    if (eventRes.events.length > 0) {
+      const e0 = eventRes.events[0];
+      assert(typeof e0.id === "number");
+      assert(typeof e0.provider === "string");
+      assert(typeof e0.timeCreated === "string");
+    }
+  });
+
+  await itAsync("manageRegistry reads, enumerates, and writes keys across HKLM and HKCU", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const getRes = await kb.manageRegistry({
+      action: "get",
+      path: "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion",
+      name: "ProductName"
+    });
+
+    assert(getRes !== null && typeof getRes === "object");
+    assert.strictEqual(getRes.success, true);
+    assert(typeof getRes.value === "string" && getRes.value.length > 0);
+
+    const listRes = await kb.manageRegistry({
+      action: "list",
+      path: "HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion"
+    });
+    assert(listRes !== null && typeof listRes === "object");
+    assert.strictEqual(listRes.success, true);
+    assert(Array.isArray(listRes.values));
+    assert(listRes.values.length > 0);
+
+    // Test write and delete in HKCU\Software\GeminiSuperTest
+    const testKey = "HKCU\\Software\\GeminiSuperTest";
+    const writeRes = await kb.manageRegistry({
+      action: "set",
+      path: testKey,
+      name: "EngineStatus",
+      value: "Active",
+      kind: "string"
+    });
+    assert(writeRes.success);
+
+    const readBack = await kb.manageRegistry({ action: "get", path: testKey, name: "EngineStatus" });
+    assert.strictEqual(readBack.value, "Active");
+
+    await kb.manageRegistry({ action: "delete", path: testKey });
+  });
+
+  it("All 87 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 84);
+    assert.strictEqual(SYSTEM_TOOLS.length, 87);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -1619,6 +1700,9 @@ async function run() {
     assert(toolNames.includes("super_audio_sequence"));
     assert(toolNames.includes("super_audio_tts_wav"));
     assert(toolNames.includes("super_audio_duck"));
+    assert(toolNames.includes("super_service_control"));
+    assert(toolNames.includes("super_event_log"));
+    assert(toolNames.includes("super_registry"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

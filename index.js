@@ -1615,6 +1615,114 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_service_control",
+        description: "Direct bare-metal Windows NT Service Control Manager (SCM) actuation (list, status, start, stop, restart, pause, continue) with sub-1ms latency via advapi32.dll.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["list", "status", "start", "stop", "restart", "pause", "continue"],
+              default: "list",
+              description: "Service control action to perform ('list', 'status', 'start', 'stop', 'restart', 'pause', 'continue')."
+            },
+            name: {
+              type: "string",
+              description: "Service identifier name (e.g. 'wuauserv', 'TermService', 'Spooler', 'EventLog'). Required for status, start, stop, restart, pause, continue."
+            },
+            filter: {
+              type: "string",
+              description: "Substring filter applied to service names and display names (for 'list' action)."
+            },
+            statusFilter: {
+              type: "string",
+              enum: ["all", "running", "stopped"],
+              default: "all",
+              description: "Filter services by status ('all', 'running', 'stopped')."
+            },
+            timeoutMs: {
+              type: "number",
+              default: 5000,
+              description: "Timeout in milliseconds for start/stop/restart state transitions."
+            }
+          }
+        }
+      },
+      {
+        name: "super_event_log",
+        description: "Queries live Windows Event Logs (System, Application, Security) using structured WEVTAPI readers for application crashes, BugChecks, disk errors, or general diagnostics.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            channel: {
+              type: "string",
+              default: "System",
+              description: "Event Log channel to interrogate ('System', 'Application', 'Security', or custom log channel)."
+            },
+            preset: {
+              type: "string",
+              enum: ["", "crashes", "bluescreen", "disk", "errors", "warnings"],
+              default: "",
+              description: "Diagnostic query preset: 'crashes' (Event 1000/1001/1002), 'bluescreen' (Kernel-Power 41/BugCheck), 'disk' (Event 153/55/51/137), 'errors', 'warnings'."
+            },
+            severity: {
+              type: "string",
+              enum: ["", "critical", "error", "warning", "info"],
+              default: "",
+              description: "Minimum severity level filter."
+            },
+            hours: {
+              type: "number",
+              default: 24,
+              description: "Lookback window in hours (default: 24)."
+            },
+            limit: {
+              type: "number",
+              default: 20,
+              description: "Maximum number of event records to return (1 to 100, default: 20)."
+            },
+            search: {
+              type: "string",
+              description: "Substring text search filter matching provider name or event description message."
+            }
+          }
+        }
+      },
+      {
+        name: "super_registry",
+        description: "Sub-millisecond direct Windows Registry operations across HKLM, HKCU, HKCR, HKU, HKCC for reading, enumerating, setting, and deleting keys and values with type preservation.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["get", "list", "set", "delete"],
+              default: "get",
+              description: "Registry action ('get' reads value, 'list' enumerates subkeys & values, 'set' writes value, 'delete' removes value or empty key)."
+            },
+            path: {
+              type: "string",
+              description: "Registry key path starting with hive prefix (e.g. 'HKLM\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion' or 'HKCU\\Environment')."
+            },
+            name: {
+              type: "string",
+              description: "Value name to read, write, or delete. Omit in 'list' to enumerate, or in 'delete' to remove the key."
+            },
+            value: {
+              type: "string",
+              description: "Value payload to write (used when action is 'set')."
+            },
+            kind: {
+              type: "string",
+              enum: ["string", "dword", "qword", "multistring", "expandstring", "binary"],
+              default: "string",
+              description: "Registry value kind to store ('string', 'dword', 'qword', 'multistring', 'expandstring', 'binary')."
+            }
+          },
+          required: ["path"]
+        }
       }
 ];
 
@@ -3072,6 +3180,58 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🦆 [Intelligent Audio Session Ducking]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_service_control") {
+    const action = args?.action || "list";
+    const serviceName = args?.name || "";
+    const filter = args?.filter || "";
+    const statusFilter = args?.statusFilter || "all";
+    const timeoutMs = typeof args?.timeoutMs === "number" ? args.timeoutMs : 5000;
+    const res = await orch.manageService({ action, name: serviceName, filter, statusFilter, timeoutMs });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚙️ [Windows NT Service Control Manager (${action})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_event_log") {
+    const channel = args?.channel || "System";
+    const preset = args?.preset || "";
+    const severity = args?.severity || "";
+    const hours = typeof args?.hours === "number" ? args.hours : 24;
+    const limit = typeof args?.limit === "number" ? args.limit : 20;
+    const search = args?.search || "";
+    const res = await orch.queryEventLog({ channel, preset, severity, hours, limit, search });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📜 [Windows Event Log Sentinel (${channel})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_registry") {
+    const action = args?.action || "get";
+    const regPath = args?.path || "";
+    const regName = args?.name || "";
+    const regValue = args?.value !== undefined ? String(args.value) : "";
+    const regKind = args?.kind || "string";
+    const res = await orch.manageRegistry({ action, path: regPath, name: regName, value: regValue, kind: regKind });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🗝️ [Windows Native Registry (${action})]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

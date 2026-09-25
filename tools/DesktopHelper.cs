@@ -12,6 +12,9 @@ using System.Windows.Automation;
 using System.Net;
 using System.Net.NetworkInformation;
 using System.Management;
+using System.ServiceProcess;
+using System.Diagnostics.Eventing.Reader;
+using Microsoft.Win32;
 
 namespace GeminiSuperDesktop {
     [StructLayout(LayoutKind.Sequential)]
@@ -3951,6 +3954,360 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static RegistryHive ParseHive(string path, out string subPath) {
+            subPath = "";
+            if (string.IsNullOrEmpty(path)) return RegistryHive.LocalMachine;
+            string p = path.Trim();
+            int slash = p.IndexOf('\\');
+            string hiveStr = slash >= 0 ? p.Substring(0, slash).ToUpperInvariant() : p.ToUpperInvariant();
+            subPath = slash >= 0 ? p.Substring(slash + 1) : "";
+
+            if (hiveStr == "HKLM" || hiveStr == "HKEY_LOCAL_MACHINE") return RegistryHive.LocalMachine;
+            if (hiveStr == "HKCU" || hiveStr == "HKEY_CURRENT_USER") return RegistryHive.CurrentUser;
+            if (hiveStr == "HKCR" || hiveStr == "HKEY_CLASSES_ROOT") return RegistryHive.ClassesRoot;
+            if (hiveStr == "HKU" || hiveStr == "HKEY_USERS") return RegistryHive.Users;
+            if (hiveStr == "HKCC" || hiveStr == "HKEY_CURRENT_CONFIG") return RegistryHive.CurrentConfig;
+            return RegistryHive.LocalMachine;
+        }
+
+        static RegistryValueKind ParseValueKind(string kindStr) {
+            if (string.IsNullOrEmpty(kindStr)) return RegistryValueKind.String;
+            string k = kindStr.Trim().ToLowerInvariant();
+            if (k == "dword" || k == "int" || k == "reg_dword") return RegistryValueKind.DWord;
+            if (k == "qword" || k == "long" || k == "reg_qword") return RegistryValueKind.QWord;
+            if (k == "multistring" || k == "multi_sz" || k == "reg_multi_sz") return RegistryValueKind.MultiString;
+            if (k == "expandstring" || k == "expand_sz" || k == "reg_expand_sz") return RegistryValueKind.ExpandString;
+            if (k == "binary" || k == "reg_binary") return RegistryValueKind.Binary;
+            return RegistryValueKind.String;
+        }
+
+        static void ServiceControlCmd(string action, string name, string filter, string statusFilter, int timeoutMs) {
+            try {
+                if (string.IsNullOrEmpty(action)) action = "list";
+                string act = action.Trim().ToLowerInvariant();
+
+                if (act == "list") {
+                    ServiceController[] all = ServiceController.GetServices();
+                    var sb = new StringBuilder();
+                    sb.Append("{\"success\": true, \"services\": [");
+                    bool first = true;
+                    int count = 0;
+
+                    string f = (filter ?? "").Trim().ToLowerInvariant();
+                    string sf = (statusFilter ?? "all").Trim().ToLowerInvariant();
+
+                    foreach (var sc in all) {
+                        bool statusMatch = true;
+                        if (sf == "running" && sc.Status != ServiceControllerStatus.Running) statusMatch = false;
+                        else if (sf == "stopped" && sc.Status != ServiceControllerStatus.Stopped) statusMatch = false;
+
+                        if (!statusMatch) continue;
+
+                        if (!string.IsNullOrEmpty(f)) {
+                            bool nameMatch = sc.ServiceName.ToLowerInvariant().Contains(f) || sc.DisplayName.ToLowerInvariant().Contains(f);
+                            if (!nameMatch) continue;
+                        }
+
+                        if (!first) sb.Append(",");
+                        first = false;
+
+                        sb.Append(string.Format("{{\"name\": \"{0}\", \"displayName\": \"{1}\", \"status\": \"{2}\", \"canStop\": {3}, \"canPause\": {4}}}",
+                            EscapeJson(sc.ServiceName), EscapeJson(sc.DisplayName), sc.Status, sc.CanStop ? "true" : "false", sc.CanPauseAndContinue ? "true" : "false"));
+                        count++;
+                        if (count >= 100) break;
+                    }
+
+                    sb.Append(string.Format("], \"totalMatching\": {0}, \"totalServices\": {1}}}", count, all.Length));
+                    Console.WriteLine(sb.ToString());
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(name)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Service name is required for action '" + act + "'\"}");
+                    return;
+                }
+
+                ServiceController target = null;
+                try {
+                    target = new ServiceController(name);
+                    var s = target.Status;
+                } catch (Exception ex) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Service '{0}' not found: {1}\"}}", EscapeJson(name), EscapeJson(ex.Message)));
+                    return;
+                }
+
+                using (target) {
+                    if (act == "status") {
+                        string startType = "Unknown";
+                        string imgPath = "";
+                        try {
+                            using (var k = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Services\" + name)) {
+                                if (k != null) {
+                                    object stObj = k.GetValue("Start");
+                                    if (stObj != null) {
+                                        int stVal = Convert.ToInt32(stObj);
+                                        if (stVal == 2) startType = "Automatic";
+                                        else if (stVal == 3) startType = "Manual";
+                                        else if (stVal == 4) startType = "Disabled";
+                                        else if (stVal == 0) startType = "Boot";
+                                        else if (stVal == 1) startType = "System";
+                                    }
+                                    imgPath = k.GetValue("ImagePath", "") as string ?? "";
+                                }
+                            }
+                        } catch {}
+
+                        Console.WriteLine(string.Format("{{\"success\": true, \"name\": \"{0}\", \"displayName\": \"{1}\", \"status\": \"{2}\", \"startType\": \"{3}\", \"imagePath\": \"{4}\", \"canStop\": {5}, \"canPause\": {6}}}",
+                            EscapeJson(target.ServiceName), EscapeJson(target.DisplayName), target.Status, startType, EscapeJson(imgPath), target.CanStop ? "true" : "false", target.CanPauseAndContinue ? "true" : "false"));
+                        return;
+                    }
+
+                    TimeSpan timeout = TimeSpan.FromMilliseconds(timeoutMs > 0 ? timeoutMs : 5000);
+
+                    if (act == "start") {
+                        if (target.Status == ServiceControllerStatus.Running) {
+                            Console.WriteLine(string.Format("{{\"success\": true, \"name\": \"{0}\", \"status\": \"Running\", \"alreadyRunning\": true}}", EscapeJson(name)));
+                            return;
+                        }
+                        target.Start();
+                        target.WaitForStatus(ServiceControllerStatus.Running, timeout);
+                        Console.WriteLine(string.Format("{{\"success\": true, \"name\": \"{0}\", \"status\": \"{1}\", \"started\": true}}", EscapeJson(name), target.Status));
+                        return;
+                    }
+
+                    if (act == "stop") {
+                        if (target.Status == ServiceControllerStatus.Stopped) {
+                            Console.WriteLine(string.Format("{{\"success\": true, \"name\": \"{0}\", \"status\": \"Stopped\", \"alreadyStopped\": true}}", EscapeJson(name)));
+                            return;
+                        }
+                        if (!target.CanStop) {
+                            Console.WriteLine(string.Format("{{\"success\": false, \"name\": \"{0}\", \"error\": \"Service cannot be stopped\"}}", EscapeJson(name)));
+                            return;
+                        }
+                        target.Stop();
+                        target.WaitForStatus(ServiceControllerStatus.Stopped, timeout);
+                        Console.WriteLine(string.Format("{{\"success\": true, \"name\": \"{0}\", \"status\": \"{1}\", \"stopped\": true}}", EscapeJson(name), target.Status));
+                        return;
+                    }
+
+                    if (act == "restart") {
+                        if (target.Status == ServiceControllerStatus.Running && target.CanStop) {
+                            target.Stop();
+                            target.WaitForStatus(ServiceControllerStatus.Stopped, timeout);
+                        }
+                        target.Start();
+                        target.WaitForStatus(ServiceControllerStatus.Running, timeout);
+                        Console.WriteLine(string.Format("{{\"success\": true, \"name\": \"{0}\", \"status\": \"{1}\", \"restarted\": true}}", EscapeJson(name), target.Status));
+                        return;
+                    }
+
+                    if (act == "pause") {
+                        if (!target.CanPauseAndContinue) {
+                            Console.WriteLine(string.Format("{{\"success\": false, \"name\": \"{0}\", \"error\": \"Service does not support pause/continue\"}}", EscapeJson(name)));
+                            return;
+                        }
+                        target.Pause();
+                        target.WaitForStatus(ServiceControllerStatus.Paused, timeout);
+                        Console.WriteLine(string.Format("{{\"success\": true, \"name\": \"{0}\", \"status\": \"{1}\", \"paused\": true}}", EscapeJson(name), target.Status));
+                        return;
+                    }
+
+                    if (act == "continue") {
+                        if (!target.CanPauseAndContinue) {
+                            Console.WriteLine(string.Format("{{\"success\": false, \"name\": \"{0}\", \"error\": \"Service does not support pause/continue\"}}", EscapeJson(name)));
+                            return;
+                        }
+                        target.Continue();
+                        target.WaitForStatus(ServiceControllerStatus.Running, timeout);
+                        Console.WriteLine(string.Format("{{\"success\": true, \"name\": \"{0}\", \"status\": \"{1}\", \"continued\": true}}", EscapeJson(name), target.Status));
+                        return;
+                    }
+
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Unknown action '{0}'\"}}", EscapeJson(act)));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void EventLogQueryCmd(string channel, string preset, string severity, int hours, int limit, string search) {
+            try {
+                if (string.IsNullOrEmpty(channel)) channel = "System";
+                if (hours <= 0) hours = 24;
+                if (limit <= 0) limit = 20;
+                if (limit > 100) limit = 100;
+
+                long ms = (long)hours * 3600000L;
+                string queryStr = "*[System[TimeCreated[timediff(@SystemTime) <= " + ms + "]";
+
+                string p = (preset ?? "").Trim().ToLowerInvariant();
+                string s = (severity ?? "").Trim().ToLowerInvariant();
+
+                if (p == "crashes") {
+                    channel = "Application";
+                    queryStr += " and (EventID=1000 or EventID=1001 or EventID=1002)]]";
+                } else if (p == "bluescreen") {
+                    channel = "System";
+                    queryStr += " and (EventID=41 or EventID=1001)]]";
+                } else if (p == "disk") {
+                    channel = "System";
+                    queryStr += " and (EventID=153 or EventID=55 or EventID=51 or EventID=137)]]";
+                } else {
+                    if (s == "critical") queryStr += " and (Level=1)";
+                    else if (s == "error" || p == "errors") queryStr += " and (Level=1 or Level=2)";
+                    else if (s == "warning" || p == "warnings") queryStr += " and (Level=3)";
+                    queryStr += "]]";
+                }
+
+                var query = new EventLogQuery(channel, PathType.LogName, queryStr);
+                query.ReverseDirection = true;
+
+                var sb = new StringBuilder();
+                sb.Append(string.Format("{{\"success\": true, \"channel\": \"{0}\", \"events\": [", EscapeJson(channel)));
+                bool first = true;
+                int count = 0;
+
+                using (var reader = new EventLogReader(query)) {
+                    EventRecord rec;
+                    while ((rec = reader.ReadEvent()) != null && count < limit) {
+                        using (rec) {
+                            string msg = "";
+                            try { msg = rec.FormatDescription(); } catch {}
+                            if (string.IsNullOrEmpty(msg)) msg = "Event " + rec.Id;
+
+                            if (!string.IsNullOrEmpty(search)) {
+                                if (msg.IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0 &&
+                                    (rec.ProviderName ?? "").IndexOf(search, StringComparison.OrdinalIgnoreCase) < 0) {
+                                    continue;
+                                }
+                            }
+
+                            if (!first) sb.Append(",");
+                            first = false;
+
+                            string timeStr = rec.TimeCreated.HasValue ? rec.TimeCreated.Value.ToUniversalTime().ToString("o") : "";
+                            sb.Append(string.Format("{{\"recordId\": {0}, \"id\": {1}, \"provider\": \"{2}\", \"level\": \"{3}\", \"timeCreated\": \"{4}\", \"message\": \"{5}\"}}",
+                                rec.RecordId ?? 0, rec.Id, EscapeJson(rec.ProviderName ?? ""), EscapeJson(rec.LevelDisplayName ?? "Info"),
+                                timeStr, EscapeJson(msg.Length > 300 ? msg.Substring(0, 300) + "..." : msg)));
+                            count++;
+                        }
+                    }
+                }
+
+                sb.Append(string.Format("], \"count\": {0}, \"hours\": {1}}}", count, hours));
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"channel\": \"{0}\", \"events\": [], \"count\": 0, \"error\": \"{1}\"}}",
+                    EscapeJson(channel ?? "System"), EscapeJson(ex.Message)));
+            }
+        }
+
+        static void RegistryCmd(string action, string path, string name, string value, string kindStr) {
+            try {
+                if (string.IsNullOrEmpty(action)) action = "get";
+                string act = action.Trim().ToLowerInvariant();
+
+                string subPath;
+                RegistryHive hive = ParseHive(path, out subPath);
+
+                using (var root = RegistryKey.OpenBaseKey(hive, RegistryView.Registry64)) {
+                    if (act == "get") {
+                        using (var key = root.OpenSubKey(subPath, false)) {
+                            if (key == null) {
+                                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Key not found: {0}\"}}", EscapeJson(path)));
+                                return;
+                            }
+                            object val = key.GetValue(name);
+                            if (val == null) {
+                                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Value '{0}' not found under '{1}'\"}}", EscapeJson(name), EscapeJson(path)));
+                                return;
+                            }
+                            RegistryValueKind kind = key.GetValueKind(name);
+                            string valStr = val is string[] ? string.Join("; ", (string[])val) : (val is byte[] ? BitConverter.ToString((byte[])val) : val.ToString());
+                            Console.WriteLine(string.Format("{{\"success\": true, \"hive\": \"{0}\", \"path\": \"{1}\", \"name\": \"{2}\", \"value\": \"{3}\", \"kind\": \"{4}\"}}",
+                                hive, EscapeJson(subPath), EscapeJson(name), EscapeJson(valStr), kind));
+                            return;
+                        }
+                    }
+
+                    if (act == "list") {
+                        using (var key = root.OpenSubKey(subPath, false)) {
+                            if (key == null) {
+                                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Key not found: {0}\"}}", EscapeJson(path)));
+                                return;
+                            }
+                            string[] subkeys = key.GetSubKeyNames();
+                            string[] valNames = key.GetValueNames();
+
+                            var sb = new StringBuilder();
+                            sb.Append(string.Format("{{\"success\": true, \"hive\": \"{0}\", \"path\": \"{1}\", \"subkeys\": [", hive, EscapeJson(subPath)));
+                            for (int i = 0; i < Math.Min(subkeys.Length, 50); i++) {
+                                if (i > 0) sb.Append(",");
+                                sb.Append(string.Format("\"{0}\"", EscapeJson(subkeys[i])));
+                            }
+                            sb.Append(string.Format("], \"subkeysCount\": {0}, \"values\": [", subkeys.Length));
+                            for (int i = 0; i < Math.Min(valNames.Length, 50); i++) {
+                                if (i > 0) sb.Append(",");
+                                string vn = valNames[i];
+                                object val = key.GetValue(vn);
+                                RegistryValueKind kind = key.GetValueKind(vn);
+                                string valStr = val is string[] ? string.Join("; ", (string[])val) : (val is byte[] ? BitConverter.ToString((byte[])val) : (val != null ? val.ToString() : ""));
+                                sb.Append(string.Format("{{\"name\": \"{0}\", \"value\": \"{1}\", \"kind\": \"{2}\"}}",
+                                    EscapeJson(vn), EscapeJson(valStr.Length > 200 ? valStr.Substring(0, 200) + "..." : valStr), kind));
+                            }
+                            sb.Append(string.Format("], \"valuesCount\": {0}}}", valNames.Length));
+                            Console.WriteLine(sb.ToString());
+                            return;
+                        }
+                    }
+
+                    if (act == "set") {
+                        if (string.IsNullOrEmpty(name)) {
+                            Console.WriteLine("{\"success\": false, \"error\": \"Value name is required for set\"}");
+                            return;
+                        }
+                        RegistryValueKind kind = ParseValueKind(kindStr);
+                        using (var key = root.CreateSubKey(subPath)) {
+                            if (key == null) {
+                                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to create/open subkey: {0}\"}}", EscapeJson(path)));
+                                return;
+                            }
+                            object valObj = value ?? "";
+                            if (kind == RegistryValueKind.DWord) valObj = Convert.ToInt32(value);
+                            else if (kind == RegistryValueKind.QWord) valObj = Convert.ToInt64(value);
+                            else if (kind == RegistryValueKind.MultiString) valObj = (value ?? "").Split(new char[] { ';', ',' }, StringSplitOptions.RemoveEmptyEntries);
+
+                            key.SetValue(name, valObj, kind);
+                            Console.WriteLine(string.Format("{{\"success\": true, \"hive\": \"{0}\", \"path\": \"{1}\", \"name\": \"{2}\", \"value\": \"{3}\", \"kind\": \"{4}\", \"written\": true}}",
+                                hive, EscapeJson(subPath), EscapeJson(name), EscapeJson(value ?? ""), kind));
+                            return;
+                        }
+                    }
+
+                    if (act == "delete") {
+                        using (var key = root.OpenSubKey(subPath, true)) {
+                            if (key == null) {
+                                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Key not found: {0}\"}}", EscapeJson(path)));
+                                return;
+                            }
+                            if (!string.IsNullOrEmpty(name)) {
+                                key.DeleteValue(name, false);
+                                Console.WriteLine(string.Format("{{\"success\": true, \"path\": \"{0}\", \"name\": \"{1}\", \"deleted\": true}}", EscapeJson(path), EscapeJson(name)));
+                            } else {
+                                root.DeleteSubKey(subPath, false);
+                                Console.WriteLine(string.Format("{{\"success\": true, \"path\": \"{0}\", \"deletedKey\": true}}", EscapeJson(path)));
+                            }
+                            return;
+                        }
+                    }
+
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Unknown registry action: {0}\"}}", EscapeJson(act)));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void GetThermalVitalsCmd() {
             try {
                 int count = Environment.ProcessorCount;
@@ -4456,6 +4813,28 @@ namespace GeminiSuperDesktop {
                 int durMs = args.Length >= 4 ? int.Parse(args[3]) : 2500;
                 float restorePercent = args.Length >= 5 ? float.Parse(args[4]) : -1f;
                 AudioDuckCmd(target, duckPercent, durMs, restorePercent);
+            } else if (cmd == "service" || cmd == "service_control" || cmd == "services" || cmd == "scm") {
+                string act = args.Length >= 2 ? args[1] : "list";
+                string name = args.Length >= 3 ? args[2] : "";
+                string filter = args.Length >= 4 ? args[3] : "";
+                string sf = args.Length >= 5 ? args[4] : "all";
+                int timeout = args.Length >= 6 ? int.Parse(args[5]) : 5000;
+                ServiceControlCmd(act, name, filter, sf, timeout);
+            } else if (cmd == "eventlog" || cmd == "event_log" || cmd == "events" || cmd == "winevent") {
+                string ch = args.Length >= 2 ? args[1] : "System";
+                string preset = args.Length >= 3 ? args[2] : "";
+                string sev = args.Length >= 4 ? args[3] : "";
+                int hrs = args.Length >= 5 ? int.Parse(args[4]) : 24;
+                int lim = args.Length >= 6 ? int.Parse(args[5]) : 20;
+                string search = args.Length >= 7 ? args[6] : "";
+                EventLogQueryCmd(ch, preset, sev, hrs, lim, search);
+            } else if (cmd == "registry" || cmd == "reg" || cmd == "winreg") {
+                string act = args.Length >= 2 ? args[1] : "get";
+                string path = args.Length >= 3 ? args[2] : "";
+                string name = args.Length >= 4 ? args[3] : "";
+                string val = args.Length >= 5 ? args[4] : "";
+                string kind = args.Length >= 6 ? args[5] : "string";
+                RegistryCmd(act, path, name, val, kind);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

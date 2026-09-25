@@ -50,6 +50,7 @@
   - [32. Hardware Thermal Watchdog & Processor Throttling Telemetry](#32-️-hardware-thermal-watchdog--processor-throttling-telemetry)
   - [33. Windows Virtual Desktop Orchestrator](#33--windows-virtual-desktop-orchestrator-ivirtualdesktopmanager)
   - [34. Sovereign Windows Audio Subsystem & Volume Mixer](#34--sovereign-windows-audio-subsystem--volume-mixer-wasapi--volume-mixer)
+  - [35. Windows Diagnostics & Reliability Subsystem](#35-️-windows-diagnostics--reliability-subsystem-scm-services-eventlog-sentinel--registry-actuator)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -513,6 +514,16 @@ Grants Gemini complete acoustic awareness, microphone perception, sound synthesi
 - **Broadcast Speech-to-WAV Rendering (Windows SAPI)**: Directly binds `SpVoice` to uncompressed `SpFileStream` PCM RIFF WAV outputs, generating offline speech files in milliseconds with zero acoustic bleed or speaker activation.
 - **Intelligent Audio Ducking & Smooth Mixer Fading**: Programmatically ducks background application audio sessions down to custom attenuation levels (e.g. 20%) for a hold duration before automatically restoring them, enabling clear speech output and voice capture.
 - **Native MCP Tools**: `super_audio_devices`, `super_audio_mic_listen`, `super_audio_mic_record_wav`, `super_audio_sessions`, `super_audio_session_set`, `super_audio_play`, `super_audio_beep`, `super_audio_inspect`, `super_audio_sequence`, `super_audio_tts_wav`, `super_audio_duck`.
+
+---
+
+## 35. 🛡️ Windows Diagnostics & Reliability Subsystem (SCM Services, EventLog Sentinel & Registry Actuator)
+
+Bridges native NT diagnostics, service supervision, and configuration boundaries directly into Gemini Super System without shell scripts or external dependencies:
+- **Bare-Metal Service Control Manager (`advapi32.dll` / `System.ServiceProcess`)**: Fast native enumeration and management of all Windows NT services (`super_service_control`). Queries service names, display titles, running/stopped statuses, start types (Automatic, Manual, Disabled), binary image paths (`ImagePath`), and user accounts. Supports high-speed start, stop, restart, pause, and continue commands with bounded timeout guards.
+- **Structured Windows Event Log Sentinel (`wevtapi.dll` / `System.Diagnostics.Eventing.Reader`)**: High-speed XPath log queries directly against Windows event channels (Application, System, Security, etc.) via `super_event_log`. Offers instant diagnostic presets for application crashes (`crashes` - Event 1000/1001/1002), kernel bug checks & blue screens (`bluescreen` - Kernel-Power 41), and storage/disk corruption warnings (`disk` - Event 153/55/51/137), returning structured timestamps, event IDs, provider names, severities, and fully rendered messages.
+- **Direct 64-Bit Registry Actuator (`Microsoft.Win32.Registry`)**: Millisecond-latency reading, writing, enumeration, and deletion of Windows registry keys and values across all major root hives (`HKLM`, `HKCU`, `HKCR`, `HKU`, `HKCC`) via `super_registry`. Preserves exact Win32 data types (`String`, `DWord`, `QWord`, `MultiString`, `ExpandString`, `Binary`) and queries both 64-bit and 32-bit registry views without spawning PowerShell or `reg.exe`.
+- **Native MCP Tools**: `super_service_control`, `super_event_log`, `super_registry`.
 
 ---
 
