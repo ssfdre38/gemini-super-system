@@ -1794,10 +1794,79 @@ async function run() {
     assert.strictEqual(delRes.deleted, true);
   });
 
-  it("All 91 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 23: Windows Advanced Firewall & Network Filtering Subsystem
+  console.log("\n\x1b[1m[Suite 23: Windows Advanced Firewall & Network Filtering Subsystem]\x1b[0m");
+
+  await itAsync("getFirewallStatus queries domain, private, and public profiles via INetFwPolicy2", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const status = await kb.getFirewallStatus();
+
+    assert(status !== null && typeof status === "object");
+    assert.strictEqual(status.success, true);
+    assert(typeof status.rulesCount === "number" && status.rulesCount > 0);
+    assert(status.profiles !== undefined);
+    assert(typeof status.profiles.domain.enabled === "boolean");
+    assert(typeof status.profiles.private.enabled === "boolean");
+    assert(typeof status.profiles.public.enabled === "boolean");
+    assert(typeof status.profiles.domain.defaultInbound === "string");
+  });
+
+  await itAsync("getFirewallRules queries rules with direction and action filtering", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const rules = await kb.getFirewallRules({ direction: "inbound", action: "allow", limit: 5 });
+
+    assert(rules !== null && typeof rules === "object");
+    assert.strictEqual(rules.success, true);
+    assert(Array.isArray(rules.rules));
+    assert(rules.count > 0);
+    const r = rules.rules[0];
+    assert(typeof r.name === "string" && r.name.length > 0);
+    assert.strictEqual(r.direction, "inbound");
+    assert.strictEqual(r.action, "allow");
+  });
+
+  await itAsync("manageFirewallRule adds, enables, disables, and deletes firewall rules dynamically", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const testRule = `GeminiSuperCI_${Date.now()}`;
+
+    // 1. Add
+    const addRes = await kb.manageFirewallRule({
+      action: "add",
+      name: testRule,
+      description: "Automated test rule for CI",
+      direction: "inbound",
+      protocol: "tcp",
+      localPorts: "18880",
+      ruleAction: "allow",
+      profiles: "all"
+    });
+    assert(addRes !== null && typeof addRes === "object");
+    assert.strictEqual(addRes.success, true);
+    assert.strictEqual(addRes.action, "add");
+
+    // 2. Disable
+    const disRes = await kb.manageFirewallRule({ action: "disable", name: testRule });
+    assert.strictEqual(disRes.success, true);
+    assert.strictEqual(disRes.enabled, false);
+
+    // 3. Enable
+    const enRes = await kb.manageFirewallRule({ action: "enable", name: testRule });
+    assert.strictEqual(enRes.success, true);
+    assert.strictEqual(enRes.enabled, true);
+
+    // 4. Delete
+    const delRes = await kb.manageFirewallRule({ action: "delete", name: testRule });
+    assert.strictEqual(delRes.success, true);
+    assert.strictEqual(delRes.deleted, true);
+  });
+
+  it("All 94 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 91);
+    assert.strictEqual(SYSTEM_TOOLS.length, 94);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -1822,6 +1891,9 @@ async function run() {
     assert(toolNames.includes("super_device_control"));
     assert(toolNames.includes("super_named_pipe"));
     assert(toolNames.includes("super_shared_memory"));
+    assert(toolNames.includes("super_firewall_status"));
+    assert(toolNames.includes("super_firewall_rules"));
+    assert(toolNames.includes("super_firewall_rule_set"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

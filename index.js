@@ -1840,6 +1840,111 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_firewall_status",
+        description: "Queries Windows Advanced Firewall status across all profiles (Domain, Private, Public) including enabled states, default inbound/outbound actions, and active rules count via INetFwPolicy2.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_firewall_rules",
+        description: "Enumerates or searches active Windows Advanced Firewall rules via INetFwPolicy2, filtering by direction, action, protocol, port, search substring, or limit.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            direction: {
+              type: "string",
+              enum: ["inbound", "outbound", "all"],
+              default: "all",
+              description: "Rule direction filter: 'inbound', 'outbound', or 'all' (default: 'all')."
+            },
+            action: {
+              type: "string",
+              enum: ["allow", "block", "all"],
+              default: "all",
+              description: "Rule action filter: 'allow', 'block', or 'all' (default: 'all')."
+            },
+            protocol: {
+              type: "string",
+              enum: ["tcp", "udp", "any"],
+              default: "any",
+              description: "Protocol filter: 'tcp', 'udp', or 'any' (default: 'any')."
+            },
+            port: {
+              type: "number",
+              default: 0,
+              description: "Port filter (e.g. 18880, 41242, 8088). 0 matches any port."
+            },
+            search: {
+              type: "string",
+              description: "Substring filter across rule name, description, application path, or service."
+            },
+            limit: {
+              type: "number",
+              default: 50,
+              description: "Maximum rules to return (default: 50)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_firewall_rule_set",
+        description: "Adds, enables, disables, or deletes Windows Advanced Firewall rules via INetFwPolicy2 and INetFwRule for dynamic port gating and service security control.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["add", "enable", "disable", "delete"],
+              default: "add",
+              description: "Firewall management action: 'add' (creates rule), 'enable' (activates rule), 'disable' (deactivates rule), 'delete' (removes rule)."
+            },
+            name: {
+              type: "string",
+              description: "Unique identifier/name for the firewall rule. Required for all actions."
+            },
+            description: {
+              type: "string",
+              description: "Description of the firewall rule purpose."
+            },
+            direction: {
+              type: "string",
+              enum: ["inbound", "outbound"],
+              default: "inbound",
+              description: "Rule traffic direction: 'inbound' or 'outbound' (default: 'inbound')."
+            },
+            protocol: {
+              type: "string",
+              enum: ["tcp", "udp", "any"],
+              default: "tcp",
+              description: "Transport protocol: 'tcp', 'udp', or 'any' (default: 'tcp')."
+            },
+            localPorts: {
+              type: "string",
+              description: "Local port or port range string (e.g. '18880', '18000-18900')."
+            },
+            appPath: {
+              type: "string",
+              description: "Full filesystem path to target executable (optional)."
+            },
+            ruleAction: {
+              type: "string",
+              enum: ["allow", "block"],
+              default: "allow",
+              description: "Traffic action: 'allow' or 'block' (default: 'allow')."
+            },
+            profiles: {
+              type: "string",
+              enum: ["all", "domain", "private", "public"],
+              default: "all",
+              description: "Network profiles to apply rule to: 'all', 'domain', 'private', 'public' (default: 'all')."
+            }
+          },
+          required: ["name"]
+        }
       }
 ];
 
@@ -3414,6 +3519,67 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [Windows NT Shared Memory (${action})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_firewall_status") {
+    const res = await orch.getFirewallStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: "⚡ [Windows Advanced Firewall Status]:\n" + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_firewall_rules") {
+    const direction = args?.direction || "all";
+    const action = args?.action || "all";
+    const protocol = args?.protocol || "any";
+    const port = args?.port || 0;
+    const search = args?.search || "";
+    const limit = args?.limit || 50;
+    const res = await orch.getFirewallRules({ direction, action, protocol, port, search, limit });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Advanced Firewall Rules (matched: ${res.totalMatched || res.count || 0})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_firewall_rule_set") {
+    const action = args?.action || "add";
+    const ruleName = args?.name || "";
+    const description = args?.description || "";
+    const direction = args?.direction || "inbound";
+    const protocol = args?.protocol || "tcp";
+    const localPorts = args?.localPorts || "";
+    const appPath = args?.appPath || "";
+    const ruleAction = args?.ruleAction || "allow";
+    const profiles = args?.profiles || "all";
+    const res = await orch.manageFirewallRule({
+      action,
+      name: ruleName,
+      description,
+      direction,
+      protocol,
+      localPorts,
+      appPath,
+      ruleAction,
+      profiles
+    });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Advanced Firewall Rule (${action}: ${ruleName})]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

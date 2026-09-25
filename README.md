@@ -53,6 +53,7 @@
   - [35. Windows Diagnostics & Reliability Subsystem](#35-️-windows-diagnostics--reliability-subsystem-scm-services-eventlog-sentinel--registry-actuator)
   - [36. Plug & Play Device Graph & SetupAPI Hardware Actuator](#36--plug--play-device-graph--setupapi-hardware-actuator-setupapidll--cfgmgr32dll)
   - [37. High-Speed Windows NT IPC — Named Pipes & Shared Memory](#37--high-speed-windows-nt-ipc--named-pipes--memory-mapped-shared-memory-systemiopipes--systemiomemorymappedfiles)
+  - [38. Windows Advanced Firewall & Network Filtering Subsystem](#38-️-windows-advanced-firewall--network-filtering-subsystem-inetfwpolicy2--inetfwrule)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -192,7 +193,7 @@ Antigravity scrolled the chat via physical mouse wheel inputs, clicked the input
 
 ---
 
-## 🧰 MCP Tool Reference (91 Sovereign Tools)
+## 🧰 MCP Tool Reference (94 Sovereign Tools)
 
 All tools are exposed natively over stdio to Antigravity, Gemini CLI, and any MCP-compliant client:
 
@@ -545,6 +546,16 @@ Provides ultra-fast local inter-process communication, zero-copy buffer sharing,
 - **Windows Named Pipe IPC Server & Client (`System.IO.Pipes`)**: Native enumeration, transmission, and listening across local named pipes via `super_named_pipe`. Supports zero-overhead daemon IPC for AI agent handshakes, subagent coordination, and local RPC endpoints (`\\.\pipe\*`) without network socket overhead or firewall prompts.
 - **Zero-Copy Memory-Mapped Shared Memory (`System.IO.MemoryMappedFiles`)**: Lightning-fast shared memory segments via `super_shared_memory`. Supports write, read, inspection, listing, and deletion of named memory mappings (`MemoryMappedFile.CreateFromFile`) with zero serialization penalty, enabling high-frequency tensor caches, frame buffers, and real-time cross-process state synchronization.
 - **Native MCP Tools**: `super_named_pipe`, `super_shared_memory`.
+
+---
+
+## 38. 🛡️ Windows Advanced Firewall & Network Filtering Subsystem (`INetFwPolicy2` & `INetFwRule`)
+
+Directly manages Windows Firewall with Advanced Security via native COM interfaces (`netfw.h`) without PowerShell or netsh spawning:
+- **Profile Status & Traffic Direction Inspection (`INetFwPolicy2`)**: Real-time querying of Domain, Private, and Public network firewall profiles via `super_firewall_status`. Inspects enabled states, default inbound/outbound rules (Block/Allow), and active rule counts in sub-10ms.
+- **High-Speed Filtered Rule Discovery (`super_firewall_rules`)**: Enumerates and filters active firewall rules by traffic direction (`inbound`/`outbound`), action (`allow`/`block`), protocol (`tcp`/`udp`/`any`), port number (e.g. `18880`, `41242`), or application executable path.
+- **Dynamic Port & Service Security Gating (`super_firewall_rule_set`)**: Adds, enables, disables, or permanently removes firewall rules on the fly via `INetFwRule`. Enables the AI agent to dynamically open listen ports for local LLM inference engines, WebSockets, or mesh nodes, and lock down unauthorized open ports.
+- **Native MCP Tools**: `super_firewall_status`, `super_firewall_rules`, `super_firewall_rule_set`.
 
 ---
 

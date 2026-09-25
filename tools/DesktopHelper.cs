@@ -2664,6 +2664,219 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static void GetFirewallStatusCmd() {
+            try {
+                Type t = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
+                if (t == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"HNetCfg.FwPolicy2 COM ProgID not registered\"}");
+                    return;
+                }
+                dynamic fw = Activator.CreateInstance(t);
+
+                // Profiles: NET_FW_PROFILE2_DOMAIN = 1, NET_FW_PROFILE2_PRIVATE = 2, NET_FW_PROFILE2_PUBLIC = 4
+                bool domainEnabled = fw.FirewallEnabled(1);
+                bool privateEnabled = fw.FirewallEnabled(2);
+                bool publicEnabled = fw.FirewallEnabled(4);
+
+                // Default Actions: NET_FW_ACTION_BLOCK = 0, NET_FW_ACTION_ALLOW = 1
+                int domainIn = fw.DefaultInboundAction(1);
+                int domainOut = fw.DefaultOutboundAction(1);
+                int privateIn = fw.DefaultInboundAction(2);
+                int privateOut = fw.DefaultOutboundAction(2);
+                int publicIn = fw.DefaultInboundAction(4);
+                int publicOut = fw.DefaultOutboundAction(4);
+
+                int rulesCount = fw.Rules.Count;
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"rulesCount\": {0}, \"profiles\": {{" +
+                    "\"domain\": {{\"enabled\": {1}, \"defaultInbound\": \"{2}\", \"defaultOutbound\": \"{3}\"}}, " +
+                    "\"private\": {{\"enabled\": {4}, \"defaultInbound\": \"{5}\", \"defaultOutbound\": \"{6}\"}}, " +
+                    "\"public\": {{\"enabled\": {7}, \"defaultInbound\": \"{8}\", \"defaultOutbound\": \"{9}\"}}" +
+                    "}}}}",
+                    rulesCount,
+                    domainEnabled ? "true" : "false", domainIn == 1 ? "allow" : "block", domainOut == 1 ? "allow" : "block",
+                    privateEnabled ? "true" : "false", privateIn == 1 ? "allow" : "block", privateOut == 1 ? "allow" : "block",
+                    publicEnabled ? "true" : "false", publicIn == 1 ? "allow" : "block", publicOut == 1 ? "allow" : "block"
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void GetFirewallRulesCmd(string directionFilter, string actionFilter, string protoFilter, int portFilter, string searchFilter, int limit) {
+            try {
+                if (limit <= 0) limit = 50;
+                string dirF = (directionFilter ?? "").Trim().ToLowerInvariant();
+                string actF = (actionFilter ?? "").Trim().ToLowerInvariant();
+                string proF = (protoFilter ?? "").Trim().ToLowerInvariant();
+                string searchF = (searchFilter ?? "").Trim().ToLowerInvariant();
+
+                Type t = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
+                if (t == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"HNetCfg.FwPolicy2 COM ProgID not registered\"}");
+                    return;
+                }
+                dynamic fw = Activator.CreateInstance(t);
+
+                var list = new List<string>();
+                int totalMatched = 0;
+
+                foreach (dynamic r in fw.Rules) {
+                    try {
+                        string name = r.Name ?? "";
+                        string desc = r.Description ?? "";
+                        int dir = r.Direction; // 1 = Inbound, 2 = Outbound
+                        int act = r.Action;    // 1 = Allow, 0 = Block
+                        int proto = r.Protocol; // 6 = TCP, 17 = UDP, 256 = Any
+                        string localPorts = r.LocalPorts ?? "";
+                        string appName = r.ApplicationName ?? "";
+                        string serviceName = r.ServiceName ?? "";
+                        bool enabled = r.Enabled;
+                        int profiles = r.Profiles;
+
+                        string dirStr = dir == 1 ? "inbound" : "outbound";
+                        string actStr = act == 1 ? "allow" : "block";
+                        string proStr = proto == 6 ? "tcp" : (proto == 17 ? "udp" : (proto == 256 ? "any" : proto.ToString()));
+
+                        if (!string.IsNullOrEmpty(dirF) && dirF != "all" && dirStr != dirF) continue;
+                        if (!string.IsNullOrEmpty(actF) && actF != "all" && actStr != actF) continue;
+                        if (!string.IsNullOrEmpty(proF) && proF != "any" && proStr != proF && proStr != "any") continue;
+
+                        if (portFilter > 0) {
+                            if (string.IsNullOrEmpty(localPorts)) continue;
+                            string pStr = portFilter.ToString();
+                            bool portMatch = false;
+                            string[] parts = localPorts.Split(',');
+                            foreach (var p in parts) {
+                                string trimP = p.Trim();
+                                if (trimP == pStr) { portMatch = true; break; }
+                                if (trimP.Contains("-")) {
+                                    string[] rng = trimP.Split('-');
+                                    int lo, hi;
+                                    if (int.TryParse(rng[0], out lo) && int.TryParse(rng[1], out hi)) {
+                                        if (portFilter >= lo && portFilter <= hi) { portMatch = true; break; }
+                                    }
+                                }
+                            }
+                            if (!portMatch) continue;
+                        }
+
+                        if (!string.IsNullOrEmpty(searchF)) {
+                            bool matched = name.ToLowerInvariant().Contains(searchF) ||
+                                           desc.ToLowerInvariant().Contains(searchF) ||
+                                           appName.ToLowerInvariant().Contains(searchF) ||
+                                           serviceName.ToLowerInvariant().Contains(searchF);
+                            if (!matched) continue;
+                        }
+
+                        totalMatched++;
+                        if (list.Count < limit) {
+                            list.Add(string.Format(
+                                "{{\"name\": \"{0}\", \"description\": \"{1}\", \"direction\": \"{2}\", \"action\": \"{3}\", \"protocol\": \"{4}\", \"localPorts\": \"{5}\", \"appName\": \"{6}\", \"serviceName\": \"{7}\", \"enabled\": {8}, \"profiles\": {9}}}",
+                                EscapeJson(name), EscapeJson(desc), dirStr, actStr, proStr, EscapeJson(localPorts),
+                                EscapeJson(appName), EscapeJson(serviceName), enabled ? "true" : "false", profiles
+                            ));
+                        }
+                    } catch {}
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"count\": {0}, \"totalMatched\": {1}, \"rules\": [{2}]}}",
+                    list.Count, totalMatched, string.Join(", ", list.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void ManageFirewallRuleCmd(string action, string name, string description, string direction, string protocol, string localPorts, string appPath, string ruleAction, string profiles) {
+            try {
+                if (string.IsNullOrEmpty(name)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Rule name is required\"}");
+                    return;
+                }
+
+                string act = (action ?? "add").Trim().ToLowerInvariant();
+                Type t = Type.GetTypeFromProgID("HNetCfg.FwPolicy2");
+                if (t == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"HNetCfg.FwPolicy2 COM ProgID not registered\"}");
+                    return;
+                }
+                dynamic fw = Activator.CreateInstance(t);
+
+                if (act == "delete" || act == "remove") {
+                    try {
+                        fw.Rules.Remove(name);
+                        Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"delete\", \"name\": \"{0}\", \"deleted\": true}}", EscapeJson(name)));
+                    } catch (Exception ex) {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"action\": \"delete\", \"name\": \"{0}\", \"error\": \"{1}\"}}", EscapeJson(name), EscapeJson(ex.Message)));
+                    }
+                    return;
+                }
+
+                if (act == "enable" || act == "disable") {
+                    try {
+                        dynamic rule = fw.Rules.Item(name);
+                        rule.Enabled = (act == "enable");
+                        Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"{0}\", \"name\": \"{1}\", \"enabled\": {2}}}",
+                            act, EscapeJson(name), act == "enable" ? "true" : "false"));
+                    } catch (Exception ex) {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"action\": \"{0}\", \"name\": \"{1}\", \"error\": \"{2}\"}}", act, EscapeJson(name), EscapeJson(ex.Message)));
+                    }
+                    return;
+                }
+
+                if (act == "add") {
+                    Type ruleType = Type.GetTypeFromProgID("HNetCfg.FWRule");
+                    if (ruleType == null) {
+                        Console.WriteLine("{\"success\": false, \"error\": \"HNetCfg.FWRule COM ProgID not registered\"}");
+                        return;
+                    }
+                    dynamic newRule = Activator.CreateInstance(ruleType);
+                    newRule.Name = name;
+                    if (!string.IsNullOrEmpty(description)) newRule.Description = description;
+                    if (!string.IsNullOrEmpty(appPath)) newRule.ApplicationName = appPath;
+
+                    string dir = (direction ?? "inbound").Trim().ToLowerInvariant();
+                    newRule.Direction = dir == "outbound" ? 2 : 1;
+
+                    string pro = (protocol ?? "tcp").Trim().ToLowerInvariant();
+                    if (pro == "udp") newRule.Protocol = 17;
+                    else if (pro == "any") newRule.Protocol = 256;
+                    else newRule.Protocol = 6; // TCP default
+
+                    if (!string.IsNullOrEmpty(localPorts)) newRule.LocalPorts = localPorts;
+
+                    string rAct = (ruleAction ?? "allow").Trim().ToLowerInvariant();
+                    newRule.Action = rAct == "block" ? 0 : 1;
+
+                    string prof = (profiles ?? "all").Trim().ToLowerInvariant();
+                    if (prof == "domain") newRule.Profiles = 1;
+                    else if (prof == "private") newRule.Profiles = 2;
+                    else if (prof == "public") newRule.Profiles = 4;
+                    else newRule.Profiles = 7; // NET_FW_PROFILE2_ALL
+
+                    newRule.Enabled = true;
+
+                    // Remove existing rule with same name if present
+                    try { fw.Rules.Remove(name); } catch {}
+
+                    fw.Rules.Add(newRule);
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"action\": \"add\", \"name\": \"{0}\", \"direction\": \"{1}\", \"protocol\": \"{2}\", \"localPorts\": \"{3}\", \"actionType\": \"{4}\", \"enabled\": true}}",
+                        EscapeJson(name), dir, pro, EscapeJson(localPorts ?? ""), rAct
+                    ));
+                    return;
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Unknown firewall action '{0}'\"}}", EscapeJson(act)));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void ClipboardGetCmd() {
             try {
                 string text = "";
@@ -5389,6 +5602,27 @@ namespace GeminiSuperDesktop {
                 string data = args.Length >= 4 ? args[3] : "";
                 int size = args.Length >= 5 ? int.Parse(args[4]) : 0;
                 SharedMemoryCmd(act, map, data, size);
+            } else if (cmd == "firewall_status" || cmd == "fw_status") {
+                GetFirewallStatusCmd();
+            } else if (cmd == "firewall_rules" || cmd == "fw_rules") {
+                string dir = args.Length >= 2 ? args[1] : "all";
+                string act = args.Length >= 3 ? args[2] : "all";
+                string pro = args.Length >= 4 ? args[3] : "any";
+                int port = args.Length >= 5 ? int.Parse(args[4]) : 0;
+                string search = args.Length >= 6 ? args[5] : "";
+                int limit = args.Length >= 7 ? int.Parse(args[6]) : 50;
+                GetFirewallRulesCmd(dir, act, pro, port, search, limit);
+            } else if (cmd == "firewall_rule_set" || cmd == "fw_rule_set" || cmd == "manage_firewall_rule") {
+                string act = args.Length >= 2 ? args[1] : "add";
+                string name = args.Length >= 3 ? args[2] : "";
+                string desc = args.Length >= 4 ? args[3] : "";
+                string dir = args.Length >= 5 ? args[4] : "inbound";
+                string pro = args.Length >= 6 ? args[5] : "tcp";
+                string ports = args.Length >= 7 ? args[6] : "";
+                string app = args.Length >= 8 ? args[7] : "";
+                string rAct = args.Length >= 9 ? args[8] : "allow";
+                string prof = args.Length >= 10 ? args[9] : "all";
+                ManageFirewallRuleCmd(act, name, desc, dir, pro, ports, app, rAct, prof);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {
