@@ -61,6 +61,7 @@
   - [43. Desktop Window Manager & Composition Subsystem](#43--desktop-window-manager--composition-subsystem-dwm--dwmapih--dwmapidll)
   - [44. Windows Native System Architecture & Firmware Subsystem](#44--windows-native-system-architecture--firmware-subsystem-sysinfoapih--kernel32dll)
   - [45. Windows Authenticode & Cryptographic Trust Verification Subsystem](#45--windows-authenticode--cryptographic-trust-verification-subsystem-wintrusth--softpubh--wintrustdll)
+  - [46. Windows Multi-Provider Router & Network Drive Management Subsystem](#46--windows-multi-provider-router--network-drive-management-subsystem-winnetwkh--mprdll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -639,6 +640,17 @@ Directly verifies binary integrity, digital signatures, and cryptographic trust 
 - **Windows Security Catalog Database Search (`super_wintrust_catalog_search`)**: Computes the cryptographic member hash of any file via `CryptCATAdminCalcHashFromFileHandle` and queries the system catalog subsystem (`CryptCATAdminEnumCatalogFromHash`) to locate the authoritative `.cat` catalog file validating its authenticity and verifying its catalog trust.
 - **Milestone Expansion**: **115 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
 - **Native MCP Tools**: `super_wintrust_verify_file`, `super_wintrust_signer_info`, `super_wintrust_catalog_search`.
+
+---
+
+## 46. 🌐 Windows Multi-Provider Router & Network Drive Management Subsystem (`winnetwk.h` / `mpr.dll`)
+
+Directly manages Windows network connections, mapped drives, SMB/UNC shares, and network providers via native Win32 Multi-Provider Router (`mpr.dll`) without external `net use` shells or PowerShell overhead:
+- **Network Drives & Resource Enumeration (`super_wnet_network_drives`)**: Directly invokes `WNetOpenEnumW`, `WNetEnumResourceW`, and `WNetCloseEnum`. Enumerates active (`RESOURCE_CONNECTED`), remembered/persistent (`RESOURCE_REMEMBERED`), and network neighborhood (`RESOURCE_GLOBALNET`) resources across disk and printer categories. Extracts local drive letters (e.g. `Z:`), remote UNC paths (e.g. `\\server\share`, `\\TSCLIENT\Local Storage`), provider names (e.g. `Microsoft Windows Network`, `Microsoft Terminal Services`), resource scopes, types, display types, and usage flags.
+- **Drive Mapping & Network User Inspection (`super_wnet_get_connection`)**: Invokes `WNetGetConnectionW` and `WNetGetUserW` to query remote UNC paths mapped to local drive letters (or device names). When called without arguments, scans all local system drives (`C:` through `Z:`) in sub-millisecond execution, reporting drive type, connection status, status codes, and current authenticated network username.
+- **Dynamic Network Drive Mount/Unmount Actuator (`super_wnet_manage_connection`)**: Directly actuates network connections via `WNetAddConnection2W` and `WNetCancelConnection2W`. Supports connecting (mounting) remote UNC shares to drive letters with optional user credentials, persistent profile updates (`CONNECT_UPDATE_PROFILE`), and disconnecting (unmounting) drives with optional forced unmounting (`fForce`).
+- **Milestone Expansion**: **118 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
+- **Native MCP Tools**: `super_wnet_network_drives`, `super_wnet_get_connection`, `super_wnet_manage_connection`.
 
 ---
 

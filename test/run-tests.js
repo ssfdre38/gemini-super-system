@@ -2357,10 +2357,76 @@ async function run() {
     }
   });
 
-  it("All 115 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 31: Windows Multi-Provider Router & Network Drive Management (WNet / mpr.dll)
+  console.log("\x1b[1m[Suite 31: Windows Multi-Provider Router & Network Drive Management (WNet)]\x1b[0m");
+
+  await itAsync("super_wnet_network_drives enumerates network connections, shares, and providers via WNetOpenEnum / WNetEnumResource", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getNetworkDrives({ scope: "connected", type: "all" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.scope, "connected");
+    assert.strictEqual(res.type, "all");
+    assert(typeof res.count === "number");
+    assert(Array.isArray(res.resources));
+    if (res.resources.length > 0) {
+      const item = res.resources[0];
+      assert("localName" in item);
+      assert("remoteName" in item);
+      assert("provider" in item);
+      assert("scope" in item);
+      assert("type" in item);
+    }
+  });
+
+  await itAsync("super_wnet_get_connection inspects network drive mappings and current user context via WNetGetConnection and WNetGetUser", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    // 1. All drives & user overview
+    const allDrives = await kb.getNetworkConnection();
+    assert(allDrives !== null && typeof allDrives === "object");
+    assert.strictEqual(allDrives.success, true);
+    assert(Array.isArray(allDrives.drives));
+    assert(allDrives.drives.length > 0);
+    const cDrive = allDrives.drives.find(d => d.localName === "C:");
+    assert(cDrive !== undefined);
+    assert.strictEqual(cDrive.status, "not_connected");
+
+    // 2. Specific drive query on C:
+    const cRes = await kb.getNetworkConnection("C:");
+    assert(cRes !== null && typeof cRes === "object");
+    assert.strictEqual(cRes.success, true);
+    assert.strictEqual(cRes.localName, "C:");
+    assert.strictEqual(cRes.status, "not_connected");
+    assert.strictEqual(cRes.statusCode, 2250);
+  });
+
+  await itAsync("super_wnet_manage_connection validates connection parameters and handles unmapped device disconnection safely", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    // 1. Disconnect non-existent network drive
+    const cancelRes = await kb.manageNetworkConnection({ action: "disconnect", localName: "Z:" });
+    assert(cancelRes !== null && typeof cancelRes === "object");
+    assert.strictEqual(cancelRes.action, "disconnect");
+    assert.strictEqual(cancelRes.target, "Z:");
+    // Returns ERROR_NOT_CONNECTED (2250) or ERROR_BAD_DEVICE (1200)
+    assert(cancelRes.errorCode === 2250 || cancelRes.errorCode === 1200);
+
+    // 2. Connect missing remoteName validation
+    const addMissing = await kb.manageNetworkConnection({ action: "connect", remoteName: "" });
+    assert(addMissing !== null && typeof addMissing === "object");
+    assert.strictEqual(addMissing.success, false);
+    assert(typeof addMissing.error === "string");
+  });
+
+  it("All 118 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 115);
+    assert.strictEqual(SYSTEM_TOOLS.length, 118);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -2409,6 +2475,9 @@ async function run() {
     assert(toolNames.includes("super_wintrust_verify_file"));
     assert(toolNames.includes("super_wintrust_signer_info"));
     assert(toolNames.includes("super_wintrust_catalog_search"));
+    assert(toolNames.includes("super_wnet_network_drives"));
+    assert(toolNames.includes("super_wnet_get_connection"));
+    assert(toolNames.includes("super_wnet_manage_connection"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

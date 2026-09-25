@@ -2341,6 +2341,81 @@ const SYSTEM_TOOLS = [
           },
           required: ["path"]
         }
+      },
+      {
+        name: "super_wnet_network_drives",
+        description: "Enumerates active and remembered Windows network connections, shares, and network providers via the Win32 Multi-Provider Router (WNet / mpr.dll). Lists local drive letters (e.g. 'Z:'), remote UNC paths (e.g. '\\\\server\\share'), provider names, and network scopes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            scope: {
+              type: "string",
+              enum: ["connected", "remembered", "global", "recent", "context"],
+              default: "connected",
+              description: "Network resource scope filter: 'connected' (active connections), 'remembered' (persistent reconnect at logon), 'global' (network neighborhood), 'recent', or 'context'."
+            },
+            type: {
+              type: "string",
+              enum: ["all", "disk", "print"],
+              default: "all",
+              description: "Resource type filter: 'all', 'disk' (shares/folders), or 'print' (network printers)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wnet_get_connection",
+        description: "Queries network connection details and remote UNC path for a local device name or drive letter (e.g., 'Z:', 'C:'), or inspects current network user and all drive connection states via WNetGetConnection and WNetGetUser.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            localName: {
+              type: "string",
+              description: "Local drive letter or device name (e.g., 'Z:', 'C:'). When omitted or null, returns a complete connection map of all local drives alongside the current network username."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wnet_manage_connection",
+        description: "Connects (maps) or disconnects (unmaps) a Windows network drive or SMB UNC share via the Win32 Multi-Provider Router (WNetAddConnection2, WNetCancelConnection2). Supports explicit credentials, persistent reconnection profiles, and forced unmounting.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["connect", "disconnect"],
+              description: "Action to perform: 'connect' (mounts remote UNC share to local drive letter) or 'disconnect' (unmounts network drive)."
+            },
+            remoteName: {
+              type: "string",
+              description: "Remote UNC share path (e.g., '\\\\server\\share'). Required for 'connect', optional for 'disconnect' if localName is provided."
+            },
+            localName: {
+              type: "string",
+              description: "Local drive letter to assign or disconnect (e.g., 'Z:'). Optional for 'connect' (connects without drive letter), required for 'disconnect' if remoteName is not provided."
+            },
+            userName: {
+              type: "string",
+              description: "Username credential for network authentication (optional)."
+            },
+            password: {
+              type: "string",
+              description: "Password credential for network authentication (optional)."
+            },
+            persistent: {
+              type: "boolean",
+              default: false,
+              description: "Whether to persist connection across reboots in the user profile (default: false)."
+            },
+            force: {
+              type: "boolean",
+              default: false,
+              description: "Force disconnection even if open files or pending requests exist on the network drive (default: false, only applies to 'disconnect')."
+            }
+          },
+          required: ["action"]
+        }
       }
 ];
 
@@ -4266,6 +4341,52 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [WinTrust Catalog Search ("${filePath}")]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wnet_network_drives") {
+    const scope = args?.scope || "connected";
+    const type = args?.type || "all";
+    const res = await orch.getNetworkDrives({ scope, type });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [WNet Network Drives (scope: ${scope}, type: ${type})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wnet_get_connection") {
+    const localName = args?.localName || null;
+    const res = await orch.getNetworkConnection(localName);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [WNet Get Connection (${localName || "all drives"})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wnet_manage_connection") {
+    const action = args?.action || "connect";
+    const remoteName = args?.remoteName || "";
+    const localName = args?.localName || "";
+    const userName = args?.userName || "";
+    const password = args?.password || "";
+    const persistent = Boolean(args?.persistent);
+    const force = Boolean(args?.force);
+    const res = await orch.manageNetworkConnection({ action, remoteName, localName, userName, password, persistent, force });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [WNet Manage Connection (${action})]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

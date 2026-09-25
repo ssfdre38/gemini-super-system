@@ -5168,6 +5168,364 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        #region Windows Multi-Provider Router & Network Drive Management (WNet)
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct NETRESOURCE_RAW {
+            public uint dwScope;
+            public uint dwType;
+            public uint dwDisplayType;
+            public uint dwUsage;
+            public IntPtr lpLocalName;
+            public IntPtr lpRemoteName;
+            public IntPtr lpComment;
+            public IntPtr lpProvider;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct NETRESOURCE_IN {
+            public uint dwScope;
+            public uint dwType;
+            public uint dwDisplayType;
+            public uint dwUsage;
+            public string lpLocalName;
+            public string lpRemoteName;
+            public string lpComment;
+            public string lpProvider;
+        }
+
+        const uint RESOURCETYPE_ANY = 0x00000000;
+        const uint RESOURCETYPE_DISK = 0x00000001;
+        const uint RESOURCETYPE_PRINT = 0x00000002;
+
+        const uint RESOURCE_CONNECTED = 0x00000001;
+        const uint RESOURCE_GLOBALNET = 0x00000002;
+        const uint RESOURCE_REMEMBERED = 0x00000003;
+        const uint RESOURCE_RECENT = 0x00000004;
+        const uint RESOURCE_CONTEXT = 0x00000005;
+
+        const uint CONNECT_UPDATE_PROFILE = 0x00000001;
+        const uint CONNECT_TEMPORARY = 0x00000004;
+
+        [DllImport("mpr.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint WNetOpenEnumW(uint dwScope, uint dwType, uint dwUsage, IntPtr lpNetResource, out IntPtr lphEnum);
+
+        [DllImport("mpr.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint WNetEnumResourceW(IntPtr hEnum, ref uint lpcCount, IntPtr lpBuffer, ref uint lpBufferSize);
+
+        [DllImport("mpr.dll", SetLastError = true)]
+        static extern uint WNetCloseEnum(IntPtr hEnum);
+
+        [DllImport("mpr.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint WNetGetConnectionW(string lpLocalName, [Out] StringBuilder lpRemoteName, ref uint lpnLength);
+
+        [DllImport("mpr.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint WNetGetUserW(string lpName, [Out] StringBuilder lpUserName, ref uint lpnLength);
+
+        [DllImport("mpr.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint WNetAddConnection2W(ref NETRESOURCE_IN lpNetResource, string lpPassword, string lpUserName, uint dwFlags);
+
+        [DllImport("mpr.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint WNetCancelConnection2W(string lpName, uint dwFlags, bool fForce);
+
+        static string GetWNetScopeName(uint scope) {
+            switch (scope) {
+                case 1: return "connected";
+                case 2: return "globalnet";
+                case 3: return "remembered";
+                case 4: return "recent";
+                case 5: return "context";
+                default: return "unknown_" + scope;
+            }
+        }
+
+        static string GetWNetTypeName(uint type) {
+            switch (type) {
+                case 0: return "all";
+                case 1: return "disk";
+                case 2: return "print";
+                case 8: return "reserved";
+                default: return "type_" + type;
+            }
+        }
+
+        static string GetWNetDisplayTypeName(uint dt) {
+            switch (dt) {
+                case 0: return "generic";
+                case 1: return "domain";
+                case 2: return "server";
+                case 3: return "share";
+                case 4: return "file";
+                case 5: return "group";
+                case 6: return "network";
+                case 7: return "root";
+                case 8: return "shareadmin";
+                case 9: return "directory";
+                case 10: return "tree";
+                case 11: return "ndscontainer";
+                default: return "display_" + dt;
+            }
+        }
+
+        static string GetWNetUsageJson(uint usage) {
+            var list = new List<string>();
+            if ((usage & 0x01) != 0) list.Add("\"connectable\"");
+            if ((usage & 0x02) != 0) list.Add("\"container\"");
+            if ((usage & 0x04) != 0) list.Add("\"no_local_device\"");
+            if ((usage & 0x08) != 0) list.Add("\"sibling\"");
+            if ((usage & 0x10) != 0) list.Add("\"attached\"");
+            return "[" + string.Join(", ", list.ToArray()) + "]";
+        }
+
+        static string GetWNetErrorMessage(uint code) {
+            switch (code) {
+                case 0: return "Success";
+                case 5: return "Access is denied";
+                case 53: return "The network path was not found";
+                case 67: return "The network name cannot be found";
+                case 85: return "The local device name is already in use";
+                case 86: return "The specified network password is not correct";
+                case 1200: return "The specified device name is invalid";
+                case 1202: return "The local device has a remembered connection to another network resource";
+                case 1203: return "No network provider accepted the given network path";
+                case 1208: return "An extended error occurred";
+                case 2250: return "This network connection does not exist";
+                case 2401: return "There are open files or pending requests on the connection";
+                default:
+                    try {
+                        return new System.ComponentModel.Win32Exception((int)code).Message;
+                    } catch {
+                        return "System error " + code;
+                    }
+            }
+        }
+
+        static void WNetNetworkDrivesCmd(string scopeStr, string typeStr) {
+            try {
+                string sLower = (scopeStr ?? "connected").Trim().ToLowerInvariant();
+                uint dwScope = RESOURCE_CONNECTED;
+                if (sLower == "remembered") dwScope = RESOURCE_REMEMBERED;
+                else if (sLower == "global" || sLower == "globalnet") dwScope = RESOURCE_GLOBALNET;
+                else if (sLower == "recent") dwScope = RESOURCE_RECENT;
+                else if (sLower == "context") dwScope = RESOURCE_CONTEXT;
+
+                string tLower = (typeStr ?? "all").Trim().ToLowerInvariant();
+                uint dwType = RESOURCETYPE_ANY;
+                if (tLower == "disk") dwType = RESOURCETYPE_DISK;
+                else if (tLower == "print") dwType = RESOURCETYPE_PRINT;
+
+                IntPtr hEnum;
+                uint openRes = WNetOpenEnumW(dwScope, dwType, 0, IntPtr.Zero, out hEnum);
+                if (openRes != 0) {
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": false, \"scope\": \"{0}\", \"type\": \"{1}\", \"errorCode\": {2}, \"error\": \"{3}\"}}",
+                        EscapeJson(sLower), EscapeJson(tLower), openRes, EscapeJson(GetWNetErrorMessage(openRes))
+                    ));
+                    return;
+                }
+
+                List<string> resJsonList = new List<string>();
+                uint bufSize = 65536;
+                IntPtr pBuf = Marshal.AllocHGlobal((int)bufSize);
+
+                try {
+                    while (true) {
+                        uint count = 0xFFFFFFFF;
+                        uint currentBufSize = bufSize;
+                        uint enumRes = WNetEnumResourceW(hEnum, ref count, pBuf, ref currentBufSize);
+
+                        if (enumRes == 0 || enumRes == 259 /* ERROR_NO_MORE_ITEMS */) {
+                            if (count > 0 && count != 0xFFFFFFFF) {
+                                int structSize = Marshal.SizeOf(typeof(NETRESOURCE_RAW));
+                                for (int i = 0; i < count; i++) {
+                                    IntPtr itemPtr = new IntPtr(pBuf.ToInt64() + (i * structSize));
+                                    NETRESOURCE_RAW nr = (NETRESOURCE_RAW)Marshal.PtrToStructure(itemPtr, typeof(NETRESOURCE_RAW));
+                                    string local = nr.lpLocalName != IntPtr.Zero ? Marshal.PtrToStringUni(nr.lpLocalName) : null;
+                                    string remote = nr.lpRemoteName != IntPtr.Zero ? Marshal.PtrToStringUni(nr.lpRemoteName) : null;
+                                    string comment = nr.lpComment != IntPtr.Zero ? Marshal.PtrToStringUni(nr.lpComment) : null;
+                                    string provider = nr.lpProvider != IntPtr.Zero ? Marshal.PtrToStringUni(nr.lpProvider) : null;
+
+                                    string itemJson = string.Format(
+                                        "{{\"localName\": {0}, \"remoteName\": {1}, \"comment\": {2}, \"provider\": {3}, \"scope\": \"{4}\", \"type\": \"{5}\", \"displayType\": \"{6}\", \"usage\": {7}}}",
+                                        local != null ? "\"" + EscapeJson(local) + "\"" : "null",
+                                        remote != null ? "\"" + EscapeJson(remote) + "\"" : "null",
+                                        comment != null ? "\"" + EscapeJson(comment) + "\"" : "null",
+                                        provider != null ? "\"" + EscapeJson(provider) + "\"" : "null",
+                                        GetWNetScopeName(nr.dwScope),
+                                        GetWNetTypeName(nr.dwType),
+                                        GetWNetDisplayTypeName(nr.dwDisplayType),
+                                        GetWNetUsageJson(nr.dwUsage)
+                                    );
+                                    resJsonList.Add(itemJson);
+                                }
+                            }
+                            if (enumRes == 259) break;
+                        } else {
+                            break;
+                        }
+                    }
+                } finally {
+                    WNetCloseEnum(hEnum);
+                    Marshal.FreeHGlobal(pBuf);
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"scope\": \"{0}\", \"type\": \"{1}\", \"count\": {2}, \"resources\": [{3}]}}",
+                    EscapeJson(sLower), EscapeJson(tLower), resJsonList.Count, string.Join(", ", resJsonList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WNetGetConnectionCmd(string localName) {
+            try {
+                StringBuilder userBuf = new StringBuilder(512);
+                uint userLen = (uint)userBuf.Capacity;
+                uint userRes = WNetGetUserW(null, userBuf, ref userLen);
+                string currentUser = (userRes == 0 ? userBuf.ToString() : null);
+
+                if (string.IsNullOrEmpty(localName)) {
+                    List<string> driveConns = new List<string>();
+                    foreach (DriveInfo di in DriveInfo.GetDrives()) {
+                        string driveRoot = di.Name.TrimEnd('\\');
+                        StringBuilder rBuf = new StringBuilder(1024);
+                        uint rLen = (uint)rBuf.Capacity;
+                        uint cRes = WNetGetConnectionW(driveRoot, rBuf, ref rLen);
+                        string remote = (cRes == 0 ? rBuf.ToString() : null);
+                        string status = (cRes == 0 ? "connected" : (cRes == 2250 ? "not_connected" : "error"));
+
+                        driveConns.Add(string.Format(
+                            "{{\"localName\": \"{0}\", \"remoteName\": {1}, \"driveType\": \"{2}\", \"status\": \"{3}\", \"statusCode\": {4}}}",
+                            EscapeJson(driveRoot),
+                            remote != null ? "\"" + EscapeJson(remote) + "\"" : "null",
+                            di.DriveType.ToString(),
+                            status,
+                            cRes
+                        ));
+                    }
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"currentUser\": {0}, \"drives\": [{1}]}}",
+                        currentUser != null ? "\"" + EscapeJson(currentUser) + "\"" : "null",
+                        string.Join(", ", driveConns.ToArray())
+                    ));
+                    return;
+                }
+
+                string cleanName = localName.Trim();
+                if (cleanName.EndsWith("\\")) cleanName = cleanName.TrimEnd('\\');
+                if (cleanName.Length == 1 && char.IsLetter(cleanName[0])) cleanName += ":";
+
+                StringBuilder remBuf = new StringBuilder(1024);
+                uint remLen = (uint)remBuf.Capacity;
+                uint res = WNetGetConnectionW(cleanName, remBuf, ref remLen);
+
+                StringBuilder devUserBuf = new StringBuilder(512);
+                uint devUserLen = (uint)devUserBuf.Capacity;
+                uint devUserRes = WNetGetUserW(cleanName, devUserBuf, ref devUserLen);
+                string devUser = (devUserRes == 0 ? devUserBuf.ToString() : currentUser);
+
+                if (res == 0) {
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"localName\": \"{0}\", \"remoteName\": \"{1}\", \"currentUser\": {2}, \"status\": \"connected\", \"statusCode\": 0, \"statusMessage\": \"Connected\"}}",
+                        EscapeJson(cleanName), EscapeJson(remBuf.ToString()),
+                        devUser != null ? "\"" + EscapeJson(devUser) + "\"" : "null"
+                    ));
+                } else if (res == 2250 /* ERROR_NOT_CONNECTED */) {
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"localName\": \"{0}\", \"remoteName\": null, \"currentUser\": {1}, \"status\": \"not_connected\", \"statusCode\": 2250, \"statusMessage\": \"This network connection does not exist (local or unmapped device)\"}}",
+                        EscapeJson(cleanName),
+                        devUser != null ? "\"" + EscapeJson(devUser) + "\"" : "null"
+                    ));
+                } else {
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": false, \"localName\": \"{0}\", \"remoteName\": null, \"currentUser\": {1}, \"status\": \"error\", \"statusCode\": {2}, \"error\": \"{3}\"}}",
+                        EscapeJson(cleanName),
+                        devUser != null ? "\"" + EscapeJson(devUser) + "\"" : "null",
+                        res,
+                        EscapeJson(GetWNetErrorMessage(res))
+                    ));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WNetManageConnectionCmd(string action, string remoteName, string localName, string userName, string password, bool persistent, bool force) {
+            try {
+                string act = (action ?? "").Trim().ToLowerInvariant();
+                if (act == "connect" || act == "add" || act == "map") {
+                    if (string.IsNullOrEmpty(remoteName)) {
+                        Console.WriteLine("{\"success\": false, \"error\": \"remoteName (UNC path, e.g. \\\\server\\share) is required for connect\"}");
+                        return;
+                    }
+
+                    string cleanLocal = string.IsNullOrEmpty(localName) ? null : localName.Trim().TrimEnd('\\');
+                    if (!string.IsNullOrEmpty(cleanLocal) && cleanLocal.Length == 1 && char.IsLetter(cleanLocal[0])) cleanLocal += ":";
+
+                    NETRESOURCE_IN nr = new NETRESOURCE_IN();
+                    nr.dwType = RESOURCETYPE_DISK;
+                    nr.lpLocalName = cleanLocal;
+                    nr.lpRemoteName = remoteName.Trim();
+                    nr.lpProvider = null;
+
+                    uint flags = persistent ? CONNECT_UPDATE_PROFILE : CONNECT_TEMPORARY;
+                    string u = string.IsNullOrEmpty(userName) ? null : userName;
+                    string p = string.IsNullOrEmpty(password) ? null : password;
+
+                    uint res = WNetAddConnection2W(ref nr, p, u, flags);
+                    if (res == 0) {
+                        Console.WriteLine(string.Format(
+                            "{{\"success\": true, \"action\": \"connect\", \"localName\": {0}, \"remoteName\": \"{1}\", \"persistent\": {2}, \"message\": \"Successfully connected network resource\"}}",
+                            cleanLocal != null ? "\"" + EscapeJson(cleanLocal) + "\"" : "null",
+                            EscapeJson(remoteName),
+                            persistent ? "true" : "false"
+                        ));
+                    } else {
+                        Console.WriteLine(string.Format(
+                            "{{\"success\": false, \"action\": \"connect\", \"localName\": {0}, \"remoteName\": \"{1}\", \"errorCode\": {2}, \"error\": \"{3}\"}}",
+                            cleanLocal != null ? "\"" + EscapeJson(cleanLocal) + "\"" : "null",
+                            EscapeJson(remoteName),
+                            res,
+                            EscapeJson(GetWNetErrorMessage(res))
+                        ));
+                    }
+                } else if (act == "disconnect" || act == "cancel" || act == "unmap") {
+                    string target = !string.IsNullOrEmpty(localName) ? localName.Trim().TrimEnd('\\') : remoteName;
+                    if (string.IsNullOrEmpty(target)) {
+                        Console.WriteLine("{\"success\": false, \"error\": \"Either localName (e.g. Z:) or remoteName (e.g. \\\\server\\share) must be provided to disconnect\"}");
+                        return;
+                    }
+                    if (target.Length == 1 && char.IsLetter(target[0])) target += ":";
+
+                    uint flags = persistent ? CONNECT_UPDATE_PROFILE : 0;
+                    uint res = WNetCancelConnection2W(target, flags, force);
+
+                    if (res == 0) {
+                        Console.WriteLine(string.Format(
+                            "{{\"success\": true, \"action\": \"disconnect\", \"target\": \"{0}\", \"force\": {1}, \"message\": \"Successfully disconnected network resource\"}}",
+                            EscapeJson(target),
+                            force ? "true" : "false"
+                        ));
+                    } else {
+                        Console.WriteLine(string.Format(
+                            "{{\"success\": false, \"action\": \"disconnect\", \"target\": \"{0}\", \"errorCode\": {1}, \"error\": \"{2}\"}}",
+                            EscapeJson(target),
+                            res,
+                            EscapeJson(GetWNetErrorMessage(res))
+                        ));
+                    }
+                } else {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Invalid action '{0}'. Expected 'connect' or 'disconnect'.\"}}", EscapeJson(act)));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         static void ClipboardGetCmd() {
             try {
                 string text = "";
@@ -7998,6 +8356,22 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "wintrust_catalog" || cmd == "file_catalog" || cmd == "catalog_search") {
                 string p = args.Length >= 2 ? args[1] : "";
                 WinTrustCatalogSearchCmd(p);
+            } else if (cmd == "wnet_drives" || cmd == "network_drives" || cmd == "wnet_network_drives") {
+                string scope = args.Length >= 2 ? args[1] : "connected";
+                string type = args.Length >= 3 ? args[2] : "all";
+                WNetNetworkDrivesCmd(scope, type);
+            } else if (cmd == "wnet_connection" || cmd == "get_connection" || cmd == "wnet_get_connection") {
+                string localName = args.Length >= 2 ? args[1] : null;
+                WNetGetConnectionCmd(localName);
+            } else if (cmd == "wnet_manage" || cmd == "manage_connection" || cmd == "wnet_manage_connection") {
+                string action = args.Length >= 2 ? args[1] : "connect";
+                string remote = args.Length >= 3 ? args[2] : null;
+                string local = args.Length >= 4 ? args[3] : null;
+                string user = args.Length >= 5 ? args[4] : null;
+                string pass = args.Length >= 6 ? args[5] : null;
+                bool persistent = args.Length >= 7 ? (args[6].ToLowerInvariant() == "true" || args[6] == "1") : false;
+                bool force = args.Length >= 8 ? (args[7].ToLowerInvariant() == "true" || args[7] == "1") : false;
+                WNetManageConnectionCmd(action, remote, local, user, pass, persistent, force);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {
