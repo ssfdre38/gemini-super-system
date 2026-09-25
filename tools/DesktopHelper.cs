@@ -4741,6 +4741,433 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        // --- WinTrust Subsystem (wintrust.h / softpub.h / wintrust.dll) ---
+
+        private const uint WTD_UI_NONE = 2;
+        private const uint WTD_REVOKE_NONE = 0;
+        private const uint WTD_CHOICE_FILE = 1;
+        private const uint WTD_CHOICE_CATALOG = 2;
+        private const uint WTD_STATEACTION_IGNORE = 0;
+        private const uint WTD_REVOCATION_CHECK_NONE = 0x00000010;
+        private const uint WTD_REVOCATION_CHECK_WHOLECHAIN = 0x00000020;
+        private const uint WTD_CACHE_ONLY_URL_RETRIEVAL = 0x00004000;
+
+        private static readonly Guid WINTRUST_ACTION_GENERIC_VERIFY_V2 = new Guid("{00AAC56B-CD44-11d0-8CC2-00C04FC295EE}");
+        private static readonly Guid DRIVER_ACTION_VERIFY = new Guid("{F750E6C3-38EE-11d1-85E5-00C04FC295EE}");
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct WINTRUST_FILE_INFO {
+            public uint cbStruct;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string pcwszFilePath;
+            public IntPtr hFile;
+            public IntPtr pgKnownSubject;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct WINTRUST_CATALOG_INFO {
+            public uint cbStruct;
+            public uint dwCatalogVersion;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string pcwszCatalogFilePath;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string pcwszMemberTag;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string pcwszMemberFilePath;
+            public IntPtr hMemberFile;
+            public IntPtr pbCalculatedHash;
+            public uint cbCalculatedHash;
+            public IntPtr pcCatalogContext;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct WINTRUST_DATA {
+            public uint cbStruct;
+            public IntPtr pPolicyCallbackData;
+            public IntPtr pSIPClientData;
+            public uint dwUIChoice;
+            public uint fdwRevocationChecks;
+            public uint dwUnionChoice;
+            public IntPtr pUnionData;
+            public uint dwStateAction;
+            public IntPtr hWVTStateData;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string pwszURLReference;
+            public uint dwProvFlags;
+            public uint dwUIContext;
+            public IntPtr pSignatureSettings;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct CATALOG_INFO {
+            public uint cbStruct;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+            public string wszCatalogFile;
+        }
+
+        [DllImport("wintrust.dll", ExactSpelling = true, SetLastError = false, CharSet = CharSet.Unicode)]
+        static extern int WinVerifyTrust(IntPtr hwnd, [MarshalAs(UnmanagedType.LPStruct)] Guid pgActionID, IntPtr pWVTData);
+
+        [DllImport("wintrust.dll", SetLastError = true)]
+        static extern bool CryptCATAdminAcquireContext(out IntPtr phCatAdmin, ref Guid pgSubsystem, uint dwFlags);
+
+        [DllImport("wintrust.dll", SetLastError = true)]
+        static extern bool CryptCATAdminReleaseContext(IntPtr hCatAdmin, uint dwFlags);
+
+        [DllImport("wintrust.dll", SetLastError = true)]
+        static extern bool CryptCATAdminCalcHashFromFileHandle(IntPtr hFile, ref uint pcbHash, IntPtr pbHash, uint dwFlags);
+
+        [DllImport("wintrust.dll", SetLastError = true)]
+        static extern IntPtr CryptCATAdminEnumCatalogFromHash(IntPtr hCatAdmin, IntPtr pbHash, uint cbHash, uint dwFlags, ref IntPtr phPrevCatInfo);
+
+        [DllImport("wintrust.dll", SetLastError = true)]
+        static extern bool CryptCATCatalogInfoFromContext(IntPtr hCatInfo, ref CATALOG_INFO psCatInfo, uint dwFlags);
+
+        [DllImport("wintrust.dll", SetLastError = true)]
+        static extern bool CryptCATAdminReleaseCatalogContext(IntPtr hCatAdmin, IntPtr hCatInfo, uint dwFlags);
+
+        static string GetWinTrustStatusText(uint status, out string message) {
+            switch (status) {
+                case 0:
+                    message = "The digital signature is verified and trusted.";
+                    return "TRUSTED_AND_VERIFIED";
+                case 0x800B0003:
+                    message = "The form specified for the subject is not supported or recognized by the trust provider.";
+                    return "TRUST_E_SUBJECT_FORM_UNKNOWN";
+                case 0x800B0100:
+                    message = "No signature was present in the subject.";
+                    return "TRUST_E_NOSIGNATURE";
+                case 0x800B0101:
+                    message = "The signature or certificate is explicitly distrusted.";
+                    return "TRUST_E_EXPLICIT_DISTRUST";
+                case 0x800B0108:
+                    message = "One of the CA certificates in the chain is not trusted.";
+                    return "CERT_E_UNTRUSTEDCA";
+                case 0x800B0109:
+                    message = "A certificate chain terminated in a root certificate not trusted by the trust provider.";
+                    return "CERT_E_UNTRUSTEDROOT";
+                case 0x800B010A:
+                    message = "A certificate chain could not be built to a trusted root authority.";
+                    return "CERT_E_CHAINING";
+                case 0x800B010C:
+                    message = "A certificate's basic constraint extension has not been observed.";
+                    return "CERT_E_ROLE";
+                case 0x800B010E:
+                    message = "The certificate was revoked by the issuer.";
+                    return "CERT_E_REVOKED";
+                case 0x800B010F:
+                    message = "The certificate is expired or outside its validity period.";
+                    return "CERT_E_EXPIRED";
+                case 0x80096010:
+                    message = "The digital signature hash does not match the file contents (possible tampering detected).";
+                    return "TRUST_E_BAD_DIGEST";
+                case 0x80096004:
+                    message = "The trust verification provider is unknown.";
+                    return "TRUST_E_PROVIDER_UNKNOWN";
+                case 0x80092026:
+                    message = "The cryptographic or security settings could not be verified.";
+                    return "CRYPT_E_SECURITY_SETTINGS";
+                default:
+                    message = "Cryptographic trust verification returned error code 0x" + status.ToString("X8") + ".";
+                    return "ERROR_0x" + status.ToString("X8");
+            }
+        }
+
+        static string BuildSignerJson(X509Certificate2 cert) {
+            if (cert == null) return "null";
+            bool isSelfSigned = string.Equals(cert.Subject, cert.Issuer, StringComparison.OrdinalIgnoreCase);
+            bool isExpired = DateTime.Now < cert.NotBefore || DateTime.Now > cert.NotAfter;
+            return string.Format(
+                "{{\"subject\": \"{0}\", \"issuer\": \"{1}\", \"thumbprint\": \"{2}\", \"serialNumber\": \"{3}\", \"validFrom\": \"{4}\", \"validTo\": \"{5}\", \"isSelfSigned\": {6}, \"isExpired\": {7}, \"keyAlgorithm\": \"{8}\"}}",
+                EscapeJson(cert.Subject),
+                EscapeJson(cert.Issuer),
+                EscapeJson(cert.Thumbprint),
+                EscapeJson(cert.SerialNumber),
+                cert.NotBefore.ToString("o"),
+                cert.NotAfter.ToString("o"),
+                isSelfSigned ? "true" : "false",
+                isExpired ? "true" : "false",
+                EscapeJson(cert.GetKeyAlgorithm())
+            );
+        }
+
+        static bool TryFindCatalogForFile(string filePath, out string catalogPath, out string memberHash, out int trustResult) {
+            catalogPath = null;
+            memberHash = null;
+            trustResult = -1;
+
+            if (!File.Exists(filePath)) return false;
+
+            try {
+                using (FileStream fs = File.OpenRead(filePath)) {
+                    IntPtr hCatAdmin;
+                    Guid driverAction = DRIVER_ACTION_VERIFY;
+                    if (!CryptCATAdminAcquireContext(out hCatAdmin, ref driverAction, 0)) return false;
+
+                    try {
+                        uint cbHash = 0;
+                        CryptCATAdminCalcHashFromFileHandle(fs.SafeFileHandle.DangerousGetHandle(), ref cbHash, IntPtr.Zero, 0);
+                        if (cbHash == 0) return false;
+
+                        IntPtr pbHash = Marshal.AllocHGlobal((int)cbHash);
+                        try {
+                            if (!CryptCATAdminCalcHashFromFileHandle(fs.SafeFileHandle.DangerousGetHandle(), ref cbHash, pbHash, 0)) return false;
+
+                            byte[] hashBytes = new byte[cbHash];
+                            Marshal.Copy(pbHash, hashBytes, 0, (int)cbHash);
+                            StringBuilder sb = new StringBuilder();
+                            foreach (byte b in hashBytes) sb.Append(b.ToString("X2"));
+                            memberHash = sb.ToString();
+
+                            IntPtr hPrev = IntPtr.Zero;
+                            IntPtr hCatInfo = CryptCATAdminEnumCatalogFromHash(hCatAdmin, pbHash, cbHash, 0, ref hPrev);
+                            if (hCatInfo == IntPtr.Zero) return false;
+
+                            CATALOG_INFO catInfo = new CATALOG_INFO();
+                            catInfo.cbStruct = (uint)Marshal.SizeOf(typeof(CATALOG_INFO));
+                            if (CryptCATCatalogInfoFromContext(hCatInfo, ref catInfo, 0)) {
+                                catalogPath = catInfo.wszCatalogFile;
+
+                                WINTRUST_CATALOG_INFO catWti = new WINTRUST_CATALOG_INFO();
+                                catWti.cbStruct = (uint)Marshal.SizeOf(typeof(WINTRUST_CATALOG_INFO));
+                                catWti.dwCatalogVersion = 0;
+                                catWti.pcwszCatalogFilePath = catalogPath;
+                                catWti.pcwszMemberTag = memberHash;
+                                catWti.pcwszMemberFilePath = filePath;
+                                catWti.hMemberFile = IntPtr.Zero;
+                                catWti.pbCalculatedHash = pbHash;
+                                catWti.cbCalculatedHash = cbHash;
+                                catWti.pcCatalogContext = IntPtr.Zero;
+
+                                IntPtr pCatWti = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(WINTRUST_CATALOG_INFO)));
+                                Marshal.StructureToPtr(catWti, pCatWti, false);
+
+                                WINTRUST_DATA wtd = new WINTRUST_DATA();
+                                wtd.cbStruct = (uint)Marshal.SizeOf(typeof(WINTRUST_DATA));
+                                wtd.dwUIChoice = WTD_UI_NONE;
+                                wtd.fdwRevocationChecks = WTD_REVOKE_NONE;
+                                wtd.dwUnionChoice = WTD_CHOICE_CATALOG;
+                                wtd.pUnionData = pCatWti;
+                                wtd.dwStateAction = WTD_STATEACTION_IGNORE;
+                                wtd.dwProvFlags = WTD_REVOCATION_CHECK_NONE | WTD_CACHE_ONLY_URL_RETRIEVAL;
+
+                                IntPtr pWtd = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(WINTRUST_DATA)));
+                                Marshal.StructureToPtr(wtd, pWtd, false);
+
+                                try {
+                                    trustResult = WinVerifyTrust(IntPtr.Zero, WINTRUST_ACTION_GENERIC_VERIFY_V2, pWtd);
+                                } finally {
+                                    Marshal.FreeHGlobal(pCatWti);
+                                    Marshal.FreeHGlobal(pWtd);
+                                }
+                            }
+                            CryptCATAdminReleaseCatalogContext(hCatAdmin, hCatInfo, 0);
+                            return !string.IsNullOrEmpty(catalogPath);
+                        } finally {
+                            Marshal.FreeHGlobal(pbHash);
+                        }
+                    } finally {
+                        CryptCATAdminReleaseContext(hCatAdmin, 0);
+                    }
+                }
+            } catch {
+                return false;
+            }
+        }
+
+        static void WinTrustVerifyFileCmd(string targetPath, bool allowCatalog, bool checkRevocation) {
+            try {
+                if (string.IsNullOrEmpty(targetPath) || !File.Exists(targetPath)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Target file not found: {0}\"}}", EscapeJson(targetPath ?? "")));
+                    return;
+                }
+
+                string fullPath = Path.GetFullPath(targetPath);
+
+                // 1. Try embedded signature verification
+                WINTRUST_FILE_INFO fileInfo = new WINTRUST_FILE_INFO();
+                fileInfo.cbStruct = (uint)Marshal.SizeOf(typeof(WINTRUST_FILE_INFO));
+                fileInfo.pcwszFilePath = fullPath;
+                fileInfo.hFile = IntPtr.Zero;
+                fileInfo.pgKnownSubject = IntPtr.Zero;
+
+                IntPtr pFileInfo = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(WINTRUST_FILE_INFO)));
+                Marshal.StructureToPtr(fileInfo, pFileInfo, false);
+
+                WINTRUST_DATA data = new WINTRUST_DATA();
+                data.cbStruct = (uint)Marshal.SizeOf(typeof(WINTRUST_DATA));
+                data.pPolicyCallbackData = IntPtr.Zero;
+                data.pSIPClientData = IntPtr.Zero;
+                data.dwUIChoice = WTD_UI_NONE;
+                data.fdwRevocationChecks = checkRevocation ? WTD_REVOCATION_CHECK_WHOLECHAIN : WTD_REVOKE_NONE;
+                data.dwUnionChoice = WTD_CHOICE_FILE;
+                data.pUnionData = pFileInfo;
+                data.dwStateAction = WTD_STATEACTION_IGNORE;
+                data.hWVTStateData = IntPtr.Zero;
+                data.pwszURLReference = null;
+                data.dwProvFlags = WTD_CACHE_ONLY_URL_RETRIEVAL;
+                if (!checkRevocation) data.dwProvFlags |= WTD_REVOCATION_CHECK_NONE;
+                data.dwUIContext = 0;
+                data.pSignatureSettings = IntPtr.Zero;
+
+                IntPtr pData = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(WINTRUST_DATA)));
+                Marshal.StructureToPtr(data, pData, false);
+
+                int lStatus;
+                try {
+                    lStatus = WinVerifyTrust(IntPtr.Zero, WINTRUST_ACTION_GENERIC_VERIFY_V2, pData);
+                } finally {
+                    Marshal.FreeHGlobal(pFileInfo);
+                    Marshal.FreeHGlobal(pData);
+                }
+
+                uint uStatus = (uint)lStatus;
+
+                if (lStatus == 0) {
+                    string msg;
+                    string statusStr = GetWinTrustStatusText(uStatus, out msg);
+                    string signerJson = "null";
+                    try {
+                        X509Certificate rawCert = X509Certificate.CreateFromSignedFile(fullPath);
+                        if (rawCert != null) {
+                            using (X509Certificate2 cert2 = new X509Certificate2(rawCert)) {
+                                signerJson = BuildSignerJson(cert2);
+                            }
+                        }
+                    } catch {}
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"path\": \"{0}\", \"isTrusted\": true, \"signatureType\": \"embedded\", \"statusCode\": \"0x{1:X8}\", \"status\": \"{2}\", \"statusMessage\": \"{3}\", \"catalogFile\": null, \"catalogHash\": null, \"signer\": {4}}}",
+                        EscapeJson(fullPath), uStatus, statusStr, EscapeJson(msg), signerJson
+                    ));
+                    return;
+                }
+
+                // If no embedded signature and catalog lookup is allowed, try catalog
+                if (allowCatalog && uStatus == 0x800B0100) {
+                    string catPath, memHash;
+                    int catTrust;
+                    if (TryFindCatalogForFile(fullPath, out catPath, out memHash, out catTrust)) {
+                        uint uCatStatus = (uint)catTrust;
+                        string catMsg;
+                        string catStatusStr = GetWinTrustStatusText(uCatStatus, out catMsg);
+                        bool isCatTrusted = (catTrust == 0);
+                        string catSignerJson = "null";
+                        try {
+                            if (File.Exists(catPath)) {
+                                X509Certificate rawCert = X509Certificate.CreateFromSignedFile(catPath);
+                                if (rawCert != null) {
+                                    using (X509Certificate2 cert2 = new X509Certificate2(rawCert)) {
+                                        catSignerJson = BuildSignerJson(cert2);
+                                    }
+                                }
+                            }
+                        } catch {}
+
+                        Console.WriteLine(string.Format(
+                            "{{\"success\": true, \"path\": \"{0}\", \"isTrusted\": {1}, \"signatureType\": \"catalog\", \"statusCode\": \"0x{2:X8}\", \"status\": \"{3}\", \"statusMessage\": \"{4}\", \"catalogFile\": \"{5}\", \"catalogHash\": \"{6}\", \"signer\": {7}}}",
+                            EscapeJson(fullPath), isCatTrusted ? "true" : "false", uCatStatus, catStatusStr, EscapeJson(catMsg), EscapeJson(catPath), memHash, catSignerJson
+                        ));
+                        return;
+                    }
+                }
+
+                string failMsg;
+                string failStatusStr = GetWinTrustStatusText(uStatus, out failMsg);
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"path\": \"{0}\", \"isTrusted\": false, \"signatureType\": \"{1}\", \"statusCode\": \"0x{2:X8}\", \"status\": \"{3}\", \"statusMessage\": \"{4}\", \"catalogFile\": null, \"catalogHash\": null, \"signer\": null}}",
+                    EscapeJson(fullPath), (uStatus == 0x800B0100 || uStatus == 0x800B0003 ? "none" : "embedded"), uStatus, failStatusStr, EscapeJson(failMsg)
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WinTrustSignerInfoCmd(string targetPath) {
+            try {
+                if (string.IsNullOrEmpty(targetPath) || !File.Exists(targetPath)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Target file not found: {0}\"}}", EscapeJson(targetPath ?? "")));
+                    return;
+                }
+
+                string fullPath = Path.GetFullPath(targetPath);
+
+                // 1. Try embedded signature certificate
+                try {
+                    X509Certificate rawCert = X509Certificate.CreateFromSignedFile(fullPath);
+                    if (rawCert != null) {
+                        using (X509Certificate2 cert2 = new X509Certificate2(rawCert)) {
+                            string signerJson = BuildSignerJson(cert2);
+                            Console.WriteLine(string.Format(
+                                "{{\"success\": true, \"path\": \"{0}\", \"hasSignature\": true, \"signatureSource\": \"embedded\", \"catalogFile\": null, \"signer\": {1}}}",
+                                EscapeJson(fullPath), signerJson
+                            ));
+                            return;
+                        }
+                    }
+                } catch {}
+
+                // 2. Try catalog certificate
+                string catPath, memHash;
+                int catTrust;
+                if (TryFindCatalogForFile(fullPath, out catPath, out memHash, out catTrust)) {
+                    try {
+                        if (File.Exists(catPath)) {
+                            X509Certificate rawCert = X509Certificate.CreateFromSignedFile(catPath);
+                            if (rawCert != null) {
+                                using (X509Certificate2 cert2 = new X509Certificate2(rawCert)) {
+                                    string signerJson = BuildSignerJson(cert2);
+                                    Console.WriteLine(string.Format(
+                                        "{{\"success\": true, \"path\": \"{0}\", \"hasSignature\": true, \"signatureSource\": \"catalog\", \"catalogFile\": \"{1}\", \"signer\": {2}}}",
+                                        EscapeJson(fullPath), EscapeJson(catPath), signerJson
+                                    ));
+                                    return;
+                                }
+                            }
+                        }
+                    } catch {}
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"path\": \"{0}\", \"hasSignature\": false, \"signatureSource\": \"none\", \"catalogFile\": null, \"signer\": null}}",
+                    EscapeJson(fullPath)
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WinTrustCatalogSearchCmd(string targetPath) {
+            try {
+                if (string.IsNullOrEmpty(targetPath) || !File.Exists(targetPath)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Target file not found: {0}\"}}", EscapeJson(targetPath ?? "")));
+                    return;
+                }
+
+                string fullPath = Path.GetFullPath(targetPath);
+                string catPath, memHash;
+                int catTrust;
+                bool found = TryFindCatalogForFile(fullPath, out catPath, out memHash, out catTrust);
+
+                if (found) {
+                    uint uStatus = (uint)catTrust;
+                    string msg;
+                    string statusStr = GetWinTrustStatusText(uStatus, out msg);
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"path\": \"{0}\", \"hasCatalog\": true, \"catalogHash\": \"{1}\", \"catalogFile\": \"{2}\", \"isCatalogTrusted\": {3}, \"statusCode\": \"0x{4:X8}\", \"status\": \"{5}\"}}",
+                        EscapeJson(fullPath), memHash, EscapeJson(catPath), (catTrust == 0 ? "true" : "false"), uStatus, statusStr
+                    ));
+                } else {
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"path\": \"{0}\", \"hasCatalog\": false, \"catalogHash\": null, \"catalogFile\": null, \"isCatalogTrusted\": false, \"statusCode\": null, \"status\": null}}",
+                        EscapeJson(fullPath)
+                    ));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void ClipboardGetCmd() {
             try {
                 string text = "";
@@ -7560,6 +7987,17 @@ namespace GeminiSuperDesktop {
                 string prov = args.Length >= 2 ? args[1] : "ACPI";
                 string table = args.Length >= 3 ? args[2] : "";
                 SystemFirmwareTablesCmd(prov, table);
+            } else if (cmd == "wintrust_verify" || cmd == "verify_file" || cmd == "verify_signature") {
+                string p = args.Length >= 2 ? args[1] : "";
+                bool allowCat = args.Length >= 3 ? (args[2].ToLowerInvariant() != "false" && args[2] != "0") : true;
+                bool checkRev = args.Length >= 4 ? (args[3].ToLowerInvariant() == "true" || args[3] == "1") : false;
+                WinTrustVerifyFileCmd(p, allowCat, checkRev);
+            } else if (cmd == "wintrust_signer" || cmd == "file_signer" || cmd == "signer_info") {
+                string p = args.Length >= 2 ? args[1] : "";
+                WinTrustSignerInfoCmd(p);
+            } else if (cmd == "wintrust_catalog" || cmd == "file_catalog" || cmd == "catalog_search") {
+                string p = args.Length >= 2 ? args[1] : "";
+                WinTrustCatalogSearchCmd(p);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

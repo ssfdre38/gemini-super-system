@@ -2264,10 +2264,103 @@ async function run() {
     }
   });
 
-  it("All 112 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n=======================================================");
+  console.log("   SUITE 30: Windows Authenticode & Cryptographic Trust (WinTrust)");
+  console.log("=======================================================\n");
+
+  await itAsync("KernelBridge.verifyFileTrust verifies embedded Authenticode signatures and signer certificates", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const nodeExe = process.execPath;
+    const res = await kb.verifyFileTrust({ path: nodeExe, allowCatalog: true });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.isTrusted, true);
+    assert.strictEqual(res.signatureType, "embedded");
+    assert.strictEqual(res.statusCode, "0x00000000");
+    assert.strictEqual(res.status, "TRUSTED_AND_VERIFIED");
+    assert(typeof res.statusMessage === "string");
+    assert(res.signer !== null && typeof res.signer === "object");
+    assert(typeof res.signer.subject === "string");
+    assert(typeof res.signer.issuer === "string");
+    assert(typeof res.signer.thumbprint === "string");
+    assert.strictEqual(res.signer.thumbprint.length, 40);
+  });
+
+  await itAsync("KernelBridge.verifyFileTrust verifies catalog-signed system files and detects unsigned files", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    // 1. Catalog-signed system binary (notepad.exe)
+    const notepadPath = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "notepad.exe");
+    if (fs.existsSync(notepadPath)) {
+      const catRes = await kb.verifyFileTrust({ path: notepadPath, allowCatalog: true });
+      assert(catRes !== null && typeof catRes === "object");
+      assert.strictEqual(catRes.success, true);
+      assert.strictEqual(catRes.isTrusted, true);
+      assert.strictEqual(catRes.signatureType, "catalog");
+      assert.strictEqual(catRes.statusCode, "0x00000000");
+      assert.strictEqual(catRes.status, "TRUSTED_AND_VERIFIED");
+      assert(typeof catRes.catalogFile === "string");
+      assert(typeof catRes.catalogHash === "string");
+    }
+
+    // 2. Unsigned file detection
+    const tempUnsigned = path.join(__dirname, "temp_unsigned_file.txt");
+    fs.writeFileSync(tempUnsigned, "Hello unsigned test binary data");
+    try {
+      const unRes = await kb.verifyFileTrust({ path: tempUnsigned, allowCatalog: true });
+      assert(unRes !== null && typeof unRes === "object");
+      assert.strictEqual(unRes.success, true);
+      assert.strictEqual(unRes.isTrusted, false);
+      assert.strictEqual(unRes.signatureType, "none");
+      assert(unRes.statusCode === "0x800B0100" || unRes.statusCode === "0x800B0003");
+    } finally {
+      if (fs.existsSync(tempUnsigned)) fs.unlinkSync(tempUnsigned);
+    }
+
+    const helperPath = path.join(__dirname, "..", "tools", "desktop_helper.exe");
+    if (fs.existsSync(helperPath)) {
+      const binRes = await kb.verifyFileTrust({ path: helperPath, allowCatalog: true });
+      assert.strictEqual(binRes.success, true);
+      assert.strictEqual(binRes.isTrusted, false);
+      assert.strictEqual(binRes.signatureType, "none");
+      assert.strictEqual(binRes.statusCode, "0x800B0100");
+    }
+  });
+
+  await itAsync("KernelBridge.getFileSignerInfo and searchFileCatalog extract signer metadata and locate catalog entries", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const nodeExe = process.execPath;
+
+    // 1. Signer info on embedded binary
+    const signerRes = await kb.getFileSignerInfo(nodeExe);
+    assert(signerRes !== null && typeof signerRes === "object");
+    assert.strictEqual(signerRes.success, true);
+    assert.strictEqual(signerRes.hasSignature, true);
+    assert.strictEqual(signerRes.signatureSource, "embedded");
+    assert(signerRes.signer !== null && typeof signerRes.signer === "object");
+    assert(typeof signerRes.signer.thumbprint === "string");
+
+    // 2. Catalog search on Windows system file
+    const notepadPath = path.join(process.env.SystemRoot || "C:\\Windows", "System32", "notepad.exe");
+    if (fs.existsSync(notepadPath)) {
+      const catSearch = await kb.searchFileCatalog(notepadPath);
+      assert(catSearch !== null && typeof catSearch === "object");
+      assert.strictEqual(catSearch.success, true);
+      assert.strictEqual(catSearch.hasCatalog, true);
+      assert(typeof catSearch.catalogHash === "string");
+      assert(typeof catSearch.catalogFile === "string");
+      assert.strictEqual(catSearch.isCatalogTrusted, true);
+    }
+  });
+
+  it("All 115 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 112);
+    assert.strictEqual(SYSTEM_TOOLS.length, 115);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -2313,6 +2406,9 @@ async function run() {
     assert(toolNames.includes("super_system_architecture"));
     assert(toolNames.includes("super_system_memory_status"));
     assert(toolNames.includes("super_system_firmware_tables"));
+    assert(toolNames.includes("super_wintrust_verify_file"));
+    assert(toolNames.includes("super_wintrust_signer_info"));
+    assert(toolNames.includes("super_wintrust_catalog_search"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

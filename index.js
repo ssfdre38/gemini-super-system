@@ -2291,6 +2291,56 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_wintrust_verify_file",
+        description: "Cryptographically verifies the Authenticode digital signature and trust of any executable, DLL, driver, catalog, or PowerShell script via WinVerifyTrust (wintrust.dll). Supports automatic fallback to Windows Security Catalogs (CatRoot) for native OS binaries, checking certificate chains, revocation, expiration, and tampering detection.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Absolute or relative file path to the executable, DLL, or driver to verify."
+            },
+            allowCatalog: {
+              type: "boolean",
+              description: "If true (default), automatically searches the Windows Security Catalog database (CatRoot) if the file lacks an embedded signature (standard for Windows system binaries like notepad.exe, drivers, etc.)."
+            },
+            checkRevocation: {
+              type: "boolean",
+              description: "If true, enforces online CRL/OCSP revocation checking across the certificate chain (defaults to false for fast offline/CI execution)."
+            }
+          },
+          required: ["path"]
+        }
+      },
+      {
+        name: "super_wintrust_signer_info",
+        description: "Extracts deep X.509 signer certificate metadata (subject, issuer, thumbprint, validity dates, serial number, public key algorithm) for an Authenticode-signed executable or Windows Security Catalog file.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Path to the signed file or executable."
+            }
+          },
+          required: ["path"]
+        }
+      },
+      {
+        name: "super_wintrust_catalog_search",
+        description: "Calculates the cryptographic member hash of a file and searches the Windows Security Catalog database (CatRoot) via CryptCATAdminEnumCatalogFromHash to locate the authoritative .cat file verifying its authenticity.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Path to the file to look up in Windows CatRoot security catalogs."
+            }
+          },
+          required: ["path"]
+        }
       }
 ];
 
@@ -4175,6 +4225,47 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [System Firmware Tables (${provider}${table ? " / " + table : ""})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wintrust_verify_file") {
+    const filePath = args?.path || "";
+    const allowCatalog = args?.allowCatalog !== false;
+    const checkRevocation = Boolean(args?.checkRevocation);
+    const res = await orch.verifyFileTrust({ path: filePath, allowCatalog, checkRevocation });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [WinTrust Verify File ("${filePath}")]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wintrust_signer_info") {
+    const filePath = args?.path || "";
+    const res = await orch.getFileSignerInfo(filePath);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [WinTrust Signer Info ("${filePath}")]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wintrust_catalog_search") {
+    const filePath = args?.path || "";
+    const res = await orch.searchFileCatalog(filePath);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [WinTrust Catalog Search ("${filePath}")]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

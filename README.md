@@ -60,6 +60,7 @@
   - [42. Windows Management Instrumentation & Bare-Metal Hardware CIM Subsystem](#42--windows-management-instrumentation--bare-metal-hardware-cim-subsystem-wmi--wbemclih--wbemidlh--systemmanagement)
   - [43. Desktop Window Manager & Composition Subsystem](#43--desktop-window-manager--composition-subsystem-dwm--dwmapih--dwmapidll)
   - [44. Windows Native System Architecture & Firmware Subsystem](#44--windows-native-system-architecture--firmware-subsystem-sysinfoapih--kernel32dll)
+  - [45. Windows Authenticode & Cryptographic Trust Verification Subsystem](#45--windows-authenticode--cryptographic-trust-verification-subsystem-wintrusth--softpubh--wintrustdll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -627,6 +628,17 @@ Directly queries bare-metal CPU topology, memory status, and motherboard firmwar
 - **Bare-Metal ACPI & SMBIOS Firmware Parser (`super_system_firmware_tables`)**: Invokes `EnumSystemFirmwareTables` and `GetSystemFirmwareTable` to inspect bare-metal firmware. Enumerates all hardware ACPI tables (`DBGP`, `MCFG`, `FACP`, `APIC`, `DMAR`, `HPET`, `SSDT`, `TPM2`, `BGRT`, etc.) with table signature, length, OEM ID, and revision parsing, as well as raw SMBIOS (`'RSMB'`) structures (BIOS/DMI version and total byte length).
 - **Milestone Expansion**: **112 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
 - **Native MCP Tools**: `super_system_architecture`, `super_system_memory_status`, `super_system_firmware_tables`.
+
+---
+
+## 45. 🛡️ Windows Authenticode & Cryptographic Trust Verification Subsystem (`wintrust.h` / `softpub.h` / `wintrust.dll`)
+
+Directly verifies binary integrity, digital signatures, and cryptographic trust chains via native Win32 `wintrust.dll` P/Invoke without external PowerShell or `signtool.exe` dependencies:
+- **Authenticode Digital Signature Verification (`super_wintrust_verify_file`)**: Directly invokes `WinVerifyTrust` (`WINTRUST_ACTION_GENERIC_VERIFY_V2`). Cryptographically verifies embedded digital signatures or automatically falls back to the Windows Security Catalog database (`CatRoot`) for native OS binaries (`notepad.exe`, `kernel32.dll`, drivers). Accurately reports trust verdict (`TRUSTED_AND_VERIFIED`, `TRUST_E_NOSIGNATURE`, `TRUST_E_EXPLICIT_DISTRUST`, `CERT_E_UNTRUSTEDROOT`, `CERT_E_REVOKED`, `CERT_E_EXPIRED`, `TRUST_E_BAD_DIGEST`), signature type (`embedded` vs `catalog`), WinTrust status codes, and signer certificate details.
+- **Deep Signer & Certificate Metadata Extraction (`super_wintrust_signer_info`)**: Extracts comprehensive X.509 signer details for any signed executable, DLL, or catalog file, including subject name (CN, O, L, S, C), issuing certificate authority, SHA1 thumbprint, validity date ranges (`validFrom`, `validTo`), serial number, public key algorithm, self-signed detection, and expiration status.
+- **Windows Security Catalog Database Search (`super_wintrust_catalog_search`)**: Computes the cryptographic member hash of any file via `CryptCATAdminCalcHashFromFileHandle` and queries the system catalog subsystem (`CryptCATAdminEnumCatalogFromHash`) to locate the authoritative `.cat` catalog file validating its authenticity and verifying its catalog trust.
+- **Milestone Expansion**: **115 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
+- **Native MCP Tools**: `super_wintrust_verify_file`, `super_wintrust_signer_info`, `super_wintrust_catalog_search`.
 
 ---
 
