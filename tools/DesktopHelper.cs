@@ -11,6 +11,7 @@ using System.Windows.Forms;
 using System.Windows.Automation;
 using System.Net;
 using System.Net.NetworkInformation;
+using System.Management;
 
 namespace GeminiSuperDesktop {
     [StructLayout(LayoutKind.Sequential)]
@@ -578,6 +579,77 @@ namespace GeminiSuperDesktop {
             [PreserveSig]
             int GetMute([MarshalAs(UnmanagedType.Bool)] out bool pbMute);
         }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WAVEFORMATEX {
+            public ushort wFormatTag;
+            public ushort nChannels;
+            public uint nSamplesPerSec;
+            public uint nAvgBytesPerSec;
+            public ushort nBlockAlign;
+            public ushort wBitsPerSample;
+            public ushort cbSize;
+        }
+
+        [Guid("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IAudioClient {
+            [PreserveSig] int Initialize(int shareMode, uint streamFlags, long hnsBufferDuration, long hnsPeriodicity, IntPtr pFormat, ref Guid audioSessionGuid);
+            [PreserveSig] int GetBufferSize(out uint numBufferFrames);
+            [PreserveSig] int GetStreamLatency(out long hnsLatency);
+            [PreserveSig] int GetCurrentPadding(out uint numPaddingFrames);
+            [PreserveSig] int IsFormatSupported(int shareMode, IntPtr pFormat, out IntPtr ppClosestMatch);
+            [PreserveSig] int GetMixFormat(out IntPtr ppDeviceFormat);
+            [PreserveSig] int GetDevicePeriod(out long hnsDefaultDevicePeriod, out long hnsMinimumDevicePeriod);
+            [PreserveSig] int Start();
+            [PreserveSig] int Stop();
+            [PreserveSig] int Reset();
+            [PreserveSig] int SetEventHandle(IntPtr eventHandle);
+            [PreserveSig] int GetService(ref Guid interfaceId, [MarshalAs(UnmanagedType.IUnknown)] out object ppv);
+        }
+
+        [Guid("C8ADBD64-E71E-48a0-A4DE-185C395CD317"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IAudioCaptureClient {
+            [PreserveSig] int GetBuffer(out IntPtr ppData, out uint pNumFramesToRead, out uint pdwFlags, out ulong pu64DevicePosition, out ulong pu64QPCPosition);
+            [PreserveSig] int ReleaseBuffer(uint numFramesRead);
+            [PreserveSig] int GetNextPacketSize(out uint pNumFramesInNextPacket);
+        }
+
+        [ComImport]
+        [Guid("a5cd92ff-29be-454c-8d04-d82879fb3f1b")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IVirtualDesktopManager {
+            [PreserveSig]
+            int IsWindowOnCurrentVirtualDesktop(IntPtr topLevelWindow, [MarshalAs(UnmanagedType.Bool)] out bool onCurrentDesktop);
+
+            [PreserveSig]
+            int GetWindowDesktopId(IntPtr topLevelWindow, out Guid desktopId);
+
+            [PreserveSig]
+            int MoveWindowToDesktop(IntPtr topLevelWindow, [MarshalAs(UnmanagedType.LPStruct)] Guid desktopId);
+        }
+
+        [ComImport]
+        [Guid("aa509086-5ca9-4c25-8f95-589d3c07b48a")]
+        public class VirtualDesktopManagerComObject {}
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct PROCESSOR_POWER_INFORMATION {
+            public uint Number;
+            public uint MaxMhz;
+            public uint CurrentMhz;
+            public uint MhzLimit;
+            public uint MaxIdleState;
+            public uint CurrentIdleState;
+        }
+
+        [DllImport("powrprof.dll")]
+        public static extern int CallNtPowerInformation(
+            int InformationLevel,
+            IntPtr lpInputBuffer,
+            uint nInputBufferSize,
+            IntPtr lpOutputBuffer,
+            uint nOutputBufferSize
+        );
 
         [StructLayout(LayoutKind.Sequential)]
         public struct CURSORINFO {
@@ -2443,14 +2515,22 @@ namespace GeminiSuperDesktop {
         }
 
         static void ClipboardSetCmd(string text) {
-            try {
-                RunSta(() => {
-                    Clipboard.SetDataObject(text, true, 5, 50);
-                });
-                Console.WriteLine(string.Format("{{\"success\": true, \"charCount\": {0}}}", text.Length));
-            } catch (Exception ex) {
-                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            Exception lastEx = null;
+            for (int attempt = 0; attempt < 5; attempt++) {
+                try {
+                    RunSta(() => {
+                        Clipboard.Clear();
+                        Clipboard.SetText(text);
+                        Application.DoEvents();
+                    });
+                    Console.WriteLine(string.Format("{{\"success\": true, \"charCount\": {0}}}", text.Length));
+                    return;
+                } catch (Exception ex) {
+                    lastEx = ex;
+                    Thread.Sleep(80);
+                }
             }
+            Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(lastEx != null ? lastEx.Message : "Clipboard set failed")));
         }
 
         static void ClipboardSaveImageCmd(string outputPath) {
@@ -2512,6 +2592,510 @@ namespace GeminiSuperDesktop {
                     Clipboard.Clear();
                 });
                 Console.WriteLine("{\"success\": true}");
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void AudioListenCmd(int durationMs) {
+            try {
+                if (durationMs < 50) durationMs = 50;
+                if (durationMs > 10000) durationMs = 10000;
+
+                var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+                IMMDevice dev;
+                int hr = enumerator.GetDefaultAudioEndpoint(0 /* eRender */, 1 /* eMultimedia */, out dev);
+                if (hr != 0 || dev == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to get default audio endpoint (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                Guid iidClient = new Guid("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2");
+                object objClient;
+                hr = dev.Activate(ref iidClient, 1 /* CLSCTX_INPROC_SERVER */, IntPtr.Zero, out objClient);
+                if (hr != 0 || objClient == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to activate IAudioClient (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                var client = (IAudioClient)objClient;
+                IntPtr pMixFormat;
+                hr = client.GetMixFormat(out pMixFormat);
+                if (hr != 0 || pMixFormat == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to get mix format (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                var fmt = (WAVEFORMATEX)Marshal.PtrToStructure(pMixFormat, typeof(WAVEFORMATEX));
+                const uint AUDCLNT_STREAMFLAGS_LOOPBACK = 0x00020000;
+                Guid session = Guid.Empty;
+                hr = client.Initialize(0 /* AUDCLNT_SHAREMODE_SHARED */, AUDCLNT_STREAMFLAGS_LOOPBACK, 10000000 /* 1 sec */, 0, pMixFormat, ref session);
+                if (hr != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Initialize loopback audio failed (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                Guid iidCapture = new Guid("C8ADBD64-E71E-48a0-A4DE-185C395CD317");
+                object objCapture;
+                hr = client.GetService(ref iidCapture, out objCapture);
+                if (hr != 0 || objCapture == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"GetService IAudioCaptureClient failed (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                var capture = (IAudioCaptureClient)objCapture;
+                client.Start();
+
+                double peak = 0.0;
+                double sumSquares = 0.0;
+                long totalSamples = 0;
+
+                int elapsed = 0;
+                while (elapsed < durationMs) {
+                    Thread.Sleep(20);
+                    elapsed += 20;
+
+                    uint packetSize = 0;
+                    capture.GetNextPacketSize(out packetSize);
+                    while (packetSize > 0) {
+                        IntPtr pData;
+                        uint numFrames;
+                        uint flags;
+                        ulong devPos, qpcPos;
+                        hr = capture.GetBuffer(out pData, out numFrames, out flags, out devPos, out qpcPos);
+                        if (hr == 0 && numFrames > 0) {
+                            if ((flags & 2 /* AUDCLNT_BUFFERFLAGS_SILENT */) == 0 && pData != IntPtr.Zero) {
+                                int samplesToRead = (int)(numFrames * fmt.nChannels);
+                                if (fmt.wBitsPerSample == 32) {
+                                    float[] floatBuf = new float[samplesToRead];
+                                    Marshal.Copy(pData, floatBuf, 0, samplesToRead);
+                                    for (int i = 0; i < samplesToRead; i++) {
+                                        double val = Math.Abs(floatBuf[i]);
+                                        if (val > peak) peak = val;
+                                        sumSquares += val * val;
+                                        totalSamples++;
+                                    }
+                                } else if (fmt.wBitsPerSample == 16) {
+                                    short[] shortBuf = new short[samplesToRead];
+                                    Marshal.Copy(pData, shortBuf, 0, samplesToRead);
+                                    for (int i = 0; i < samplesToRead; i++) {
+                                        double val = Math.Abs((double)shortBuf[i] / 32768.0);
+                                        if (val > peak) peak = val;
+                                        sumSquares += val * val;
+                                        totalSamples++;
+                                    }
+                                }
+                            }
+                            capture.ReleaseBuffer(numFrames);
+                        }
+                        capture.GetNextPacketSize(out packetSize);
+                    }
+                }
+
+                client.Stop();
+
+                double rms = totalSamples > 0 ? Math.Sqrt(sumSquares / totalSamples) : 0.0;
+                double peakDb = peak > 0.00001 ? Math.Round(20.0 * Math.Log10(peak), 1) : -96.0;
+                double rmsDb = rms > 0.00001 ? Math.Round(20.0 * Math.Log10(rms), 1) : -96.0;
+                bool isPlaying = peakDb > -50.0;
+
+                Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{{\"success\": true, \"peakDecibels\": {0:F1}, \"rmsDecibels\": {1:F1}, \"isPlaying\": {2}, \"sampleRate\": {3}, \"channels\": {4}, \"bitsPerSample\": {5}, \"samplesCaptured\": {6}, \"durationMs\": {7}}}",
+                    peakDb, rmsDb, isPlaying ? "true" : "false", fmt.nSamplesPerSec, fmt.nChannels, fmt.wBitsPerSample, totalSamples, durationMs));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void AudioRecordCmd(string outputPath, int durationSeconds) {
+            try {
+                if (durationSeconds < 1) durationSeconds = 1;
+                if (durationSeconds > 30) durationSeconds = 30;
+
+                string fullPath = Path.GetFullPath(outputPath);
+                string dir = Path.GetDirectoryName(fullPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) {
+                    Directory.CreateDirectory(dir);
+                }
+
+                var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+                IMMDevice dev;
+                int hr = enumerator.GetDefaultAudioEndpoint(0, 1, out dev);
+                if (hr != 0 || dev == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to get audio endpoint (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                Guid iidClient = new Guid("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2");
+                object objClient;
+                hr = dev.Activate(ref iidClient, 1, IntPtr.Zero, out objClient);
+                if (hr != 0 || objClient == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to activate IAudioClient (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                var client = (IAudioClient)objClient;
+                IntPtr pMixFormat;
+                hr = client.GetMixFormat(out pMixFormat);
+                if (hr != 0 || pMixFormat == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to get mix format (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                var fmt = (WAVEFORMATEX)Marshal.PtrToStructure(pMixFormat, typeof(WAVEFORMATEX));
+                const uint AUDCLNT_STREAMFLAGS_LOOPBACK = 0x00020000;
+                Guid session = Guid.Empty;
+                hr = client.Initialize(0, AUDCLNT_STREAMFLAGS_LOOPBACK, 10000000, 0, pMixFormat, ref session);
+                if (hr != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Initialize loopback failed (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                Guid iidCapture = new Guid("C8ADBD64-E71E-48a0-A4DE-185C395CD317");
+                object objCapture;
+                hr = client.GetService(ref iidCapture, out objCapture);
+                if (hr != 0 || objCapture == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"GetService IAudioCaptureClient failed (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                var capture = (IAudioCaptureClient)objCapture;
+                client.Start();
+
+                var pcmStream = new MemoryStream();
+                var writer = new BinaryWriter(pcmStream);
+
+                double peak = 0.0;
+                double sumSquares = 0.0;
+                long totalSamples = 0;
+
+                int durationMs = durationSeconds * 1000;
+                int elapsed = 0;
+                while (elapsed < durationMs) {
+                    Thread.Sleep(20);
+                    elapsed += 20;
+
+                    uint packetSize = 0;
+                    capture.GetNextPacketSize(out packetSize);
+                    while (packetSize > 0) {
+                        IntPtr pData;
+                        uint numFrames;
+                        uint flags;
+                        ulong devPos, qpcPos;
+                        hr = capture.GetBuffer(out pData, out numFrames, out flags, out devPos, out qpcPos);
+                        if (hr == 0 && numFrames > 0) {
+                            int samplesToRead = (int)(numFrames * fmt.nChannels);
+                            if ((flags & 2) != 0 || pData == IntPtr.Zero) {
+                                for (int i = 0; i < samplesToRead; i++) {
+                                    writer.Write((short)0);
+                                    totalSamples++;
+                                }
+                            } else {
+                                if (fmt.wBitsPerSample == 32) {
+                                    float[] floatBuf = new float[samplesToRead];
+                                    Marshal.Copy(pData, floatBuf, 0, samplesToRead);
+                                    for (int i = 0; i < samplesToRead; i++) {
+                                        float f = floatBuf[i];
+                                        double val = Math.Abs(f);
+                                        if (val > peak) peak = val;
+                                        sumSquares += val * val;
+                                        totalSamples++;
+                                        short s = (short)Math.Max(-32768, Math.Min(32767, (int)(f * 32767.0f)));
+                                        writer.Write(s);
+                                    }
+                                } else if (fmt.wBitsPerSample == 16) {
+                                    short[] shortBuf = new short[samplesToRead];
+                                    Marshal.Copy(pData, shortBuf, 0, samplesToRead);
+                                    for (int i = 0; i < samplesToRead; i++) {
+                                        short s = shortBuf[i];
+                                        double val = Math.Abs((double)s / 32768.0);
+                                        if (val > peak) peak = val;
+                                        sumSquares += val * val;
+                                        totalSamples++;
+                                        writer.Write(s);
+                                    }
+                                }
+                            }
+                            capture.ReleaseBuffer(numFrames);
+                        }
+                        capture.GetNextPacketSize(out packetSize);
+                    }
+                }
+
+                client.Stop();
+
+                byte[] pcmData = pcmStream.ToArray();
+                uint dataSize = (uint)pcmData.Length;
+                uint subchunk1Size = 16;
+                ushort audioFormat = 1; // PCM
+                ushort channels = fmt.nChannels;
+                uint sampleRate = fmt.nSamplesPerSec;
+                ushort bitsPerSample = 16;
+                uint byteRate = sampleRate * channels * (uint)(bitsPerSample / 8);
+                ushort blockAlign = (ushort)(channels * (bitsPerSample / 8));
+                uint chunkSize = 36 + dataSize;
+
+                using (var fs = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.Read))
+                using (var bw = new BinaryWriter(fs)) {
+                    // RIFF header
+                    bw.Write(Encoding.ASCII.GetBytes("RIFF"));
+                    bw.Write(chunkSize);
+                    bw.Write(Encoding.ASCII.GetBytes("WAVE"));
+
+                    // fmt subchunk
+                    bw.Write(Encoding.ASCII.GetBytes("fmt "));
+                    bw.Write(subchunk1Size);
+                    bw.Write(audioFormat);
+                    bw.Write(channels);
+                    bw.Write(sampleRate);
+                    bw.Write(byteRate);
+                    bw.Write(blockAlign);
+                    bw.Write(bitsPerSample);
+
+                    // data subchunk
+                    bw.Write(Encoding.ASCII.GetBytes("data"));
+                    bw.Write(dataSize);
+                    bw.Write(pcmData);
+                }
+
+                double rms = totalSamples > 0 ? Math.Sqrt(sumSquares / totalSamples) : 0.0;
+                double peakDb = peak > 0.00001 ? Math.Round(20.0 * Math.Log10(peak), 1) : -96.0;
+                double rmsDb = rms > 0.00001 ? Math.Round(20.0 * Math.Log10(rms), 1) : -96.0;
+
+                FileInfo fi = new FileInfo(fullPath);
+                Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{{\"success\": true, \"path\": \"{0}\", \"durationSeconds\": {1}, \"fileSize\": {2}, \"sampleRate\": {3}, \"channels\": {4}, \"bitsPerSample\": 16, \"peakDecibels\": {5:F1}, \"rmsDecibels\": {6:F1}, \"samplesRecorded\": {7}}}",
+                    fullPath.Replace("\\", "/"), durationSeconds, fi.Length, sampleRate, channels, peakDb, rmsDb, totalSamples));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void GetThermalVitalsCmd() {
+            try {
+                int count = Environment.ProcessorCount;
+                int structSize = Marshal.SizeOf(typeof(PROCESSOR_POWER_INFORMATION));
+                uint bufferSize = (uint)(count * structSize);
+                IntPtr pOut = Marshal.AllocHGlobal((int)bufferSize);
+
+                var cores = new List<string>();
+                double totalCurrentMhz = 0;
+                uint maxDetectedMhz = 0;
+                bool isCpuThrottled = false;
+
+                try {
+                    int status = CallNtPowerInformation(11 /* ProcessorPowerInformation */, IntPtr.Zero, 0, pOut, bufferSize);
+                    if (status == 0) {
+                        for (int i = 0; i < count; i++) {
+                            IntPtr pItem = (IntPtr)((long)pOut + (i * structSize));
+                            var info = (PROCESSOR_POWER_INFORMATION)Marshal.PtrToStructure(pItem, typeof(PROCESSOR_POWER_INFORMATION));
+                            totalCurrentMhz += info.CurrentMhz;
+                            if (info.MaxMhz > maxDetectedMhz) maxDetectedMhz = info.MaxMhz;
+                            bool coreThrottled = (info.MhzLimit < info.MaxMhz) || (info.MaxMhz > 0 && info.CurrentMhz < (info.MaxMhz * 0.85));
+                            if (coreThrottled) isCpuThrottled = true;
+
+                            cores.Add(string.Format("{{\"core\": {0}, \"currentMhz\": {1}, \"maxMhz\": {2}, \"mhzLimit\": {3}, \"maxIdleState\": {4}, \"currentIdleState\": {5}, \"isThrottled\": {6}}}",
+                                info.Number, info.CurrentMhz, info.MaxMhz, info.MhzLimit, info.MaxIdleState, info.CurrentIdleState, coreThrottled ? "true" : "false"));
+                        }
+                    }
+                } finally {
+                    Marshal.FreeHGlobal(pOut);
+                }
+
+                double avgMhz = count > 0 ? (totalCurrentMhz / count) : 0;
+
+                // Query WMI ThermalZoneInformation
+                var zones = new List<string>();
+                double maxTempCelsius = 0.0;
+                bool hasTemp = false;
+                bool isThermalThrottled = false;
+
+                try {
+                    using (var searcher = new ManagementObjectSearcher(@"root\cimv2", "SELECT Name, HighPrecisionTemperature, PercentPassiveLimit, ThrottleReasons FROM Win32_PerfFormattedData_Counters_ThermalZoneInformation")) {
+                        foreach (ManagementObject mo in searcher.Get()) {
+                            string name = mo["Name"] != null ? mo["Name"].ToString() : "Zone";
+                            ulong hpTemp = mo["HighPrecisionTemperature"] != null ? Convert.ToUInt64(mo["HighPrecisionTemperature"]) : 0;
+                            uint limit = mo["PercentPassiveLimit"] != null ? Convert.ToUInt32(mo["PercentPassiveLimit"]) : 100;
+                            uint reasons = mo["ThrottleReasons"] != null ? Convert.ToUInt32(mo["ThrottleReasons"]) : 0;
+
+                            double c = (hpTemp > 2732) ? ((hpTemp - 2732.0) / 10.0) : 0.0;
+                            if (c > 0) {
+                                hasTemp = true;
+                                if (c > maxTempCelsius) maxTempCelsius = c;
+                            }
+                            if (limit < 100 || reasons > 0) isThermalThrottled = true;
+
+                            zones.Add(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                                "{{\"name\": \"{0}\", \"tempCelsius\": {1:F2}, \"percentPassiveLimit\": {2}, \"throttleReasons\": {3}}}",
+                                EscapeJson(name), c, limit, reasons));
+                        }
+                    }
+                } catch {}
+
+                bool overallThrottled = isCpuThrottled || isThermalThrottled;
+                string maxTempStr = hasTemp ? string.Format(System.Globalization.CultureInfo.InvariantCulture, "{0:F2}", maxTempCelsius) : "null";
+
+                Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{{\"success\": true, \"logicalCores\": {0}, \"averageMhz\": {1:F1}, \"maxMhz\": {2}, \"maxTempCelsius\": {3}, \"isThermalThrottled\": {4}, \"cores\": [{5}], \"thermalZones\": [{6}]}}",
+                    count, avgMhz, maxDetectedMhz, maxTempStr, overallThrottled ? "true" : "false",
+                    string.Join(", ", cores.ToArray()), string.Join(", ", zones.ToArray())));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static List<string> EnumerateVirtualDesktopIds() {
+            var list = new List<string>();
+            try {
+                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops\Desktops")) {
+                    if (key != null) {
+                        foreach (string subName in key.GetSubKeyNames()) {
+                            if (!string.IsNullOrEmpty(subName) && subName.StartsWith("{") && subName.EndsWith("}")) {
+                                list.Add(subName.ToUpperInvariant());
+                            }
+                        }
+                    }
+                }
+            } catch {}
+
+            if (list.Count == 0) {
+                try {
+                    object raw = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops", "VirtualDesktopIDs", null);
+                    byte[] bytes = raw as byte[];
+                    if (bytes != null && bytes.Length >= 16) {
+                        for (int i = 0; i <= bytes.Length - 16; i += 16) {
+                            byte[] guidBytes = new byte[16];
+                            Array.Copy(bytes, i, guidBytes, 0, 16);
+                            var guid = new Guid(guidBytes);
+                            list.Add("{" + guid.ToString().ToUpperInvariant() + "}");
+                        }
+                    }
+                } catch {}
+            }
+
+            return list;
+        }
+
+        static void VirtualDesktopsListCmd() {
+            try {
+                var mgr = (IVirtualDesktopManager)new VirtualDesktopManagerComObject();
+                var ids = EnumerateVirtualDesktopIds();
+
+                string currentIdStr = "";
+                IntPtr hFore = GetForegroundWindow();
+                if (hFore != IntPtr.Zero) {
+                    Guid foreId;
+                    int hr = mgr.GetWindowDesktopId(hFore, out foreId);
+                    if (hr == 0 && foreId != Guid.Empty) {
+                        currentIdStr = "{" + foreId.ToString().ToUpperInvariant() + "}";
+                    }
+                }
+
+                if (string.IsNullOrEmpty(currentIdStr)) {
+                    IntPtr hDesk = EnsureInteractiveDesktop();
+                    EnumDesktopWindows(hDesk, (hWnd, lParam) => {
+                        if (IsWindowVisible(hWnd)) {
+                            Guid wId;
+                            if (mgr.GetWindowDesktopId(hWnd, out wId) == 0 && wId != Guid.Empty) {
+                                currentIdStr = "{" + wId.ToString().ToUpperInvariant() + "}";
+                                return false;
+                            }
+                        }
+                        return true;
+                    }, IntPtr.Zero);
+                }
+
+                if (!string.IsNullOrEmpty(currentIdStr) && !ids.Contains(currentIdStr)) {
+                    ids.Insert(0, currentIdStr);
+                }
+
+                var desktopList = new List<string>();
+                for (int i = 0; i < ids.Count; i++) {
+                    string id = ids[i];
+                    bool isCurrent = (!string.IsNullOrEmpty(currentIdStr) && string.Equals(id, currentIdStr, StringComparison.OrdinalIgnoreCase)) || (string.IsNullOrEmpty(currentIdStr) && i == 0);
+                    
+                    string customName = "";
+                    try {
+                        object val = Microsoft.Win32.Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops\Desktops\" + id, "Name", null);
+                        if (val != null) customName = val.ToString();
+                    } catch {}
+                    if (string.IsNullOrEmpty(customName)) {
+                        customName = string.Format("Desktop {0}", i + 1);
+                    }
+
+                    desktopList.Add(string.Format("{{\"id\": \"{0}\", \"index\": {1}, \"name\": \"{2}\", \"isCurrent\": {3}}}",
+                        id, i, EscapeJson(customName), isCurrent ? "true" : "false"));
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"currentDesktopId\": \"{0}\", \"count\": {1}, \"desktops\": [{2}]}}",
+                    currentIdStr, ids.Count, string.Join(", ", desktopList.ToArray())));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void VirtualDesktopWindowCmd(string query) {
+            try {
+                IntPtr hDesk = EnsureInteractiveDesktop();
+                IntPtr targetHwnd;
+                string actualTitle;
+                if (!FindWindow(hDesk, query, out targetHwnd, out actualTitle)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                    return;
+                }
+
+                var mgr = (IVirtualDesktopManager)new VirtualDesktopManagerComObject();
+                bool onCurrent = false;
+                mgr.IsWindowOnCurrentVirtualDesktop(targetHwnd, out onCurrent);
+                Guid desktopId;
+                mgr.GetWindowDesktopId(targetHwnd, out desktopId);
+
+                string idStr = desktopId != Guid.Empty ? ("{" + desktopId.ToString().ToUpperInvariant() + "}") : "";
+                Console.WriteLine(string.Format("{{\"success\": true, \"hwnd\": \"0x{0:X}\", \"title\": \"{1}\", \"desktopId\": \"{2}\", \"isOnCurrentDesktop\": {3}}}",
+                    targetHwnd.ToInt64(), EscapeJson(actualTitle), idStr, onCurrent ? "true" : "false"));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void VirtualDesktopMoveCmd(string query, string targetDesktop) {
+            try {
+                IntPtr hDesk = EnsureInteractiveDesktop();
+                IntPtr targetHwnd;
+                string actualTitle;
+                if (!FindWindow(hDesk, query, out targetHwnd, out actualTitle)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Window not found\"}");
+                    return;
+                }
+
+                Guid targetGuid = Guid.Empty;
+                int desktopIdx;
+                if (int.TryParse(targetDesktop, out desktopIdx)) {
+                    var ids = EnumerateVirtualDesktopIds();
+                    if (desktopIdx >= 0 && desktopIdx < ids.Count) {
+                        targetGuid = new Guid(ids[desktopIdx]);
+                    } else {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Desktop index out of range: {0} (count: {1})\"}}", desktopIdx, ids.Count));
+                        return;
+                    }
+                } else {
+                    try {
+                        targetGuid = new Guid(targetDesktop);
+                    } catch {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Invalid GUID or desktop index: {0}\"}}", EscapeJson(targetDesktop)));
+                        return;
+                    }
+                }
+
+                var mgr = (IVirtualDesktopManager)new VirtualDesktopManagerComObject();
+                int hr = mgr.MoveWindowToDesktop(targetHwnd, targetGuid);
+                if (hr != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"MoveWindowToDesktop failed (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"hwnd\": \"0x{0:X}\", \"title\": \"{1}\", \"targetDesktopId\": \"{{{2}}}\"}}",
+                    targetHwnd.ToInt64(), EscapeJson(actualTitle), targetGuid.ToString().ToUpperInvariant()));
             } catch (Exception ex) {
                 Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
             }
@@ -2716,6 +3300,24 @@ namespace GeminiSuperDesktop {
                 string target = args.Length >= 2 ? args[1] : "active";
                 int count = args.Length >= 3 ? int.Parse(args[2]) : 3;
                 FlashWindowCmd(target, count);
+            } else if (cmd == "audio_listen" || cmd == "audiolisten" || cmd == "listen") {
+                int durationMs = args.Length >= 2 ? int.Parse(args[1]) : 300;
+                AudioListenCmd(durationMs);
+            } else if (cmd == "audio_record" || cmd == "audiorecord" || cmd == "record_wav") {
+                string outPath = args.Length >= 2 ? args[1] : "recording.wav";
+                int durSec = args.Length >= 3 ? int.Parse(args[2]) : 3;
+                AudioRecordCmd(outPath, durSec);
+            } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
+                GetThermalVitalsCmd();
+            } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {
+                VirtualDesktopsListCmd();
+            } else if (cmd == "vdesktop_window" || cmd == "desktop_window" || cmd == "window_desktop") {
+                string query = args.Length >= 2 ? args[1] : "active";
+                VirtualDesktopWindowCmd(query);
+            } else if (cmd == "vdesktop_move" || cmd == "desktop_move" || cmd == "move_to_desktop") {
+                string query = args.Length >= 2 ? args[1] : "active";
+                string target = args.Length >= 3 ? args[2] : "0";
+                VirtualDesktopMoveCmd(query, target);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
@@ -2921,6 +3523,17 @@ namespace GeminiSuperDesktop {
         static bool FindWindow(IntPtr hDesk, string query, out IntPtr targetHwnd, out string actualTitle) {
             targetHwnd = IntPtr.Zero;
             actualTitle = "";
+
+            if (string.IsNullOrEmpty(query) || query.Equals("active", StringComparison.OrdinalIgnoreCase) || query.Equals("foreground", StringComparison.OrdinalIgnoreCase)) {
+                IntPtr hFore = GetForegroundWindow();
+                if (hFore != IntPtr.Zero) {
+                    targetHwnd = hFore;
+                    var sb = new StringBuilder(256);
+                    GetWindowText(hFore, sb, sb.Capacity);
+                    actualTitle = sb.ToString();
+                    return true;
+                }
+            }
 
             long handleNum = 0;
             bool isHandle = long.TryParse(query, out handleNum);

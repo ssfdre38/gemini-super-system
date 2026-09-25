@@ -1244,6 +1244,107 @@ async function run() {
     assert(typeof usnRes.maximumSizeMB === "string" || typeof usnRes.maximumSizeMB === "number");
   });
 
+  // Suite 18: Desktop Hearing, Thermals & Virtual Desktops
+  console.log("\n\x1b[1m[Suite 18: Desktop Hearing, Thermals & Virtual Desktops]\x1b[0m");
+
+  await itAsync("listenAudio captures live WASAPI loopback audio and decibel telemetry", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const audio = await kb.listenAudio({ durationMs: 200 });
+
+    assert(audio !== null && typeof audio === "object");
+    assert.strictEqual(audio.success, true);
+    assert(typeof audio.peakDecibels === "number");
+    assert(typeof audio.rmsDecibels === "number");
+    assert(typeof audio.isPlaying === "boolean");
+    assert(typeof audio.sampleRate === "number" && audio.sampleRate > 0);
+    assert(typeof audio.channels === "number" && audio.channels > 0);
+    assert(typeof audio.bitsPerSample === "number");
+  });
+
+  await itAsync("recordAudioWav writes standard 16-bit PCM RIFF WAV audio file to disk", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const testWavPath = path.join(__dirname, "test_loopback_clip.wav");
+    if (fs.existsSync(testWavPath)) fs.unlinkSync(testWavPath);
+
+    const rec = await kb.recordAudioWav({ outputPath: testWavPath, durationSeconds: 1 });
+
+    assert(rec !== null && typeof rec === "object");
+    assert.strictEqual(rec.success, true);
+    assert(fs.existsSync(testWavPath), "Expected test WAV file to exist on disk");
+    const stat = fs.statSync(testWavPath);
+    assert(stat.size >= 44, "Expected valid RIFF/WAV header of at least 44 bytes");
+
+    const buf = fs.readFileSync(testWavPath);
+    assert.strictEqual(buf.toString("ascii", 0, 4), "RIFF");
+    assert.strictEqual(buf.toString("ascii", 8, 12), "WAVE");
+    assert.strictEqual(buf.toString("ascii", 12, 16), "fmt ");
+
+    if (fs.existsSync(testWavPath)) fs.unlinkSync(testWavPath);
+  });
+
+  await itAsync("getThermalVitals queries per-core frequencies and ACPI thermal zones", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const thermals = await kb.getThermalVitals();
+
+    assert(thermals !== null && typeof thermals === "object");
+    assert.strictEqual(thermals.success, true);
+    assert(typeof thermals.logicalCores === "number" && thermals.logicalCores > 0);
+    assert(typeof thermals.averageMhz === "number" && thermals.averageMhz > 0);
+    assert(typeof thermals.isThermalThrottled === "boolean");
+    assert(Array.isArray(thermals.cores) && thermals.cores.length > 0);
+    const core0 = thermals.cores[0];
+    assert(typeof core0.core === "number");
+    assert(typeof core0.currentMhz === "number");
+    assert(typeof core0.maxMhz === "number");
+  });
+
+  await itAsync("getVirtualDesktops enumerates configured desktops and detects active desktop", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const vdesktops = await kb.getVirtualDesktops();
+
+    assert(vdesktops !== null && typeof vdesktops === "object");
+    assert.strictEqual(vdesktops.success, true);
+    assert(typeof vdesktops.count === "number" && vdesktops.count >= 1);
+    assert(Array.isArray(vdesktops.desktops) && vdesktops.desktops.length > 0);
+    const d0 = vdesktops.desktops[0];
+    assert(typeof d0.id === "string" && d0.id.startsWith("{"));
+    assert(typeof d0.index === "number");
+    assert(typeof d0.name === "string");
+  });
+
+  await itAsync("getVirtualDesktopWindow resolves virtual desktop status for window", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const winDesk = await kb.getVirtualDesktopWindow("active");
+
+    assert(winDesk !== null && typeof winDesk === "object");
+    assert.strictEqual(winDesk.success, true);
+    assert(typeof winDesk.hwnd === "string" && winDesk.hwnd.startsWith("0x"));
+    assert(typeof winDesk.isOnCurrentDesktop === "boolean");
+  });
+
+  it("All 73 MCP Tools are registered with valid JSON schemas in index.js", () => {
+    const { SYSTEM_TOOLS } = require("../index.js");
+    assert(Array.isArray(SYSTEM_TOOLS));
+    assert.strictEqual(SYSTEM_TOOLS.length, 73);
+
+    const toolNames = SYSTEM_TOOLS.map(t => t.name);
+    assert(toolNames.includes("super_audio_listen"));
+    assert(toolNames.includes("super_audio_record_wav"));
+    assert(toolNames.includes("super_thermal_vitals"));
+    assert(toolNames.includes("super_virtual_desktops"));
+
+    for (const tool of SYSTEM_TOOLS) {
+      assert(tool.name && tool.name.startsWith("super_"));
+      assert(tool.description && tool.description.length > 10);
+      assert(tool.inputSchema && tool.inputSchema.type === "object");
+    }
+  });
+
   console.log("\n=======================================================");
   console.log(`   TEST RESULTS: ${passedTests}/${totalTests} PASSED (${failedTests} FAILED)`);
   console.log("=======================================================\n");

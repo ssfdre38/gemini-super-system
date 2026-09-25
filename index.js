@@ -1356,6 +1356,71 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_audio_listen",
+        description: "Samples live Windows audio playback directly from the default render endpoint via native WASAPI loopback capture. Returns peak dBFS, RMS dBFS, sample rate, channels, and whether audio is currently playing without microphone access.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            durationMs: {
+              type: "number",
+              default: 300,
+              description: "Sampling duration in milliseconds (50 to 10000ms, default: 300ms)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_audio_record_wav",
+        description: "Records live desktop audio loopback directly into a standard 16-bit PCM RIFF WAV audio file via native WASAPI loopback capture.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            outputPath: {
+              type: "string",
+              default: "recording.wav",
+              description: "Target WAV file path to save audio."
+            },
+            durationSeconds: {
+              type: "number",
+              default: 3,
+              description: "Recording duration in seconds (1 to 30 seconds, default: 3s)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_thermal_vitals",
+        description: "Queries bare-metal CPU core frequency, throttling status, and limits via NtPowerInformation (Level 11: ProcessorPowerInformation) combined with ACPI thermal zone temperatures via WMI.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_virtual_desktops",
+        description: "Manages Windows 10/11 Virtual Desktops via IVirtualDesktopManager COM interface and registry. Supports listing all virtual desktops, querying a window's virtual desktop, and seamlessly moving windows across desktops.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["list", "get_window", "move_window"],
+              default: "list",
+              description: "Action to perform: 'list' (all desktops), 'get_window' (query desktop for window), or 'move_window' (teleport window)."
+            },
+            window: {
+              type: "string",
+              default: "active",
+              description: "Target window title, PID, HWND, or 'active'."
+            },
+            targetDesktop: {
+              type: ["string", "number"],
+              description: "Destination desktop GUID or 0-based index when action is 'move_window'."
+            }
+          }
+        }
       }
 ];
 
@@ -2605,6 +2670,62 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `📁 [NTFS USN Change Journal & MFT]:\n` + JSON.stringify(usn, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_audio_listen") {
+    const audio = await orch.listenAudio({ durationMs: args?.durationMs });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔊 [WASAPI Audio Hearing & Decibel Telemetry]:\n` + JSON.stringify(audio, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_audio_record_wav") {
+    const rec = await orch.recordAudioWav({ outputPath: args?.outputPath, durationSeconds: args?.durationSeconds });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎙️ [WASAPI Audio Loopback WAV Recorder]:\n` + JSON.stringify(rec, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_thermal_vitals") {
+    const thermals = await orch.getThermalVitals();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🌡️ [Hardware Thermal Watchdog & CPU Frequency]:\n` + JSON.stringify(thermals, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_virtual_desktops") {
+    const action = args?.action || "list";
+    let res;
+    if (action === "get_window") {
+      res = await orch.getVirtualDesktopWindow(args?.window || "active");
+    } else if (action === "move_window") {
+      res = await orch.moveVirtualDesktopWindow(args?.window || "active", args?.targetDesktop ?? "0");
+    } else {
+      res = await orch.getVirtualDesktops();
+    }
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🪟 [Windows Virtual Desktop Orchestrator - ${action}]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

@@ -21,6 +21,8 @@ out.log
 err.log
 data/*.tmp
 data/*.raw.tmp
+data/*.png
+data/*.wav
 data/captures/*
 !data/captures/.gitkeep
 

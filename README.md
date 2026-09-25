@@ -46,6 +46,9 @@
   - [28. NT Job Object Resource Sandbox & Hard Capping](#28--nt-job-object-resource-sandbox--hard-capping-kernel32dll)
   - [29. Dynamic Power Profile & Frequency Governor Actuator](#29--dynamic-power-profile--frequency-governor-actuator-powrprofdll)
   - [30. NTFS USN Change Journal & Master File Table Scanner](#30--ntfs-usn-change-journal--master-file-table-scanner-fsctl_query_usn_journal)
+  - [31. Native Desktop Hearing — WASAPI Audio Loopback Capture & Decibel Telemetry](#31--native-desktop-hearing--wasapi-audio-loopback-capture--decibel-telemetry)
+  - [32. Hardware Thermal Watchdog & Processor Throttling Telemetry](#32-️-hardware-thermal-watchdog--processor-throttling-telemetry)
+  - [33. Windows Virtual Desktop Orchestrator](#33--windows-virtual-desktop-orchestrator-ivirtualdesktopmanager)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -461,6 +464,36 @@ Provides sub-millisecond filesystem change telemetry directly from the NTFS kern
 - **Zero-Walk Journal Tracking**: Obtains the 64-bit `UsnJournalID`, current and first Update Sequence Numbers (`nextUsn`, `firstUsn`), maximum allocation size, and delta cluster boundaries.
 - **Instant Delta Auditing**: Eliminates recursive directory walking and HDD spindle thrashing by observing the authoritative NTFS change journal for exact file creations, modifications, renames, and deletions.
 - **Native MCP Tool**: `super_usn_journal`.
+
+---
+
+## 31. 🎧 Native Desktop Hearing — WASAPI Audio Loopback Capture & Decibel Telemetry
+
+Enables true bare-metal acoustic perception of system audio and application playback directly from Windows Core Audio:
+- **Zero-Driver WASAPI Loopback (`IAudioClient` & `IAudioCaptureClient`)**: Direct COM P/Invoke to Windows Core Audio APIs using `AUDCLNT_STREAMFLAGS_LOOPBACK` (`0x00020000`) and `AUDCLNT_SHAREMODE_SHARED`. Requires no virtual audio cables, stereo mix drivers, or external audio libraries.
+- **Real-Time Decibel & Playback Telemetry**: Samples loopback buffer for configurable intervals (`durationMs`), calculating Peak Amplitude (dBFS), Root Mean Square (RMS dBFS), and binary playback activity (`isPlaying` when peak exceeds silence threshold). Exposes native sample rate (e.g. 48000Hz), channel count (e.g. 2), and bit depth (e.g. 32-bit float / 16-bit PCM).
+- **Direct 16-Bit PCM RIFF WAV Recorder**: Streams audio frames directly into standard 16-bit uncompressed `.wav` files with authentic 44-byte RIFF/WAVE headers on disk. Allows autonomous recording of desktop speech, video playback, notification chimes, or ambient system audio for downstream speech-to-text (Whisper) or sound analysis.
+- **Native MCP Tools**: `super_audio_listen`, `super_audio_record_wav`.
+
+---
+
+## 32. 🌡️ Hardware Thermal Watchdog & Processor Throttling Telemetry
+
+Grants the AI agent granular thermal awareness and hardware throttling protection at the silicon level:
+- **NT Kernel Processor Power Telemetry (`powrprof.dll`)**: Direct P/Invoke to `CallNtPowerInformation` passing InformationLevel 11 (`ProcessorPowerInformation`). Queries all logical cores simultaneously, exposing current MHz, maximum MHz, limit MHz, max idle state, and individual core throttling flags (`mhzLimit < maxMhz`).
+- **WMI ACPI Thermal Zone Monitoring**: Discovers motherboard and CPU thermal zones (`Win32_PerfFormattedData_Counters_ThermalZoneInformation`), converting deci-Kelvin readings to Celsius (`tempCelsius`). Monitors thermal throttling flags and passive cooling limits.
+- **Active Workload Protection**: Allows the AI agent to proactively detect thermal throttling, excessive heat, and hardware frequency limits before launching heavy compilation jobs, local LLM inferences, or 3D CAD parametric calculations.
+- **Native MCP Tool**: `super_thermal_vitals`.
+
+---
+
+## 33. 🪟 Windows Virtual Desktop Orchestrator (`IVirtualDesktopManager`)
+
+Provides spatial window organization and workspace isolation via Windows 10/11 Virtual Desktop subsystems:
+- **Native COM Virtual Desktop Manager**: Activates Windows COM class `VirtualDesktopManager` (`CLSID_VirtualDesktopManager = aa509085-ecd9-468e-a094-87a471fe4d5c`) exposing `IVirtualDesktopManager` (`a5cd92ff-29be-454c-8d04-d82879fb3f1b`).
+- **Multi-Desktop Enumeration & Active Desktop Detection**: Directly reads `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops` (`Desktops` and `CurrentVirtualDesktop`), resolving all active virtual desktop GUIDs, count, and active desktop index.
+- **Window Desktop Teleportation & Spatial Isolation**: Inspects any window handle (by title, class name, PID, or "active" foreground window) via `GetWindowDesktopId` and `IsWindowOnCurrentVirtualDesktop`. Teleports windows across desktops using `MoveWindowToDesktop`, enabling the AI agent to organize workspaces, move browser tabs or worker apps to dedicated agent desktops, and keep the user's primary desktop clutter-free.
+- **Native MCP Tool**: `super_virtual_desktops`.
 
 ---
 
