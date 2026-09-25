@@ -1723,6 +1723,58 @@ const SYSTEM_TOOLS = [
           },
           required: ["path"]
         }
+      },
+      {
+        name: "super_device_graph",
+        description: "Discovers and enumerates all physical and virtual hardware devices, device classes, hardware IDs, and PnP problem codes across the system via SetupAPI and CfgMgr32.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            presentOnly: {
+              type: "boolean",
+              default: true,
+              description: "Only return currently connected/present devices (DIGCF_PRESENT). Default: true."
+            },
+            deviceClass: {
+              type: "string",
+              description: "Filter devices by device class name (e.g. 'Net', 'Display', 'USB', 'Bluetooth', 'AudioEndpoint', 'DiskDrive', 'Ports', 'System')."
+            },
+            search: {
+              type: "string",
+              description: "Substring text search filter matching friendly name, description, manufacturer, hardwareId, or deviceInstanceId."
+            },
+            problemsOnly: {
+              type: "boolean",
+              default: false,
+              description: "Filter to only return devices currently reporting problem codes (CM_PROB_* or hasProblem=true)."
+            },
+            limit: {
+              type: "number",
+              default: 100,
+              description: "Maximum number of devices to return (1 to 300, default: 100)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_device_control",
+        description: "Actuates hardware device state (reenumerate/rescan, enable, disable, restart) via SetupAPI and CfgMgr32. Enabling/disabling devices requires administrative privileges.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["reenumerate", "enable", "disable", "restart"],
+              default: "reenumerate",
+              description: "Device control action ('reenumerate' rescans devnode, 'enable' turns on device, 'disable' turns off device, 'restart' power cycles device)."
+            },
+            deviceInstanceId: {
+              type: "string",
+              description: "Target device instance ID (e.g. 'USB\\VID_046D&PID_C52B\\6&31A29D4&0&1' or matching substring)."
+            }
+          },
+          required: ["deviceInstanceId"]
+        }
       }
 ];
 
@@ -3232,6 +3284,37 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🗝️ [Windows Native Registry (${action})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_device_graph") {
+    const presentOnly = args?.presentOnly !== false;
+    const deviceClass = args?.deviceClass || "";
+    const search = args?.search || "";
+    const problemsOnly = args?.problemsOnly === true;
+    const limit = typeof args?.limit === "number" ? args.limit : 100;
+    const res = await orch.getDeviceGraph({ presentOnly, deviceClass, search, problemsOnly, limit });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔌 [SetupAPI & PnP Device Graph (${res.count || 0} devices)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_device_control") {
+    const action = args?.action || "reenumerate";
+    const deviceInstanceId = args?.deviceInstanceId || "";
+    const res = await orch.manageDevice({ action, deviceInstanceId });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Hardware Device Control (${action})]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

@@ -346,6 +346,72 @@ namespace GeminiSuperDesktop {
         [DllImport("user32.dll", SetLastError = true)]
         static extern bool SetProcessWindowStation(IntPtr hWinSta);
 
+        [StructLayout(LayoutKind.Sequential)]
+        struct SP_DEVINFO_DATA {
+            public uint cbSize;
+            public Guid ClassGuid;
+            public uint DevInst;
+            public IntPtr Reserved;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct SP_CLASSINSTALL_HEADER {
+            public uint cbSize;
+            public uint InstallFunction;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct SP_PROPCHANGE_PARAMS {
+            public SP_CLASSINSTALL_HEADER ClassInstallHeader;
+            public uint StateChange;
+            public uint Scope;
+            public uint HwProfile;
+        }
+
+        const uint DIGCF_PRESENT = 0x00000002;
+        const uint DIGCF_ALLCLASSES = 0x00000004;
+
+        const uint SPDRP_DEVICEDESC = 0x00000000;
+        const uint SPDRP_HARDWAREID = 0x00000001;
+        const uint SPDRP_CLASS = 0x00000007;
+        const uint SPDRP_CLASSGUID = 0x00000008;
+        const uint SPDRP_DRIVER = 0x00000009;
+        const uint SPDRP_MFG = 0x0000000B;
+        const uint SPDRP_FRIENDLYNAME = 0x0000000C;
+
+        const uint DIF_PROPERTYCHANGE = 0x00000012;
+        const uint DICS_ENABLE = 0x00000001;
+        const uint DICS_DISABLE = 0x00000002;
+        const uint DICS_PROPCHANGE = 0x00000003;
+        const uint DICS_FLAG_GLOBAL = 0x00000001;
+
+        [DllImport("setupapi.dll", SetLastError = true)]
+        static extern IntPtr SetupDiGetClassDevs(IntPtr ClassGuid, string Enumerator, IntPtr hwndParent, uint Flags);
+
+        [DllImport("setupapi.dll", SetLastError = true)]
+        static extern bool SetupDiEnumDeviceInfo(IntPtr DeviceInfoSet, uint MemberIndex, ref SP_DEVINFO_DATA DeviceInfoData);
+
+        [DllImport("setupapi.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        static extern bool SetupDiGetDeviceRegistryProperty(IntPtr DeviceInfoSet, ref SP_DEVINFO_DATA DeviceInfoData, uint Property, out uint PropertyRegDataType, byte[] PropertyBuffer, uint PropertyBufferSize, out uint RequiredSize);
+
+        [DllImport("setupapi.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        static extern bool SetupDiGetDeviceInstanceId(IntPtr DeviceInfoSet, ref SP_DEVINFO_DATA DeviceInfoData, StringBuilder DeviceInstanceId, uint DeviceInstanceIdSize, out uint RequiredSize);
+
+        [DllImport("setupapi.dll", SetLastError = true)]
+        static extern bool SetupDiDestroyDeviceInfoList(IntPtr DeviceInfoSet);
+
+        [DllImport("setupapi.dll", SetLastError = true)]
+        static extern bool SetupDiSetClassInstallParams(IntPtr DeviceInfoSet, ref SP_DEVINFO_DATA DeviceInfoData, ref SP_PROPCHANGE_PARAMS ClassInstallParams, uint ClassInstallParamsSize);
+
+        [DllImport("setupapi.dll", SetLastError = true)]
+        static extern bool SetupDiCallClassInstaller(uint InstallFunction, IntPtr DeviceInfoSet, ref SP_DEVINFO_DATA DeviceInfoData);
+
+        [DllImport("cfgmgr32.dll", SetLastError = true)]
+        static extern int CM_Get_DevNode_Status(out uint pulStatus, out uint pulProblemNumber, uint dnDevInst, uint ulFlags);
+
+        [DllImport("cfgmgr32.dll", SetLastError = true)]
+        static extern int CM_Reenumerate_DevNode(uint dnDevInst, uint ulFlags);
+
         [DllImport("user32.dll")]
         static extern bool SetForegroundWindow(IntPtr hWnd);
 
@@ -4308,6 +4374,263 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static string GetDeviceProperty(IntPtr devInfoSet, ref SP_DEVINFO_DATA devData, uint prop) {
+            uint regType;
+            uint reqSize;
+            SetupDiGetDeviceRegistryProperty(devInfoSet, ref devData, prop, out regType, null, 0, out reqSize);
+            if (reqSize == 0) return "";
+            byte[] buf = new byte[reqSize];
+            if (SetupDiGetDeviceRegistryProperty(devInfoSet, ref devData, prop, out regType, buf, reqSize, out reqSize)) {
+                if (regType == 7) {
+                    string[] parts = Encoding.Unicode.GetString(buf).Split(new char[] { '\0' }, StringSplitOptions.RemoveEmptyEntries);
+                    return string.Join("; ", parts);
+                } else if (regType == 1 || regType == 2) {
+                    return Encoding.Unicode.GetString(buf).TrimEnd('\0');
+                }
+            }
+            return "";
+        }
+
+        static string GetProblemDescription(uint code) {
+            switch (code) {
+                case 0: return "OK";
+                case 1: return "Device not configured properly";
+                case 3: return "Driver corrupted or low memory";
+                case 10: return "Device cannot start";
+                case 12: return "Resource conflict";
+                case 14: return "Restart computer to finish device installation";
+                case 18: return "Reinstall drivers for this device";
+                case 19: return "Registry information corrupted";
+                case 21: return "Windows is removing this device";
+                case 22: return "Device is disabled";
+                case 24: return "Device not present or not working properly";
+                case 28: return "Drivers for this device are not installed";
+                case 29: return "Device disabled by firmware";
+                case 31: return "Device not working properly";
+                case 32: return "Driver service is disabled";
+                case 37: return "Driver initialization failed";
+                case 38: return "Previous driver instance still in memory";
+                case 39: return "Corrupted or missing driver";
+                case 43: return "Windows stopped device because it reported problems (Code 43)";
+                case 44: return "Application or service shut down this device";
+                case 45: return "Device is not currently connected to computer";
+                case 47: return "Device prepared for safe removal";
+                case 48: return "Blocked from starting because known to have problems";
+                case 52: return "Driver signature verification failed";
+                default: return "Problem Code " + code;
+            }
+        }
+
+        static void DeviceGraphCmd(bool presentOnly, string classFilter, string search, bool problemsOnly, int limit) {
+            try {
+                if (limit <= 0) limit = 100;
+                if (limit > 300) limit = 300;
+
+                uint flags = (presentOnly ? DIGCF_PRESENT : 0) | DIGCF_ALLCLASSES;
+                IntPtr devInfo = SetupDiGetClassDevs(IntPtr.Zero, null, IntPtr.Zero, flags);
+                if (devInfo == (IntPtr)(-1)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"SetupDiGetClassDevs failed: 0x{0:X}\"}}", Marshal.GetLastWin32Error()));
+                    return;
+                }
+
+                try {
+                    SP_DEVINFO_DATA data = new SP_DEVINFO_DATA();
+                    data.cbSize = (uint)Marshal.SizeOf(data);
+                    uint idx = 0;
+                    int matchCount = 0;
+
+                    string cf = (classFilter ?? "").Trim().ToLowerInvariant();
+                    string s = (search ?? "").Trim().ToLowerInvariant();
+
+                    var sb = new StringBuilder();
+                    sb.Append("{\"success\": true, \"devices\": [");
+                    bool first = true;
+
+                    while (SetupDiEnumDeviceInfo(devInfo, idx, ref data)) {
+                        StringBuilder idSb = new StringBuilder(512);
+                        uint reqId;
+                        SetupDiGetDeviceInstanceId(devInfo, ref data, idSb, (uint)idSb.Capacity, out reqId);
+                        string instId = idSb.ToString();
+
+                        string desc = GetDeviceProperty(devInfo, ref data, SPDRP_DEVICEDESC);
+                        string friendly = GetDeviceProperty(devInfo, ref data, SPDRP_FRIENDLYNAME);
+                        string cls = GetDeviceProperty(devInfo, ref data, SPDRP_CLASS);
+                        string classGuid = GetDeviceProperty(devInfo, ref data, SPDRP_CLASSGUID);
+                        string mfg = GetDeviceProperty(devInfo, ref data, SPDRP_MFG);
+                        string driver = GetDeviceProperty(devInfo, ref data, SPDRP_DRIVER);
+                        string hwId = GetDeviceProperty(devInfo, ref data, SPDRP_HARDWAREID);
+
+                        uint status = 0;
+                        uint problem = 0;
+                        CM_Get_DevNode_Status(out status, out problem, data.DevInst, 0);
+
+                        bool hasProblem = (status & 0x00000400) != 0 || problem != 0;
+                        bool isStarted = (status & 0x00000008) != 0;
+                        bool isDisableable = (status & 0x00002000) != 0;
+                        bool isRemovable = (status & 0x00004000) != 0;
+
+                        if (problemsOnly && !hasProblem) {
+                            idx++;
+                            continue;
+                        }
+
+                        if (!string.IsNullOrEmpty(cf) && cf != "all" && cf != "*") {
+                            if (string.IsNullOrEmpty(cls) || cls.ToLowerInvariant().IndexOf(cf, StringComparison.OrdinalIgnoreCase) < 0) {
+                                idx++;
+                                continue;
+                            }
+                        }
+
+                        if (!string.IsNullOrEmpty(s)) {
+                            bool textMatch = (desc != null && desc.ToLowerInvariant().IndexOf(s, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                                             (friendly != null && friendly.ToLowerInvariant().IndexOf(s, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                                             (instId != null && instId.ToLowerInvariant().IndexOf(s, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                                             (mfg != null && mfg.ToLowerInvariant().IndexOf(s, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                                             (cls != null && cls.ToLowerInvariant().IndexOf(s, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                                             (hwId != null && hwId.ToLowerInvariant().IndexOf(s, StringComparison.OrdinalIgnoreCase) >= 0);
+                            if (!textMatch) {
+                                idx++;
+                                continue;
+                            }
+                        }
+
+                        string name = !string.IsNullOrEmpty(friendly) ? friendly : desc;
+                        if (string.IsNullOrEmpty(name)) name = "Unknown Device";
+
+                        string statusStr = (status & 0x00000400) != 0 ? (problem == 22 ? "disabled" : "problem") : (isStarted ? "started" : "stopped");
+
+                        if (!first) sb.Append(",");
+                        first = false;
+
+                        sb.Append(string.Format("{{\"deviceInstanceId\": \"{0}\", \"name\": \"{1}\", \"description\": \"{2}\", \"class\": \"{3}\", \"classGuid\": \"{4}\", \"manufacturer\": \"{5}\", \"driver\": \"{6}\", \"hardwareId\": \"{7}\", \"status\": \"{8}\", \"problemCode\": {9}, \"problemDescription\": \"{10}\", \"isStarted\": {11}, \"hasProblem\": {12}, \"isDisableable\": {13}, \"isRemovable\": {14}}}",
+                            EscapeJson(instId), EscapeJson(name), EscapeJson(desc), EscapeJson(cls), EscapeJson(classGuid), EscapeJson(mfg),
+                            EscapeJson(driver), EscapeJson(hwId), statusStr, problem, EscapeJson(GetProblemDescription(problem)),
+                            isStarted ? "true" : "false", hasProblem ? "true" : "false", isDisableable ? "true" : "false", isRemovable ? "true" : "false"));
+
+                        matchCount++;
+                        if (matchCount >= limit) break;
+
+                        idx++;
+                    }
+
+                    sb.Append(string.Format("], \"count\": {0}, \"totalScanned\": {1}}}", matchCount, idx));
+                    Console.WriteLine(sb.ToString());
+                } finally {
+                    SetupDiDestroyDeviceInfoList(devInfo);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"devices\": [], \"count\": 0, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DeviceControlCmd(string action, string deviceInstanceId) {
+            try {
+                if (string.IsNullOrEmpty(deviceInstanceId)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"deviceInstanceId is required\"}");
+                    return;
+                }
+
+                string act = (action ?? "reenumerate").Trim().ToLowerInvariant();
+
+                IntPtr devInfo = SetupDiGetClassDevs(IntPtr.Zero, null, IntPtr.Zero, DIGCF_ALLCLASSES);
+                if (devInfo == (IntPtr)(-1)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"SetupDiGetClassDevs failed: 0x{0:X}\"}}", Marshal.GetLastWin32Error()));
+                    return;
+                }
+
+                try {
+                    SP_DEVINFO_DATA data = new SP_DEVINFO_DATA();
+                    data.cbSize = (uint)Marshal.SizeOf(data);
+                    uint idx = 0;
+                    bool found = false;
+
+                    while (SetupDiEnumDeviceInfo(devInfo, idx, ref data)) {
+                        StringBuilder idSb = new StringBuilder(512);
+                        uint reqId;
+                        SetupDiGetDeviceInstanceId(devInfo, ref data, idSb, (uint)idSb.Capacity, out reqId);
+                        string instId = idSb.ToString();
+
+                        if (string.Equals(instId, deviceInstanceId, StringComparison.OrdinalIgnoreCase) ||
+                            instId.IndexOf(deviceInstanceId, StringComparison.OrdinalIgnoreCase) >= 0) {
+                            found = true;
+
+                            if (act == "reenumerate" || act == "rescan") {
+                                int ret = CM_Reenumerate_DevNode(data.DevInst, 0);
+                                Console.WriteLine(string.Format("{{\"success\": {0}, \"action\": \"reenumerate\", \"deviceInstanceId\": \"{1}\", \"returnCode\": {2}}}",
+                                    ret == 0 ? "true" : "false", EscapeJson(instId), ret));
+                                return;
+                            }
+
+                            SP_PROPCHANGE_PARAMS pcp = new SP_PROPCHANGE_PARAMS();
+                            pcp.ClassInstallHeader.cbSize = (uint)Marshal.SizeOf(typeof(SP_CLASSINSTALL_HEADER));
+                            pcp.ClassInstallHeader.InstallFunction = DIF_PROPERTYCHANGE;
+                            pcp.Scope = DICS_FLAG_GLOBAL;
+                            pcp.HwProfile = 0;
+
+                            if (act == "enable") {
+                                pcp.StateChange = DICS_ENABLE;
+                                if (!SetupDiSetClassInstallParams(devInfo, ref data, ref pcp, (uint)Marshal.SizeOf(pcp)) ||
+                                    !SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, devInfo, ref data)) {
+                                    int err = Marshal.GetLastWin32Error();
+                                    string errHint = (err == 5) ? "Access denied: elevated administrator privileges required" : ("Error 0x" + err.ToString("X"));
+                                    Console.WriteLine(string.Format("{{\"success\": false, \"action\": \"enable\", \"deviceInstanceId\": \"{0}\", \"error\": \"{1}\", \"win32Error\": {2}}}",
+                                        EscapeJson(instId), EscapeJson(errHint), err));
+                                    return;
+                                }
+                                Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"enable\", \"deviceInstanceId\": \"{0}\", \"enabled\": true}}", EscapeJson(instId)));
+                                return;
+                            }
+
+                            if (act == "disable") {
+                                pcp.StateChange = DICS_DISABLE;
+                                if (!SetupDiSetClassInstallParams(devInfo, ref data, ref pcp, (uint)Marshal.SizeOf(pcp)) ||
+                                    !SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, devInfo, ref data)) {
+                                    int err = Marshal.GetLastWin32Error();
+                                    string errHint = (err == 5) ? "Access denied: elevated administrator privileges required" : ("Error 0x" + err.ToString("X"));
+                                    Console.WriteLine(string.Format("{{\"success\": false, \"action\": \"disable\", \"deviceInstanceId\": \"{0}\", \"error\": \"{1}\", \"win32Error\": {2}}}",
+                                        EscapeJson(instId), EscapeJson(errHint), err));
+                                    return;
+                                }
+                                Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"disable\", \"deviceInstanceId\": \"{0}\", \"disabled\": true}}", EscapeJson(instId)));
+                                return;
+                            }
+
+                            if (act == "restart") {
+                                pcp.StateChange = DICS_DISABLE;
+                                SetupDiSetClassInstallParams(devInfo, ref data, ref pcp, (uint)Marshal.SizeOf(pcp));
+                                SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, devInfo, ref data);
+                                Thread.Sleep(300);
+                                pcp.StateChange = DICS_ENABLE;
+                                if (!SetupDiSetClassInstallParams(devInfo, ref data, ref pcp, (uint)Marshal.SizeOf(pcp)) ||
+                                    !SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, devInfo, ref data)) {
+                                    int err = Marshal.GetLastWin32Error();
+                                    string errHint = (err == 5) ? "Access denied: elevated administrator privileges required" : ("Error 0x" + err.ToString("X"));
+                                    Console.WriteLine(string.Format("{{\"success\": false, \"action\": \"restart\", \"deviceInstanceId\": \"{0}\", \"error\": \"{1}\", \"win32Error\": {2}}}",
+                                        EscapeJson(instId), EscapeJson(errHint), err));
+                                    return;
+                                }
+                                Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"restart\", \"deviceInstanceId\": \"{0}\", \"restarted\": true}}", EscapeJson(instId)));
+                                return;
+                            }
+
+                            Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Unknown device control action: {0}\"}}", EscapeJson(act)));
+                            return;
+                        }
+
+                        idx++;
+                    }
+
+                    if (!found) {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Device instance ID not found: {0}\"}}", EscapeJson(deviceInstanceId)));
+                    }
+                } finally {
+                    SetupDiDestroyDeviceInfoList(devInfo);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void GetThermalVitalsCmd() {
             try {
                 int count = Environment.ProcessorCount;
@@ -4835,6 +5158,17 @@ namespace GeminiSuperDesktop {
                 string val = args.Length >= 5 ? args[4] : "";
                 string kind = args.Length >= 6 ? args[5] : "string";
                 RegistryCmd(act, path, name, val, kind);
+            } else if (cmd == "device_graph" || cmd == "devices" || cmd == "pnp_devices" || cmd == "devicegraph") {
+                bool presentOnly = args.Length >= 2 ? (args[1].Equals("all", StringComparison.OrdinalIgnoreCase) || args[1].Equals("false", StringComparison.OrdinalIgnoreCase) ? false : true) : true;
+                string classFilter = args.Length >= 3 ? args[2] : "";
+                string search = args.Length >= 4 ? args[3] : "";
+                bool problemsOnly = args.Length >= 5 ? (args[4].Equals("problems", StringComparison.OrdinalIgnoreCase) || args[4].Equals("true", StringComparison.OrdinalIgnoreCase)) : false;
+                int limit = args.Length >= 6 ? int.Parse(args[5]) : 100;
+                DeviceGraphCmd(presentOnly, classFilter, search, problemsOnly, limit);
+            } else if (cmd == "device_control" || cmd == "dev_control" || cmd == "device_action") {
+                string act = args.Length >= 2 ? args[1] : "reenumerate";
+                string devId = args.Length >= 3 ? args[2] : "";
+                DeviceControlCmd(act, devId);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {
@@ -4849,6 +5183,7 @@ namespace GeminiSuperDesktop {
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
+            Environment.Exit(0);
         }
 
         static List<WindowMeta> CollectDesktopWindows(IntPtr hDesk, bool includeCloaked = false) {

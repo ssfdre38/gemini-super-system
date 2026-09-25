@@ -51,6 +51,7 @@
   - [33. Windows Virtual Desktop Orchestrator](#33--windows-virtual-desktop-orchestrator-ivirtualdesktopmanager)
   - [34. Sovereign Windows Audio Subsystem & Volume Mixer](#34--sovereign-windows-audio-subsystem--volume-mixer-wasapi--volume-mixer)
   - [35. Windows Diagnostics & Reliability Subsystem](#35-️-windows-diagnostics--reliability-subsystem-scm-services-eventlog-sentinel--registry-actuator)
+  - [36. Plug & Play Device Graph & SetupAPI Hardware Actuator](#36--plug--play-device-graph--setupapi-hardware-actuator-setupapidll--cfgmgr32dll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -524,6 +525,16 @@ Bridges native NT diagnostics, service supervision, and configuration boundaries
 - **Structured Windows Event Log Sentinel (`wevtapi.dll` / `System.Diagnostics.Eventing.Reader`)**: High-speed XPath log queries directly against Windows event channels (Application, System, Security, etc.) via `super_event_log`. Offers instant diagnostic presets for application crashes (`crashes` - Event 1000/1001/1002), kernel bug checks & blue screens (`bluescreen` - Kernel-Power 41), and storage/disk corruption warnings (`disk` - Event 153/55/51/137), returning structured timestamps, event IDs, provider names, severities, and fully rendered messages.
 - **Direct 64-Bit Registry Actuator (`Microsoft.Win32.Registry`)**: Millisecond-latency reading, writing, enumeration, and deletion of Windows registry keys and values across all major root hives (`HKLM`, `HKCU`, `HKCR`, `HKU`, `HKCC`) via `super_registry`. Preserves exact Win32 data types (`String`, `DWord`, `QWord`, `MultiString`, `ExpandString`, `Binary`) and queries both 64-bit and 32-bit registry views without spawning PowerShell or `reg.exe`.
 - **Native MCP Tools**: `super_service_control`, `super_event_log`, `super_registry`.
+
+---
+
+## 36. 🔌 Plug & Play Device Graph & SetupAPI Hardware Actuator (`setupapi.dll` & `cfgmgr32.dll`)
+
+Empowers the AI agent with bare-metal hardware discovery, PnP device tree navigation, and physical peripheral actuation:
+- **Zero-Latency Device Graph Enumeration (`SetupDiGetClassDevs`, `SetupDiEnumDeviceInfo`)**: Directly queries Windows SetupAPI across all device classes (`DIGCF_ALLCLASSES`, `DIGCF_PRESENT`) via `super_device_graph`. Extracts friendly names, descriptions, hardware IDs (`SPDRP_HARDWAREID`), driver registry branches (`SPDRP_DRIVER`), device class GUIDs, and manufacturers with zero WMI or PowerShell overhead.
+- **PnP Node Status & Problem Code Diagnostics (`CM_Get_DevNode_Status`)**: Interrogates the configuration manager device node state (`cfgmgr32.dll`), resolving live execution flags (`DN_STARTED`, `DN_DISABLEABLE`, `DN_REMOVABLE`, `DN_HAS_PROBLEM`) and mapping raw `CM_PROB_*` codes (e.g. Code 22 Disabled, Code 43 Stopped, Code 10 Failed to Start, Code 28 Missing Driver) into human-readable diagnostic explanations.
+- **Hardware Device State Actuation (`SetupDiCallClassInstaller`, `CM_Reenumerate_DevNode`)**: Enables, disables, restarts (power cycles), and re-enumerates hardware devices directly via `super_device_control`. Enables the AI agent to self-heal malfunctioning peripherals, cycle locked USB devices, or re-probe audio/camera endpoints automatically.
+- **Native MCP Tools**: `super_device_graph`, `super_device_control`.
 
 ---
 

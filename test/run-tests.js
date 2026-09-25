@@ -1679,10 +1679,54 @@ async function run() {
     await kb.manageRegistry({ action: "delete", path: testKey });
   });
 
-  it("All 87 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 21: SetupAPI Device Graph & PnP Hardware Subsystem
+  console.log("\n\x1b[1m[Suite 21: SetupAPI Device Graph & PnP Hardware Subsystem]\x1b[0m");
+
+  await itAsync("getDeviceGraph enumerates connected hardware devices, classes, and problem codes", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const graph = await kb.getDeviceGraph({ presentOnly: true, limit: 10 });
+
+    assert(graph !== null && typeof graph === "object");
+    assert.strictEqual(graph.success, true);
+    assert(Array.isArray(graph.devices));
+    assert(graph.count > 0, "Expected at least one present hardware device");
+
+    const firstDev = graph.devices[0];
+    assert(typeof firstDev.deviceInstanceId === "string" && firstDev.deviceInstanceId.length > 0);
+    assert(typeof firstDev.name === "string");
+    assert(typeof firstDev.status === "string");
+    assert(typeof firstDev.problemCode === "number");
+    assert(typeof firstDev.problemDescription === "string");
+    assert(typeof firstDev.isStarted === "boolean");
+    assert(typeof firstDev.hasProblem === "boolean");
+    assert(typeof firstDev.isDisableable === "boolean");
+  });
+
+  await itAsync("manageDevice executes device reenumeration and validates instance targeting", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const graph = await kb.getDeviceGraph({ presentOnly: true, limit: 1 });
+    assert(graph.success && graph.devices.length > 0);
+
+    const devId = graph.devices[0].deviceInstanceId;
+    const renumRes = await kb.manageDevice({ action: "reenumerate", deviceInstanceId: devId });
+
+    assert(renumRes !== null && typeof renumRes === "object");
+    assert.strictEqual(renumRes.success, true);
+    assert.strictEqual(renumRes.action, "reenumerate");
+    assert.strictEqual(renumRes.deviceInstanceId, devId);
+
+    // Verify targeting non-existent device returns structured failure
+    const badRes = await kb.manageDevice({ action: "reenumerate", deviceInstanceId: "NON_EXISTENT_DEVICE_XYZ_12345" });
+    assert.strictEqual(badRes.success, false);
+    assert(badRes.error && badRes.error.includes("not found"));
+  });
+
+  it("All 89 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 87);
+    assert.strictEqual(SYSTEM_TOOLS.length, 89);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -1703,6 +1747,8 @@ async function run() {
     assert(toolNames.includes("super_service_control"));
     assert(toolNames.includes("super_event_log"));
     assert(toolNames.includes("super_registry"));
+    assert(toolNames.includes("super_device_graph"));
+    assert(toolNames.includes("super_device_control"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
