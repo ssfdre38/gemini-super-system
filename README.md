@@ -54,6 +54,7 @@
   - [36. Plug & Play Device Graph & SetupAPI Hardware Actuator](#36--plug--play-device-graph--setupapi-hardware-actuator-setupapidll--cfgmgr32dll)
   - [37. High-Speed Windows NT IPC — Named Pipes & Shared Memory](#37--high-speed-windows-nt-ipc--named-pipes--memory-mapped-shared-memory-systemiopipes--systemiomemorymappedfiles)
   - [38. Windows Advanced Firewall & Network Filtering Subsystem](#38-️-windows-advanced-firewall--network-filtering-subsystem-inetfwpolicy2--inetfwrule)
+  - [39. Windows Task Scheduler Subsystem](#39-️-windows-task-scheduler-subsystem-scheduleservice--itaskservice--taskschdh)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -556,6 +557,16 @@ Directly manages Windows Firewall with Advanced Security via native COM interfac
 - **High-Speed Filtered Rule Discovery (`super_firewall_rules`)**: Enumerates and filters active firewall rules by traffic direction (`inbound`/`outbound`), action (`allow`/`block`), protocol (`tcp`/`udp`/`any`), port number (e.g. `18880`, `41242`), or application executable path.
 - **Dynamic Port & Service Security Gating (`super_firewall_rule_set`)**: Adds, enables, disables, or permanently removes firewall rules on the fly via `INetFwRule`. Enables the AI agent to dynamically open listen ports for local LLM inference engines, WebSockets, or mesh nodes, and lock down unauthorized open ports.
 - **Native MCP Tools**: `super_firewall_status`, `super_firewall_rules`, `super_firewall_rule_set`.
+
+---
+
+## 39. ⏱️ Windows Task Scheduler Subsystem (`Schedule.Service` / `ITaskService` / `taskschd.h`)
+
+Directly manages the Windows Task Scheduler engine via native COM dynamic dispatch (`taskschd.dll`, CLSID `{0f87369f-a4e5-4eec-ac06-38d5e685f588}`) without spawning `schtasks.exe`:
+- **Recursive Task Tree Traversal & Search (`super_task_scheduler_list`)**: Instantaneously traverses root and nested Task Scheduler folders (`\`, `\Microsoft\Windows\...`), filtering jobs by operational state (`ready`, `running`, `disabled`, `queued`) or text query across task names, paths, and action targets.
+- **Deep Definition & Security Telemetry (`super_task_scheduler_info`)**: Inspects complete task definitions via `ITaskDefinition`—including registration metadata (author, description, URI), security principals (`UserId`, `RunLevel`, `LogonType`), power/battery execution constraints, launch triggers (`boot`, `logon`, `time`, `daily`, `event`), and execution actions.
+- **Lifecycle & Execution Actuation (`super_task_scheduler_action`)**: Runs scheduled tasks on demand (`IRegisteredTask::Run`), stops active instances (`Stop`), toggles schedules (`Enabled = true/false`), and deletes obsolete tasks (`DeleteTask`) directly through native Win32 COM.
+- **Native MCP Tools**: `super_task_scheduler_list`, `super_task_scheduler_info`, `super_task_scheduler_action`.
 
 ---
 

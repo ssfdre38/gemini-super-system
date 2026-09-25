@@ -2877,6 +2877,355 @@ namespace GeminiSuperDesktop {
             }
         }
 
+        static string GetTaskStateName(int state) {
+            switch (state) {
+                case 1: return "disabled";
+                case 2: return "queued";
+                case 3: return "ready";
+                case 4: return "running";
+                default: return "unknown";
+            }
+        }
+
+        static string FormatTaskDate(DateTime dt) {
+            if (dt.Year <= 1900 || dt.Year == 1999) return "null";
+            return "\"" + dt.ToString("o") + "\"";
+        }
+
+        static string GetActionTypeName(int type) {
+            switch (type) {
+                case 0: return "exec";
+                case 5: return "com_handler";
+                case 6: return "email";
+                case 7: return "message";
+                default: return "type_" + type;
+            }
+        }
+
+        static string GetTriggerTypeName(int type) {
+            switch (type) {
+                case 0: return "event";
+                case 1: return "time";
+                case 2: return "daily";
+                case 3: return "weekly";
+                case 4: return "monthly";
+                case 5: return "monthly_dow";
+                case 6: return "idle";
+                case 7: return "registration";
+                case 8: return "boot";
+                case 9: return "logon";
+                case 11: return "session_change";
+                default: return "type_" + type;
+            }
+        }
+
+        static void TaskSchedulerListCmd(string folderPath, bool recursive, string stateFilter, string searchFilter, int limit) {
+            try {
+                if (string.IsNullOrEmpty(folderPath)) folderPath = "\\";
+                if (limit <= 0) limit = 50;
+                string sFilter = (stateFilter ?? "all").Trim().ToLowerInvariant();
+                string qFilter = (searchFilter ?? "").Trim().ToLowerInvariant();
+
+                Type t = Type.GetTypeFromProgID("Schedule.Service");
+                if (t == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Schedule.Service COM ProgID not registered\"}");
+                    return;
+                }
+                dynamic ts = Activator.CreateInstance(t);
+                ts.Connect();
+
+                dynamic rootFolder = ts.GetFolder(folderPath);
+                var list = new List<string>();
+                int totalMatched = 0;
+
+                EnumerateFolderTasks(rootFolder, recursive, 0, 10, list, sFilter, qFilter, limit, ref totalMatched);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"folder\": \"{0}\", \"recursive\": {1}, \"count\": {2}, \"totalMatched\": {3}, \"tasks\": [{4}]}}",
+                    EscapeJson(folderPath), recursive ? "true" : "false", list.Count, totalMatched, string.Join(", ", list.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void EnumerateFolderTasks(dynamic folder, bool recursive, int depth, int maxDepth, List<string> list, string stateFilter, string searchFilter, int limit, ref int totalMatched) {
+            try {
+                dynamic tasks = folder.GetTasks(1);
+                foreach (dynamic task in tasks) {
+                    try {
+                        string name = task.Name ?? "";
+                        string path = task.Path ?? "";
+                        int state = 0;
+                        try { state = task.State; } catch {}
+                        string stateStr = GetTaskStateName(state);
+                        bool enabled = true;
+                        try { enabled = task.Enabled; } catch {}
+
+                        if (!string.IsNullOrEmpty(stateFilter) && stateFilter != "all" && stateStr != stateFilter) {
+                            continue;
+                        }
+
+                        DateTime lastRun = DateTime.MinValue;
+                        try { lastRun = task.LastRunTime; } catch {}
+                        int lastResult = 0;
+                        try { lastResult = task.LastTaskResult; } catch {}
+                        DateTime nextRun = DateTime.MinValue;
+                        try { nextRun = task.NextRunTime; } catch {}
+
+                        string actionSummary = "";
+                        try {
+                            dynamic def = task.Definition;
+                            dynamic actions = def.Actions;
+                            if (actions != null) {
+                                foreach (dynamic act in actions) {
+                                    int aType = act.Type;
+                                    if (aType == 0) {
+                                        actionSummary = act.Path ?? "";
+                                        string aArgs = "";
+                                        try { aArgs = act.Arguments ?? ""; } catch {}
+                                        if (!string.IsNullOrEmpty(aArgs)) actionSummary += " " + aArgs;
+                                    } else if (aType == 5) {
+                                        actionSummary = "COM: " + (act.ClassId ?? "");
+                                    } else {
+                                        actionSummary = GetActionTypeName(aType);
+                                    }
+                                    break;
+                                }
+                            }
+                        } catch {}
+
+                        if (!string.IsNullOrEmpty(searchFilter)) {
+                            bool m = name.ToLowerInvariant().Contains(searchFilter) ||
+                                     path.ToLowerInvariant().Contains(searchFilter) ||
+                                     actionSummary.ToLowerInvariant().Contains(searchFilter);
+                            if (!m) continue;
+                        }
+
+                        totalMatched++;
+                        if (list.Count < limit) {
+                            list.Add(string.Format(
+                                "{{\"name\": \"{0}\", \"path\": \"{1}\", \"state\": \"{2}\", \"enabled\": {3}, \"lastRunTime\": {4}, \"lastTaskResult\": {5}, \"nextRunTime\": {6}, \"actionSummary\": \"{7}\", \"folder\": \"{8}\"}}",
+                                EscapeJson(name), EscapeJson(path), stateStr, enabled ? "true" : "false",
+                                FormatTaskDate(lastRun), lastResult, FormatTaskDate(nextRun),
+                                EscapeJson(actionSummary), EscapeJson(folder.Path ?? "")
+                            ));
+                        }
+                    } catch {}
+                }
+            } catch {}
+
+            if (recursive && depth < maxDepth) {
+                try {
+                    dynamic subs = folder.GetFolders(0);
+                    foreach (dynamic sf in subs) {
+                        EnumerateFolderTasks(sf, recursive, depth + 1, maxDepth, list, stateFilter, searchFilter, limit, ref totalMatched);
+                    }
+                } catch {}
+            }
+        }
+
+        static void TaskSchedulerInfoCmd(string taskPath) {
+            try {
+                if (string.IsNullOrEmpty(taskPath)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"taskPath is required\"}");
+                    return;
+                }
+
+                Type t = Type.GetTypeFromProgID("Schedule.Service");
+                if (t == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Schedule.Service COM ProgID not registered\"}");
+                    return;
+                }
+                dynamic ts = Activator.CreateInstance(t);
+                ts.Connect();
+
+                string normPath = (taskPath ?? "").Trim().Replace('/', '\\');
+                if (!normPath.StartsWith("\\") && normPath.Contains("\\")) {
+                    normPath = "\\" + normPath;
+                }
+                int lastSlash = normPath.LastIndexOf('\\');
+                string folderPath = "\\";
+                string taskName = normPath;
+                if (lastSlash > 0) {
+                    folderPath = normPath.Substring(0, lastSlash);
+                    taskName = normPath.Substring(lastSlash + 1);
+                } else if (lastSlash == 0) {
+                    folderPath = "\\";
+                    taskName = normPath.Substring(1);
+                }
+
+                dynamic folder = ts.GetFolder(folderPath);
+                dynamic task = folder.GetTask(taskName);
+
+                string name = task.Name ?? "";
+                string path = task.Path ?? "";
+                int state = 0;
+                try { state = task.State; } catch {}
+                string stateStr = GetTaskStateName(state);
+                bool enabled = true;
+                try { enabled = task.Enabled; } catch {}
+
+                DateTime lastRun = DateTime.MinValue;
+                try { lastRun = task.LastRunTime; } catch {}
+                int lastResult = 0;
+                try { lastResult = task.LastTaskResult; } catch {}
+                DateTime nextRun = DateTime.MinValue;
+                try { nextRun = task.NextRunTime; } catch {}
+                int missedRuns = 0;
+                try { missedRuns = task.NumberOfMissedRuns; } catch {}
+
+                dynamic def = task.Definition;
+                dynamic reg = def.RegistrationInfo;
+                string author = ""; try { author = reg.Author ?? ""; } catch {}
+                string desc = ""; try { desc = reg.Description ?? ""; } catch {}
+                string date = ""; try { date = reg.Date ?? ""; } catch {}
+                string version = ""; try { version = reg.Version ?? ""; } catch {}
+                string uri = ""; try { uri = reg.URI ?? ""; } catch {}
+
+                dynamic princ = def.Principal;
+                string userId = ""; try { userId = princ.UserId ?? ""; } catch {}
+                int logonType = 0; try { logonType = princ.LogonType; } catch {}
+                int runLevel = 0; try { runLevel = princ.RunLevel; } catch {}
+                string runLevelStr = (runLevel == 1) ? "highest_available" : "least_privilege";
+
+                dynamic sett = def.Settings;
+                bool allowDemand = false; try { allowDemand = sett.AllowDemandStart; } catch {}
+                bool disallowBatteries = false; try { disallowBatteries = sett.DisallowStartIfOnBatteries; } catch {}
+                bool stopBatteries = false; try { stopBatteries = sett.StopIfGoingOnBatteries; } catch {}
+                bool hidden = false; try { hidden = sett.Hidden; } catch {}
+                string execLimit = ""; try { execLimit = sett.ExecutionTimeLimit ?? ""; } catch {}
+                int restartCount = 0; try { restartCount = sett.RestartCount; } catch {}
+
+                var actionsList = new List<string>();
+                try {
+                    foreach (dynamic act in def.Actions) {
+                        int aType = act.Type;
+                        string actTypeStr = GetActionTypeName(aType);
+                        string aPath = ""; try { aPath = act.Path ?? ""; } catch {}
+                        string aArgs = ""; try { aArgs = act.Arguments ?? ""; } catch {}
+                        string aDir = ""; try { aDir = act.WorkingDirectory ?? ""; } catch {}
+                        string aClsid = ""; try { aClsid = act.ClassId ?? ""; } catch {}
+
+                        actionsList.Add(string.Format(
+                            "{{\"type\": \"{0}\", \"path\": \"{1}\", \"arguments\": \"{2}\", \"workingDirectory\": \"{3}\", \"classId\": \"{4}\"}}",
+                            actTypeStr, EscapeJson(aPath), EscapeJson(aArgs), EscapeJson(aDir), EscapeJson(aClsid)
+                        ));
+                    }
+                } catch {}
+
+                var triggersList = new List<string>();
+                try {
+                    foreach (dynamic tr in def.Triggers) {
+                        int trType = tr.Type;
+                        string trTypeStr = GetTriggerTypeName(trType);
+                        bool trEnabled = true; try { trEnabled = tr.Enabled; } catch {}
+                        string startBoundary = ""; try { startBoundary = tr.StartBoundary ?? ""; } catch {}
+                        string endBoundary = ""; try { endBoundary = tr.EndBoundary ?? ""; } catch {}
+
+                        triggersList.Add(string.Format(
+                            "{{\"type\": \"{0}\", \"enabled\": {1}, \"startBoundary\": \"{2}\", \"endBoundary\": \"{3}\"}}",
+                            trTypeStr, trEnabled ? "true" : "false", EscapeJson(startBoundary), EscapeJson(endBoundary)
+                        ));
+                    }
+                } catch {}
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"name\": \"{0}\", \"path\": \"{1}\", \"folder\": \"{2}\", \"state\": \"{3}\", \"enabled\": {4}, " +
+                    "\"lastRunTime\": {5}, \"lastTaskResult\": {6}, \"nextRunTime\": {7}, \"numberOfMissedRuns\": {8}, " +
+                    "\"registration\": {{\"author\": \"{9}\", \"description\": \"{10}\", \"date\": \"{11}\", \"version\": \"{12}\", \"uri\": \"{13}\"}}, " +
+                    "\"principal\": {{\"userId\": \"{14}\", \"logonType\": {15}, \"runLevel\": \"{16}\"}}, " +
+                    "\"settings\": {{\"allowDemandStart\": {17}, \"disallowStartIfOnBatteries\": {18}, \"stopIfGoingOnBatteries\": {19}, \"hidden\": {20}, \"executionTimeLimit\": \"{21}\", \"restartCount\": {22}}}, " +
+                    "\"actions\": [{23}], \"triggers\": [{24}]}}",
+                    EscapeJson(name), EscapeJson(path), EscapeJson(folderPath), stateStr, enabled ? "true" : "false",
+                    FormatTaskDate(lastRun), lastResult, FormatTaskDate(nextRun), missedRuns,
+                    EscapeJson(author), EscapeJson(desc), EscapeJson(date), EscapeJson(version), EscapeJson(uri),
+                    EscapeJson(userId), logonType, runLevelStr,
+                    allowDemand ? "true" : "false", disallowBatteries ? "true" : "false", stopBatteries ? "true" : "false", hidden ? "true" : "false", EscapeJson(execLimit), restartCount,
+                    string.Join(", ", actionsList.ToArray()), string.Join(", ", triggersList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void TaskSchedulerActionCmd(string action, string taskPath) {
+            try {
+                if (string.IsNullOrEmpty(action)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"action is required (run, stop, enable, disable, delete)\"}");
+                    return;
+                }
+                if (string.IsNullOrEmpty(taskPath)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"taskPath is required\"}");
+                    return;
+                }
+
+                string act = action.Trim().ToLowerInvariant();
+                Type t = Type.GetTypeFromProgID("Schedule.Service");
+                if (t == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Schedule.Service COM ProgID not registered\"}");
+                    return;
+                }
+                dynamic ts = Activator.CreateInstance(t);
+                ts.Connect();
+
+                string normPath = (taskPath ?? "").Trim().Replace('/', '\\');
+                if (!normPath.StartsWith("\\") && normPath.Contains("\\")) {
+                    normPath = "\\" + normPath;
+                }
+                int lastSlash = normPath.LastIndexOf('\\');
+                string folderPath = "\\";
+                string taskName = normPath;
+                if (lastSlash > 0) {
+                    folderPath = normPath.Substring(0, lastSlash);
+                    taskName = normPath.Substring(lastSlash + 1);
+                } else if (lastSlash == 0) {
+                    folderPath = "\\";
+                    taskName = normPath.Substring(1);
+                }
+
+                dynamic folder = ts.GetFolder(folderPath);
+
+                if (act == "delete" || act == "remove") {
+                    folder.DeleteTask(taskName, 0);
+                    Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"delete\", \"path\": \"{0}\", \"deleted\": true}}", EscapeJson(normPath)));
+                    return;
+                }
+
+                dynamic task = folder.GetTask(taskName);
+
+                if (act == "run" || act == "start") {
+                    dynamic runningTask = task.Run(null);
+                    string instanceId = "";
+                    try { instanceId = runningTask.InstanceGuid ?? ""; } catch {}
+                    Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"run\", \"path\": \"{0}\", \"instanceId\": \"{1}\"}}", EscapeJson(normPath), EscapeJson(instanceId)));
+                    return;
+                }
+
+                if (act == "stop" || act == "terminate") {
+                    task.Stop(0);
+                    Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"stop\", \"path\": \"{0}\", \"stopped\": true}}", EscapeJson(normPath)));
+                    return;
+                }
+
+                if (act == "enable") {
+                    task.Enabled = true;
+                    Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"enable\", \"path\": \"{0}\", \"enabled\": true}}", EscapeJson(normPath)));
+                    return;
+                }
+
+                if (act == "disable") {
+                    task.Enabled = false;
+                    Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"disable\", \"path\": \"{0}\", \"enabled\": false}}", EscapeJson(normPath)));
+                    return;
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Unsupported action: {0}\"}}", EscapeJson(act)));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
         static void ClipboardGetCmd() {
             try {
                 string text = "";
@@ -5623,6 +5972,20 @@ namespace GeminiSuperDesktop {
                 string rAct = args.Length >= 9 ? args[8] : "allow";
                 string prof = args.Length >= 10 ? args[9] : "all";
                 ManageFirewallRuleCmd(act, name, desc, dir, pro, ports, app, rAct, prof);
+            } else if (cmd == "task_scheduler_list" || cmd == "ts_list" || cmd == "task_list") {
+                string folder = args.Length >= 2 ? args[1] : "\\";
+                bool rec = args.Length >= 3 && (args[2].ToLowerInvariant() == "true" || args[2] == "1");
+                string state = args.Length >= 4 ? args[3] : "all";
+                string search = args.Length >= 5 ? args[4] : "";
+                int limit = args.Length >= 6 ? int.Parse(args[5]) : 50;
+                TaskSchedulerListCmd(folder, rec, state, search, limit);
+            } else if (cmd == "task_scheduler_info" || cmd == "ts_info" || cmd == "task_info") {
+                string taskPath = args.Length >= 2 ? args[1] : "";
+                TaskSchedulerInfoCmd(taskPath);
+            } else if (cmd == "task_scheduler_action" || cmd == "ts_action" || cmd == "task_action") {
+                string act = args.Length >= 2 ? args[1] : "run";
+                string taskPath = args.Length >= 3 ? args[2] : "";
+                TaskSchedulerActionCmd(act, taskPath);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

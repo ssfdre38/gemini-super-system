@@ -1945,6 +1945,74 @@ const SYSTEM_TOOLS = [
           },
           required: ["name"]
         }
+      },
+      {
+        name: "super_task_scheduler_list",
+        description: "Enumerates or searches Windows Task Scheduler jobs via ITaskService/ITaskFolder COM automation, supporting recursive folder traversal, state filtering (ready, running, disabled, queued), and action path summaries.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            folder: {
+              type: "string",
+              default: "\\",
+              description: "Task Scheduler folder path (e.g. '\\', '\\Microsoft\\Windows', '\\Microsoft\\Windows\\Defrag'). Default: '\\'."
+            },
+            recursive: {
+              type: "boolean",
+              default: false,
+              description: "Traverse subfolders recursively across the Task Scheduler tree (default: false)."
+            },
+            state: {
+              type: "string",
+              enum: ["all", "ready", "running", "disabled", "queued"],
+              default: "all",
+              description: "Task state filter: 'all', 'ready', 'running', 'disabled', or 'queued' (default: 'all')."
+            },
+            search: {
+              type: "string",
+              description: "Substring filter across task name, full path, or action executable."
+            },
+            limit: {
+              type: "number",
+              default: 50,
+              description: "Maximum tasks to return (default: 50)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_task_scheduler_info",
+        description: "Retrieves comprehensive metadata for a specific Windows scheduled task via ITaskDefinition, including registration author/description, principal credentials/runlevel, power/battery execution settings, action arguments, and trigger definitions.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            taskPath: {
+              type: "string",
+              description: "Full path or name of the scheduled task (e.g. '\\Microsoft\\Windows\\Defrag\\ScheduledDefrag' or 'ScheduledDefrag')."
+            }
+          },
+          required: ["taskPath"]
+        }
+      },
+      {
+        name: "super_task_scheduler_action",
+        description: "Controls the lifecycle and execution of a Windows scheduled task via IRegisteredTask (run immediately, stop active instance, enable, disable, or delete).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["run", "stop", "enable", "disable", "delete"],
+              default: "run",
+              description: "Task action: 'run' (executes immediately), 'stop' (terminates running task), 'enable' (enables scheduled execution), 'disable' (suspends schedule), 'delete' (permanently removes task)."
+            },
+            taskPath: {
+              type: "string",
+              description: "Full path or name of the target scheduled task."
+            }
+          },
+          required: ["action", "taskPath"]
+        }
       }
 ];
 
@@ -3580,6 +3648,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [Windows Advanced Firewall Rule (${action}: ${ruleName})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_task_scheduler_list") {
+    const folder = args?.folder || "\\";
+    const recursive = Boolean(args?.recursive);
+    const state = args?.state || "all";
+    const search = args?.search || "";
+    const limit = args?.limit || 50;
+    const res = await orch.listScheduledTasks({ folder, recursive, state, search, limit });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Task Scheduler (Folder: ${res.folder || folder}, Matched: ${res.totalMatched || res.count || 0})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_task_scheduler_info") {
+    const taskPath = args?.taskPath || "";
+    const res = await orch.getScheduledTaskInfo(taskPath);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Task Scheduler Info (${taskPath})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_task_scheduler_action") {
+    const action = args?.action || "run";
+    const taskPath = args?.taskPath || "";
+    const res = await orch.manageScheduledTask({ action, taskPath });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Task Scheduler Action (${action}: ${taskPath})]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

@@ -1863,10 +1863,61 @@ async function run() {
     assert.strictEqual(delRes.deleted, true);
   });
 
-  it("All 94 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 24: Windows Task Scheduler Subsystem
+  console.log("\n\x1b[1m[Suite 24: Windows Task Scheduler Subsystem]\x1b[0m");
+
+  await itAsync("listScheduledTasks enumerates root folder tasks via ITaskService/ITaskFolder", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const tasks = await kb.listScheduledTasks({ folder: "\\", limit: 10 });
+
+    assert(tasks !== null && typeof tasks === "object");
+    assert.strictEqual(tasks.success, true);
+    assert(Array.isArray(tasks.tasks));
+    assert(tasks.count > 0);
+    const t0 = tasks.tasks[0];
+    assert(typeof t0.name === "string" && t0.name.length > 0);
+    assert(typeof t0.path === "string" && t0.path.length > 0);
+    assert(typeof t0.state === "string");
+    assert(typeof t0.enabled === "boolean");
+  });
+
+  await itAsync("listScheduledTasks searches tasks recursively across Task Scheduler tree", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const searchRes = await kb.listScheduledTasks({ folder: "\\", recursive: true, search: "defrag", limit: 5 });
+
+    assert(searchRes !== null && typeof searchRes === "object");
+    assert.strictEqual(searchRes.success, true);
+    assert(Array.isArray(searchRes.tasks));
+    assert(searchRes.count >= 1);
+    const hasDefrag = searchRes.tasks.some(t => t.name.toLowerCase().includes("defrag") || t.path.toLowerCase().includes("defrag"));
+    assert(hasDefrag, "Expected defrag task in recursive search");
+  });
+
+  await itAsync("getScheduledTaskInfo inspects task definition, registration, principal, and actions", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const info = await kb.getScheduledTaskInfo("\\Microsoft\\Windows\\Defrag\\ScheduledDefrag");
+
+    assert(info !== null && typeof info === "object");
+    assert.strictEqual(info.success, true);
+    assert.strictEqual(info.name, "ScheduledDefrag");
+    assert.strictEqual(info.folder, "\\Microsoft\\Windows\\Defrag");
+    assert(typeof info.registration === "object");
+    assert(typeof info.principal === "object");
+    assert(typeof info.settings === "object");
+    assert(Array.isArray(info.actions));
+    assert(info.actions.length >= 1);
+    const act0 = info.actions[0];
+    assert.strictEqual(act0.type, "exec");
+    assert(act0.path.toLowerCase().includes("defrag.exe"));
+  });
+
+  it("All 97 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 94);
+    assert.strictEqual(SYSTEM_TOOLS.length, 97);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -1894,6 +1945,9 @@ async function run() {
     assert(toolNames.includes("super_firewall_status"));
     assert(toolNames.includes("super_firewall_rules"));
     assert(toolNames.includes("super_firewall_rule_set"));
+    assert(toolNames.includes("super_task_scheduler_list"));
+    assert(toolNames.includes("super_task_scheduler_info"));
+    assert(toolNames.includes("super_task_scheduler_action"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
