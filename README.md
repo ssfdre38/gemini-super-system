@@ -49,6 +49,7 @@
   - [31. Native Desktop Hearing — WASAPI Audio Loopback Capture & Decibel Telemetry](#31--native-desktop-hearing--wasapi-audio-loopback-capture--decibel-telemetry)
   - [32. Hardware Thermal Watchdog & Processor Throttling Telemetry](#32-️-hardware-thermal-watchdog--processor-throttling-telemetry)
   - [33. Windows Virtual Desktop Orchestrator](#33--windows-virtual-desktop-orchestrator-ivirtualdesktopmanager)
+  - [34. Sovereign Windows Audio Subsystem & Volume Mixer](#34--sovereign-windows-audio-subsystem--volume-mixer-wasapi--volume-mixer)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -494,6 +495,20 @@ Provides spatial window organization and workspace isolation via Windows 10/11 V
 - **Multi-Desktop Enumeration & Active Desktop Detection**: Directly reads `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\VirtualDesktops` (`Desktops` and `CurrentVirtualDesktop`), resolving all active virtual desktop GUIDs, count, and active desktop index.
 - **Window Desktop Teleportation & Spatial Isolation**: Inspects any window handle (by title, class name, PID, or "active" foreground window) via `GetWindowDesktopId` and `IsWindowOnCurrentVirtualDesktop`. Teleports windows across desktops using `MoveWindowToDesktop`, enabling the AI agent to organize workspaces, move browser tabs or worker apps to dedicated agent desktops, and keep the user's primary desktop clutter-free.
 - **Native MCP Tool**: `super_virtual_desktops`.
+
+---
+
+## 34. 🔊 Sovereign Windows Audio Subsystem & Volume Mixer (WASAPI & Volume Mixer)
+
+Grants Gemini complete acoustic awareness, microphone perception, sound synthesis, and per-process audio mixer actuation with zero external drivers:
+- **Audio Endpoint Topology Enumeration (`IMMDeviceEnumerator`, `IMMDeviceCollection`)**: Queries the host audio graph for all active render (speakers/headphones) and capture (microphones) endpoints. Inspects endpoint friendly names (`PKEY_Device_FriendlyName`), system default endpoints, and data-flow routing.
+- **Native Microphone Capture & Voice Activity Detection**: Samples physical microphone input using WASAPI shared capture streams (`IAudioClient` & `IAudioCaptureClient`), calculating peak dBFS, RMS power, and active voice/speech presence.
+- **16-Bit PCM Microphone WAV Recording**: Streams live microphone input directly to disk into standard 16-bit uncompressed `.wav` files with authentic RIFF headers, enabling local Whisper transcription or voice note archiving.
+- **Windows Volume Mixer Session & Meter Inspection (`IAudioSessionManager2`, `IAudioSessionEnumerator`)**: Discovers all active per-application Windows Volume Mixer sessions. Obtains process IDs, executable names, current volume levels (0-100), mute status, and real-time audio peak activity meters (`IAudioMeterInformation`).
+- **Granular Per-Process Volume & Mute Actuation (`ISimpleAudioVolume`)**: Programmatically ducks, adjusts, or mutes specific application volumes (e.g. lowering media players during voice calls or silencing noisy background tabs) by matching process name or PID.
+- **Native Sound Playback (`winmm.dll` `PlaySound`)**: Triggers asynchronous, non-blocking playback of WAV audio cues, chimes, or spoken feedback (`SND_ASYNC | SND_FILENAME | SND_PURGE`).
+- **Hardware/System Frequency Tone Synthesis (`kernel32.dll` `Beep` + `user32.dll` `MessageBeep`)**: Synthesizes exact pitch frequencies (Hz) and millisecond durations across hardware and virtual/RDP environments with automatic fallback.
+- **Native MCP Tools**: `super_audio_devices`, `super_audio_mic_listen`, `super_audio_mic_record_wav`, `super_audio_sessions`, `super_audio_session_set`, `super_audio_play`, `super_audio_beep`.
 
 ---
 

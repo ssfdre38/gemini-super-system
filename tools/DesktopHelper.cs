@@ -536,27 +536,130 @@ namespace GeminiSuperDesktop {
         [DllImport("user32.dll")]
         static extern bool EnumDisplaySettings(string deviceName, int modeNum, ref DEVMODE devMode);
 
+        [DllImport("ole32.dll")]
+        static extern int PropVariantClear(ref PROPVARIANT pvar);
+
+        [DllImport("winmm.dll", SetLastError = true, CharSet = CharSet.Auto)]
+        static extern bool PlaySound(string pszSound, IntPtr hmod, uint fdwSound);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool Beep(uint dwFreq, uint dwDuration);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool MessageBeep(uint uType);
+
         [ComImport]
         [Guid("BCDE0395-E52F-467C-8E3D-C4579291692E")]
         class MMDeviceEnumeratorComObject {}
 
         [Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         interface IMMDeviceEnumerator {
-            int EnumAudioEndpoints(int dataFlow, int stateMask, out IntPtr deviceCollection);
-            [PreserveSig]
-            int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice endpoint);
+            [PreserveSig] int EnumAudioEndpoints(int dataFlow, int stateMask, out IMMDeviceCollection deviceCollection);
+            [PreserveSig] int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice endpoint);
             int GetDevice(string pwstrId, out IMMDevice endpoint);
             int RegisterEndpointNotificationCallback(IntPtr pClient);
             int UnregisterEndpointNotificationCallback(IntPtr pClient);
         }
 
+        [Guid("0BD7A1BE-7A1A-44DB-8397-CC5392387B5E"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IMMDeviceCollection {
+            [PreserveSig] int GetCount(out uint pcDevices);
+            [PreserveSig] int Item(uint nDevice, out IMMDevice ppDevice);
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct PROPERTYKEY {
+            public Guid fmtid;
+            public uint pid;
+        }
+
+        [StructLayout(LayoutKind.Explicit)]
+        struct PROPVARIANT {
+            [FieldOffset(0)] public ushort vt;
+            [FieldOffset(8)] public IntPtr pwszVal;
+            [FieldOffset(8)] public int iVal;
+            [FieldOffset(8)] public uint uiVal;
+        }
+
+        [Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IPropertyStore {
+            [PreserveSig] int GetCount(out uint cProps);
+            [PreserveSig] int GetAt(uint iProp, out PROPERTYKEY pkey);
+            [PreserveSig] int GetValue(ref PROPERTYKEY key, out PROPVARIANT pv);
+            [PreserveSig] int SetValue(ref PROPERTYKEY key, ref PROPVARIANT pv);
+            [PreserveSig] int Commit();
+        }
+
         [Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
         interface IMMDevice {
-            [PreserveSig]
-            int Activate(ref Guid iid, int dwClsCtx, IntPtr pActivationParams, [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);
-            int OpenPropertyStore(int stgmAccess, out IntPtr ppProperties);
-            int GetId([MarshalAs(UnmanagedType.LPWStr)] out string ppstrId);
-            int GetState(out int pdwState);
+            [PreserveSig] int Activate(ref Guid iid, int dwClsCtx, IntPtr pActivationParams, [MarshalAs(UnmanagedType.IUnknown)] out object ppInterface);
+            [PreserveSig] int OpenPropertyStore(int stgmAccess, out IPropertyStore ppProperties);
+            [PreserveSig] int GetId([MarshalAs(UnmanagedType.LPWStr)] out string ppstrId);
+            [PreserveSig] int GetState(out int pdwState);
+        }
+
+        [Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IAudioSessionManager2 {
+            [PreserveSig] int GetAudioSessionControl(ref Guid AudioSessionGuid, uint StreamFlags, out IntPtr SessionControl);
+            [PreserveSig] int GetSimpleAudioVolume(ref Guid AudioSessionGuid, uint StreamFlags, out ISimpleAudioVolume AudioVolume);
+            [PreserveSig] int GetSessionEnumerator(out IAudioSessionEnumerator SessionEnum);
+            [PreserveSig] int RegisterSessionNotification(IntPtr NewSessionNotification);
+            [PreserveSig] int UnregisterSessionNotification(IntPtr NewSessionNotification);
+            [PreserveSig] int RegisterDuckNotification(string sessionID, IntPtr duckNotification);
+            [PreserveSig] int UnregisterDuckNotification(IntPtr duckNotification);
+        }
+
+        [Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IAudioSessionEnumerator {
+            [PreserveSig] int GetCount(out int SessionCount);
+            [PreserveSig] int GetSession(int SessionIndex, out IAudioSessionControl Session);
+        }
+
+        [Guid("F4B1A599-7266-4319-A8CA-E70ACB11E8CD"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IAudioSessionControl {
+            [PreserveSig] int GetState(out int pRetVal);
+            [PreserveSig] int GetDisplayName([MarshalAs(UnmanagedType.LPWStr)] out string pRetVal);
+            [PreserveSig] int SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string Value, ref Guid EventContext);
+            [PreserveSig] int GetIconPath([MarshalAs(UnmanagedType.LPWStr)] out string pRetVal);
+            [PreserveSig] int SetIconPath([MarshalAs(UnmanagedType.LPWStr)] string Value, ref Guid EventContext);
+            [PreserveSig] int GetGroupingParam(out Guid pRetVal);
+            [PreserveSig] int SetGroupingParam(ref Guid Override, ref Guid EventContext);
+            [PreserveSig] int RegisterAudioSessionNotification(IntPtr NewNotifications);
+            [PreserveSig] int UnregisterAudioSessionNotification(IntPtr NewNotifications);
+        }
+
+        [Guid("bfb7ff88-7239-4fc9-8fa2-07c950be9c6d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IAudioSessionControl2 : IAudioSessionControl {
+            [PreserveSig] new int GetState(out int pRetVal);
+            [PreserveSig] new int GetDisplayName([MarshalAs(UnmanagedType.LPWStr)] out string pRetVal);
+            [PreserveSig] new int SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string Value, ref Guid EventContext);
+            [PreserveSig] new int GetIconPath([MarshalAs(UnmanagedType.LPWStr)] out string pRetVal);
+            [PreserveSig] new int SetIconPath([MarshalAs(UnmanagedType.LPWStr)] string Value, ref Guid EventContext);
+            [PreserveSig] new int GetGroupingParam(out Guid pRetVal);
+            [PreserveSig] new int SetGroupingParam(ref Guid Override, ref Guid EventContext);
+            [PreserveSig] new int RegisterAudioSessionNotification(IntPtr NewNotifications);
+            [PreserveSig] new int UnregisterAudioSessionNotification(IntPtr NewNotifications);
+            [PreserveSig] int GetSessionIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string pRetVal);
+            [PreserveSig] int GetSessionInstanceIdentifier([MarshalAs(UnmanagedType.LPWStr)] out string pRetVal);
+            [PreserveSig] int GetProcessId(out uint pRetVal);
+            [PreserveSig] int IsSystemSoundsSession();
+            [PreserveSig] int SetDuckingPreference([MarshalAs(UnmanagedType.Bool)] bool optOut);
+        }
+
+        [Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface ISimpleAudioVolume {
+            [PreserveSig] int SetMasterVolume(float fLevel, ref Guid EventContext);
+            [PreserveSig] int GetMasterVolume(out float pfLevel);
+            [PreserveSig] int SetMute([MarshalAs(UnmanagedType.Bool)] bool bMute, ref Guid EventContext);
+            [PreserveSig] int GetMute([MarshalAs(UnmanagedType.Bool)] out bool pbMute);
+        }
+
+        [Guid("C02216F6-8C67-4B5B-9D00-D008E73E0064"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IAudioMeterInformation {
+            [PreserveSig] int GetPeakValue(out float pfPeak);
+            [PreserveSig] int GetMeteringChannelCount(out uint pnChannelCount);
+            [PreserveSig] int GetChannelsPeakValues(uint u32ChannelCount, [In, Out] float[] afPeakValues);
+            [PreserveSig] int QueryHardwareSupport(out uint pdwHardwareSupportMask);
         }
 
         [Guid("5CDF2C82-841E-4546-9722-0CF74078229A"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -2520,7 +2623,7 @@ namespace GeminiSuperDesktop {
                 try {
                     RunSta(() => {
                         Clipboard.Clear();
-                        Clipboard.SetText(text);
+                        Clipboard.SetDataObject(text, true, 10, 100);
                         Application.DoEvents();
                     });
                     Console.WriteLine(string.Format("{{\"success\": true, \"charCount\": {0}}}", text.Length));
@@ -2866,6 +2969,613 @@ namespace GeminiSuperDesktop {
                 Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
                     "{{\"success\": true, \"path\": \"{0}\", \"durationSeconds\": {1}, \"fileSize\": {2}, \"sampleRate\": {3}, \"channels\": {4}, \"bitsPerSample\": 16, \"peakDecibels\": {5:F1}, \"rmsDecibels\": {6:F1}, \"samplesRecorded\": {7}}}",
                     fullPath.Replace("\\", "/"), durationSeconds, fi.Length, sampleRate, channels, peakDb, rmsDb, totalSamples));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static string GetDeviceFriendlyName(IMMDevice dev) {
+            if (dev == null) return "Unknown";
+            try {
+                IPropertyStore store;
+                if (dev.OpenPropertyStore(0 /* STGM_READ */, out store) == 0 && store != null) {
+                    var pkey = new PROPERTYKEY { fmtid = new Guid("a45c254e-df1c-4efd-8020-67d146a850e0"), pid = 14 };
+                    PROPVARIANT pv;
+                    if (store.GetValue(ref pkey, out pv) == 0 && pv.vt == 31 /* VT_LPWSTR */) {
+                        string name = Marshal.PtrToStringUni(pv.pwszVal);
+                        PropVariantClear(ref pv);
+                        if (!string.IsNullOrEmpty(name)) return name;
+                    }
+                }
+            } catch {}
+            return "Generic Audio Device";
+        }
+
+        static void AudioDevicesCmd() {
+            try {
+                var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+                string defRenderId = "";
+                IMMDevice defRender;
+                if (enumerator.GetDefaultAudioEndpoint(0, 1, out defRender) == 0 && defRender != null) {
+                    defRender.GetId(out defRenderId);
+                }
+
+                string defCaptureId = "";
+                IMMDevice defCapture;
+                if (enumerator.GetDefaultAudioEndpoint(1, 1, out defCapture) == 0 && defCapture != null) {
+                    defCapture.GetId(out defCaptureId);
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"devices\": [");
+                bool first = true;
+                int renderCount = 0;
+                int captureCount = 0;
+
+                IMMDeviceCollection renderCol;
+                int hr = enumerator.EnumAudioEndpoints(0 /* eRender */, 1 /* DEVICE_STATE_ACTIVE */, out renderCol);
+                if (hr == 0 && renderCol != null) {
+                    uint count;
+                    renderCol.GetCount(out count);
+                    for (uint i = 0; i < count; i++) {
+                        IMMDevice dev;
+                        if (renderCol.Item(i, out dev) == 0 && dev != null) {
+                            string id = "";
+                            dev.GetId(out id);
+                            string name = GetDeviceFriendlyName(dev);
+                            int state = 1;
+                            dev.GetState(out state);
+                            bool isDefault = !string.IsNullOrEmpty(defRenderId) && id == defRenderId;
+
+                            if (!first) sb.Append(",");
+                            first = false;
+                            sb.Append(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                                "{{\"id\": \"{0}\", \"name\": \"{1}\", \"type\": \"render\", \"state\": {2}, \"isDefault\": {3}}}",
+                                EscapeJson(id), EscapeJson(name), state, isDefault ? "true" : "false"));
+                            renderCount++;
+                        }
+                    }
+                }
+
+                IMMDeviceCollection captureCol;
+                hr = enumerator.EnumAudioEndpoints(1 /* eCapture */, 1 /* DEVICE_STATE_ACTIVE */, out captureCol);
+                if (hr == 0 && captureCol != null) {
+                    uint count;
+                    captureCol.GetCount(out count);
+                    for (uint i = 0; i < count; i++) {
+                        IMMDevice dev;
+                        if (captureCol.Item(i, out dev) == 0 && dev != null) {
+                            string id = "";
+                            dev.GetId(out id);
+                            string name = GetDeviceFriendlyName(dev);
+                            int state = 1;
+                            dev.GetState(out state);
+                            bool isDefault = !string.IsNullOrEmpty(defCaptureId) && id == defCaptureId;
+
+                            if (!first) sb.Append(",");
+                            first = false;
+                            sb.Append(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                                "{{\"id\": \"{0}\", \"name\": \"{1}\", \"type\": \"capture\", \"state\": {2}, \"isDefault\": {3}}}",
+                                EscapeJson(id), EscapeJson(name), state, isDefault ? "true" : "false"));
+                            captureCount++;
+                        }
+                    }
+                }
+
+                sb.Append(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "], \"renderCount\": {0}, \"captureCount\": {1}, \"defaultRender\": \"{2}\", \"defaultCapture\": \"{3}\", \"isHeadless\": {4}}}",
+                    renderCount, captureCount, EscapeJson(defRenderId), EscapeJson(defCaptureId), (renderCount == 0 && captureCount == 0) ? "true" : "false"));
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"isHeadless\": true, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void AudioMicListenCmd(int durationMs) {
+            try {
+                if (durationMs < 50) durationMs = 50;
+                if (durationMs > 10000) durationMs = 10000;
+
+                var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+                IMMDevice dev = null;
+                int hr = enumerator.GetDefaultAudioEndpoint(1 /* eCapture */, 1 /* eMultimedia */, out dev);
+                if (hr != 0 || dev == null) {
+                    hr = enumerator.GetDefaultAudioEndpoint(1 /* eCapture */, 0 /* eConsole */, out dev);
+                }
+                if (hr != 0 || dev == null) {
+                    IMMDeviceCollection col;
+                    if (enumerator.EnumAudioEndpoints(1, 1, out col) == 0 && col != null) {
+                        uint c;
+                        col.GetCount(out c);
+                        if (c > 0) col.Item(0, out dev);
+                    }
+                }
+
+                if (dev == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"isHeadless\": true, \"error\": \"No audio capture endpoint available (0x{0:X8})\"}}", hr));
+                    return;
+                }
+
+                Guid iidClient = new Guid("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2");
+                object objClient;
+                hr = dev.Activate(ref iidClient, 1 /* CLSCTX_INPROC_SERVER */, IntPtr.Zero, out objClient);
+                if (hr != 0 || objClient == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to activate IAudioClient (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                var client = (IAudioClient)objClient;
+                IntPtr pMixFormat;
+                hr = client.GetMixFormat(out pMixFormat);
+                if (hr != 0 || pMixFormat == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to get mix format (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                var fmt = (WAVEFORMATEX)Marshal.PtrToStructure(pMixFormat, typeof(WAVEFORMATEX));
+                Guid session = Guid.Empty;
+                hr = client.Initialize(0 /* AUDCLNT_SHAREMODE_SHARED */, 0 /* normal mic capture */, 10000000 /* 1 sec */, 0, pMixFormat, ref session);
+                if (hr != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Initialize microphone capture failed (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                Guid iidCapture = new Guid("C8ADBD64-E71E-48a0-A4DE-185C395CD317");
+                object objCapture;
+                hr = client.GetService(ref iidCapture, out objCapture);
+                if (hr != 0 || objCapture == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"GetService IAudioCaptureClient failed (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                var capture = (IAudioCaptureClient)objCapture;
+                client.Start();
+
+                double peak = 0.0;
+                double sumSquares = 0.0;
+                long totalSamples = 0;
+
+                int elapsed = 0;
+                while (elapsed < durationMs) {
+                    Thread.Sleep(20);
+                    elapsed += 20;
+
+                    uint packetSize = 0;
+                    capture.GetNextPacketSize(out packetSize);
+                    while (packetSize > 0) {
+                        IntPtr pData;
+                        uint numFrames;
+                        uint flags;
+                        ulong devPos, qpcPos;
+                        hr = capture.GetBuffer(out pData, out numFrames, out flags, out devPos, out qpcPos);
+                        if (hr == 0 && numFrames > 0) {
+                            if ((flags & 2 /* AUDCLNT_BUFFERFLAGS_SILENT */) == 0 && pData != IntPtr.Zero) {
+                                int samplesToRead = (int)(numFrames * fmt.nChannels);
+                                if (fmt.wBitsPerSample == 32) {
+                                    float[] floatBuf = new float[samplesToRead];
+                                    Marshal.Copy(pData, floatBuf, 0, samplesToRead);
+                                    for (int i = 0; i < samplesToRead; i++) {
+                                        double val = Math.Abs(floatBuf[i]);
+                                        if (val > peak) peak = val;
+                                        sumSquares += val * val;
+                                        totalSamples++;
+                                    }
+                                } else if (fmt.wBitsPerSample == 16) {
+                                    short[] shortBuf = new short[samplesToRead];
+                                    Marshal.Copy(pData, shortBuf, 0, samplesToRead);
+                                    for (int i = 0; i < samplesToRead; i++) {
+                                        double val = Math.Abs((double)shortBuf[i] / 32768.0);
+                                        if (val > peak) peak = val;
+                                        sumSquares += val * val;
+                                        totalSamples++;
+                                    }
+                                }
+                            }
+                            capture.ReleaseBuffer(numFrames);
+                        }
+                        capture.GetNextPacketSize(out packetSize);
+                    }
+                }
+
+                client.Stop();
+
+                double rms = totalSamples > 0 ? Math.Sqrt(sumSquares / totalSamples) : 0.0;
+                double peakDb = peak > 0.00001 ? Math.Round(20.0 * Math.Log10(peak), 1) : -96.0;
+                double rmsDb = rms > 0.00001 ? Math.Round(20.0 * Math.Log10(rms), 1) : -96.0;
+                bool isSpeaking = peakDb > -45.0;
+
+                Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{{\"success\": true, \"peakDecibels\": {0:F1}, \"rmsDecibels\": {1:F1}, \"isSpeaking\": {2}, \"sampleRate\": {3}, \"channels\": {4}, \"bitsPerSample\": {5}, \"samplesCaptured\": {6}, \"durationMs\": {7}}}",
+                    peakDb, rmsDb, isSpeaking ? "true" : "false", fmt.nSamplesPerSec, fmt.nChannels, fmt.wBitsPerSample, totalSamples, durationMs));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void AudioMicRecordCmd(string outputPath, int durationSeconds) {
+            try {
+                if (durationSeconds < 1) durationSeconds = 1;
+                if (durationSeconds > 30) durationSeconds = 30;
+
+                string fullPath = Path.GetFullPath(outputPath);
+                string dir = Path.GetDirectoryName(fullPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) {
+                    Directory.CreateDirectory(dir);
+                }
+
+                var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+                IMMDevice dev = null;
+                int hr = enumerator.GetDefaultAudioEndpoint(1 /* eCapture */, 1 /* eMultimedia */, out dev);
+                if (hr != 0 || dev == null) {
+                    hr = enumerator.GetDefaultAudioEndpoint(1 /* eCapture */, 0 /* eConsole */, out dev);
+                }
+                if (hr != 0 || dev == null) {
+                    IMMDeviceCollection col;
+                    if (enumerator.EnumAudioEndpoints(1, 1, out col) == 0 && col != null) {
+                        uint c;
+                        col.GetCount(out c);
+                        if (c > 0) col.Item(0, out dev);
+                    }
+                }
+
+                if (dev == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"isHeadless\": true, \"error\": \"No audio capture endpoint available (0x{0:X8})\"}}", hr));
+                    return;
+                }
+
+                Guid iidClient = new Guid("1CB9AD4C-DBFA-4c32-B178-C2F568A703B2");
+                object objClient;
+                hr = dev.Activate(ref iidClient, 1, IntPtr.Zero, out objClient);
+                if (hr != 0 || objClient == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to activate IAudioClient (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                var client = (IAudioClient)objClient;
+                IntPtr pMixFormat;
+                hr = client.GetMixFormat(out pMixFormat);
+                if (hr != 0 || pMixFormat == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to get mix format (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                var fmt = (WAVEFORMATEX)Marshal.PtrToStructure(pMixFormat, typeof(WAVEFORMATEX));
+                Guid session = Guid.Empty;
+                hr = client.Initialize(0, 0 /* normal mic capture */, 10000000, 0, pMixFormat, ref session);
+                if (hr != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Initialize microphone capture failed (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                Guid iidCapture = new Guid("C8ADBD64-E71E-48a0-A4DE-185C395CD317");
+                object objCapture;
+                hr = client.GetService(ref iidCapture, out objCapture);
+                if (hr != 0 || objCapture == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"GetService IAudioCaptureClient failed (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                var capture = (IAudioCaptureClient)objCapture;
+                client.Start();
+
+                var pcmStream = new MemoryStream();
+                var writer = new BinaryWriter(pcmStream);
+
+                double peak = 0.0;
+                double sumSquares = 0.0;
+                long totalSamples = 0;
+
+                int durationMs = durationSeconds * 1000;
+                int elapsed = 0;
+                while (elapsed < durationMs) {
+                    Thread.Sleep(20);
+                    elapsed += 20;
+
+                    uint packetSize = 0;
+                    capture.GetNextPacketSize(out packetSize);
+                    while (packetSize > 0) {
+                        IntPtr pData;
+                        uint numFrames;
+                        uint flags;
+                        ulong devPos, qpcPos;
+                        hr = capture.GetBuffer(out pData, out numFrames, out flags, out devPos, out qpcPos);
+                        if (hr == 0 && numFrames > 0) {
+                            int samplesToRead = (int)(numFrames * fmt.nChannels);
+                            if ((flags & 2) != 0 || pData == IntPtr.Zero) {
+                                for (int i = 0; i < samplesToRead; i++) {
+                                    writer.Write((short)0);
+                                    totalSamples++;
+                                }
+                            } else {
+                                if (fmt.wBitsPerSample == 32) {
+                                    float[] floatBuf = new float[samplesToRead];
+                                    Marshal.Copy(pData, floatBuf, 0, samplesToRead);
+                                    for (int i = 0; i < samplesToRead; i++) {
+                                        float f = floatBuf[i];
+                                        double val = Math.Abs(f);
+                                        if (val > peak) peak = val;
+                                        sumSquares += val * val;
+                                        totalSamples++;
+                                        short s = (short)Math.Max(-32768, Math.Min(32767, (int)(f * 32767.0f)));
+                                        writer.Write(s);
+                                    }
+                                } else if (fmt.wBitsPerSample == 16) {
+                                    short[] shortBuf = new short[samplesToRead];
+                                    Marshal.Copy(pData, shortBuf, 0, samplesToRead);
+                                    for (int i = 0; i < samplesToRead; i++) {
+                                        short s = shortBuf[i];
+                                        double val = Math.Abs((double)s / 32768.0);
+                                        if (val > peak) peak = val;
+                                        sumSquares += val * val;
+                                        totalSamples++;
+                                        writer.Write(s);
+                                    }
+                                }
+                            }
+                            capture.ReleaseBuffer(numFrames);
+                        }
+                        capture.GetNextPacketSize(out packetSize);
+                    }
+                }
+
+                client.Stop();
+
+                byte[] pcmData = pcmStream.ToArray();
+                uint dataSize = (uint)pcmData.Length;
+                uint subchunk1Size = 16;
+                ushort audioFormat = 1; // PCM
+                ushort channels = fmt.nChannels;
+                uint sampleRate = fmt.nSamplesPerSec;
+                ushort bitsPerSample = 16;
+                uint byteRate = sampleRate * channels * (uint)(bitsPerSample / 8);
+                ushort blockAlign = (ushort)(channels * (bitsPerSample / 8));
+                uint chunkSize = 36 + dataSize;
+
+                using (var fs = new FileStream(fullPath, FileMode.Create, FileAccess.Write, FileShare.Read))
+                using (var bw = new BinaryWriter(fs)) {
+                    // RIFF header
+                    bw.Write(Encoding.ASCII.GetBytes("RIFF"));
+                    bw.Write(chunkSize);
+                    bw.Write(Encoding.ASCII.GetBytes("WAVE"));
+
+                    // fmt subchunk
+                    bw.Write(Encoding.ASCII.GetBytes("fmt "));
+                    bw.Write(subchunk1Size);
+                    bw.Write(audioFormat);
+                    bw.Write(channels);
+                    bw.Write(sampleRate);
+                    bw.Write(byteRate);
+                    bw.Write(blockAlign);
+                    bw.Write(bitsPerSample);
+
+                    // data subchunk
+                    bw.Write(Encoding.ASCII.GetBytes("data"));
+                    bw.Write(dataSize);
+                    bw.Write(pcmData);
+                }
+
+                double rms = totalSamples > 0 ? Math.Sqrt(sumSquares / totalSamples) : 0.0;
+                double peakDb = peak > 0.00001 ? Math.Round(20.0 * Math.Log10(peak), 1) : -96.0;
+                double rmsDb = rms > 0.00001 ? Math.Round(20.0 * Math.Log10(rms), 1) : -96.0;
+
+                FileInfo fi = new FileInfo(fullPath);
+                Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{{\"success\": true, \"path\": \"{0}\", \"durationSeconds\": {1}, \"fileSize\": {2}, \"sampleRate\": {3}, \"channels\": {4}, \"bitsPerSample\": 16, \"peakDecibels\": {5:F1}, \"rmsDecibels\": {6:F1}, \"samplesRecorded\": {7}}}",
+                    fullPath.Replace("\\", "/"), durationSeconds, fi.Length, sampleRate, channels, peakDb, rmsDb, totalSamples));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void AudioSessionsCmd() {
+            try {
+                var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+                IMMDevice defRender;
+                int hr = enumerator.GetDefaultAudioEndpoint(0 /* eRender */, 1 /* eMultimedia */, out defRender);
+                if (hr != 0 || defRender == null) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"isHeadless\": true, \"sessions\": [], \"count\": 0, \"error\": \"No default audio render endpoint (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                Guid iidMgr = new Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F");
+                object objMgr;
+                hr = defRender.Activate(ref iidMgr, 1 /* CLSCTX_INPROC_SERVER */, IntPtr.Zero, out objMgr);
+                if (hr != 0 || objMgr == null) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"isHeadless\": true, \"sessions\": [], \"count\": 0, \"error\": \"Failed to activate IAudioSessionManager2 (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                var mgr = (IAudioSessionManager2)objMgr;
+                IAudioSessionEnumerator sessionEnum;
+                hr = mgr.GetSessionEnumerator(out sessionEnum);
+                if (hr != 0 || sessionEnum == null) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"isHeadless\": true, \"sessions\": [], \"count\": 0, \"error\": \"Failed to get session enumerator (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                int sCount;
+                sessionEnum.GetCount(out sCount);
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"sessions\": [");
+                bool first = true;
+                int emitted = 0;
+
+                for (int i = 0; i < sCount; i++) {
+                    IAudioSessionControl ctrl;
+                    if (sessionEnum.GetSession(i, out ctrl) == 0 && ctrl != null) {
+                        var ctrl2 = ctrl as IAudioSessionControl2;
+                        uint pid = 0;
+                        string procName = "System";
+                        string sessionId = "";
+                        if (ctrl2 != null) {
+                            ctrl2.GetProcessId(out pid);
+                            ctrl2.GetSessionIdentifier(out sessionId);
+                            if (pid > 0) {
+                                try { procName = Process.GetProcessById((int)pid).ProcessName; } catch {}
+                            }
+                        }
+                        var vol = ctrl as ISimpleAudioVolume;
+                        float level = 0f;
+                        bool mute = false;
+                        if (vol != null) {
+                            vol.GetMasterVolume(out level);
+                            vol.GetMute(out mute);
+                        }
+                        var meter = ctrl as IAudioMeterInformation;
+                        float peak = 0f;
+                        if (meter != null) {
+                            meter.GetPeakValue(out peak);
+                        }
+
+                        if (!first) sb.Append(",");
+                        first = false;
+                        sb.Append(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                            "{{\"index\": {0}, \"processId\": {1}, \"processName\": \"{2}\", \"volume\": {3}, \"level\": {4:F3}, \"isMuted\": {5}, \"peak\": {6:F3}, \"sessionId\": \"{7}\"}}",
+                            i, pid, EscapeJson(procName), (int)Math.Round(level * 100f), level, mute ? "true" : "false", peak, EscapeJson(sessionId ?? "")));
+                        emitted++;
+                    }
+                }
+
+                sb.Append(string.Format(System.Globalization.CultureInfo.InvariantCulture, "], \"count\": {0}}}", emitted));
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"isHeadless\": true, \"sessions\": [], \"count\": 0, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void AudioSessionSetCmd(string target, float volumePercent, string muteStr) {
+            try {
+                if (string.IsNullOrEmpty(target)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Target process ID or name is required\"}");
+                    return;
+                }
+
+                var enumerator = (IMMDeviceEnumerator)(new MMDeviceEnumeratorComObject());
+                IMMDevice defRender;
+                int hr = enumerator.GetDefaultAudioEndpoint(0, 1, out defRender);
+                if (hr != 0 || defRender == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"isHeadless\": true, \"error\": \"No default audio endpoint (0x{0:X})\"}}", hr));
+                    return;
+                }
+
+                Guid iidMgr = new Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F");
+                object objMgr;
+                hr = defRender.Activate(ref iidMgr, 1, IntPtr.Zero, out objMgr);
+                if (hr != 0 || objMgr == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Failed to activate audio session manager\"}");
+                    return;
+                }
+
+                var mgr = (IAudioSessionManager2)objMgr;
+                IAudioSessionEnumerator sessionEnum;
+                hr = mgr.GetSessionEnumerator(out sessionEnum);
+                if (hr != 0 || sessionEnum == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Failed to get session enumerator\"}");
+                    return;
+                }
+
+                int sCount;
+                sessionEnum.GetCount(out sCount);
+
+                uint targetPid = 0;
+                bool isNumeric = uint.TryParse(target, out targetPid);
+
+                bool matched = false;
+                uint matchedPid = 0;
+                string matchedProcName = "";
+                float finalVol = -1f;
+                bool finalMute = false;
+
+                Guid ctx = Guid.Empty;
+
+                for (int i = 0; i < sCount; i++) {
+                    IAudioSessionControl ctrl;
+                    if (sessionEnum.GetSession(i, out ctrl) == 0 && ctrl != null) {
+                        var ctrl2 = ctrl as IAudioSessionControl2;
+                        uint pid = 0;
+                        string procName = "System";
+                        if (ctrl2 != null) {
+                            ctrl2.GetProcessId(out pid);
+                            if (pid > 0) {
+                                try { procName = Process.GetProcessById((int)pid).ProcessName; } catch {}
+                            }
+                        }
+
+                        bool isMatch = false;
+                        if (isNumeric && (pid == targetPid || (targetPid < (uint)sCount && (uint)i == targetPid))) isMatch = true;
+                        else if (!string.IsNullOrEmpty(procName) && procName.IndexOf(target, StringComparison.OrdinalIgnoreCase) >= 0) isMatch = true;
+
+                        if (isMatch) {
+                            var vol = ctrl as ISimpleAudioVolume;
+                            if (vol != null) {
+                                if (volumePercent >= 0f) {
+                                    float scalar = Math.Max(0f, Math.Min(1f, volumePercent / 100.0f));
+                                    vol.SetMasterVolume(scalar, ref ctx);
+                                }
+                                if (!string.IsNullOrEmpty(muteStr)) {
+                                    bool m = muteStr.Equals("true", StringComparison.OrdinalIgnoreCase) || muteStr == "1";
+                                    vol.SetMute(m, ref ctx);
+                                }
+
+                                vol.GetMasterVolume(out finalVol);
+                                vol.GetMute(out finalMute);
+                                matched = true;
+                                matchedPid = pid;
+                                matchedProcName = procName;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (matched) {
+                    Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                        "{{\"success\": true, \"matched\": true, \"processId\": {0}, \"processName\": \"{1}\", \"volume\": {2}, \"level\": {3:F3}, \"isMuted\": {4}}}",
+                        matchedPid, EscapeJson(matchedProcName), (int)Math.Round(finalVol * 100f), finalVol, finalMute ? "true" : "false"));
+                } else {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"matched\": false, \"error\": \"No active audio session found matching '{0}'\"}}", EscapeJson(target)));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void AudioPlayCmd(string filePath) {
+            try {
+                if (string.IsNullOrEmpty(filePath) || filePath.Equals("stop", StringComparison.OrdinalIgnoreCase)) {
+                    PlaySound(null, IntPtr.Zero, 0);
+                    Console.WriteLine("{\"success\": true, \"stopped\": true}");
+                    return;
+                }
+
+                string fullPath = Path.GetFullPath(filePath);
+                if (!File.Exists(fullPath)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Audio file not found: {0}\"}}", EscapeJson(fullPath)));
+                    return;
+                }
+
+                bool ok = PlaySound(fullPath, IntPtr.Zero, 0x0001 | 0x00020000);
+                Console.WriteLine(string.Format("{{\"success\": {0}, \"playing\": {0}, \"filePath\": \"{1}\"}}",
+                    ok ? "true" : "false", EscapeJson(fullPath.Replace("\\", "/"))));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void AudioBeepCmd(int freqHz, int durationMs) {
+            try {
+                if (freqHz < 37) freqHz = 37;
+                if (freqHz > 32767) freqHz = 32767;
+                if (durationMs < 10) durationMs = 10;
+                if (durationMs > 5000) durationMs = 5000;
+
+                bool ok = Beep((uint)freqHz, (uint)durationMs);
+                bool fallback = false;
+                if (!ok) {
+                    fallback = MessageBeep(0);
+                }
+                Console.WriteLine(string.Format("{{\"success\": {0}, \"frequencyHz\": {1}, \"durationMs\": {2}, \"emitted\": {3}}}",
+                    (ok || fallback) ? "true" : "false", freqHz, durationMs, (ok || fallback) ? "true" : "false"));
             } catch (Exception ex) {
                 Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
             }
@@ -3326,6 +4036,8 @@ namespace GeminiSuperDesktop {
                 string target = args.Length >= 2 ? args[1] : "active";
                 int count = args.Length >= 3 ? int.Parse(args[2]) : 3;
                 FlashWindowCmd(target, count);
+            } else if (cmd == "audio_devices" || cmd == "audiodevices" || cmd == "audio_endpoints") {
+                AudioDevicesCmd();
             } else if (cmd == "audio_listen" || cmd == "audiolisten" || cmd == "listen") {
                 int durationMs = args.Length >= 2 ? int.Parse(args[1]) : 300;
                 AudioListenCmd(durationMs);
@@ -3333,6 +4045,28 @@ namespace GeminiSuperDesktop {
                 string outPath = args.Length >= 2 ? args[1] : "recording.wav";
                 int durSec = args.Length >= 3 ? int.Parse(args[2]) : 3;
                 AudioRecordCmd(outPath, durSec);
+            } else if (cmd == "audio_mic_listen" || cmd == "audiomiclisten" || cmd == "mic_listen") {
+                int durationMs = args.Length >= 2 ? int.Parse(args[1]) : 300;
+                AudioMicListenCmd(durationMs);
+            } else if (cmd == "audio_mic_record" || cmd == "audiomicrecord" || cmd == "mic_record" || cmd == "record_mic") {
+                string outPath = args.Length >= 2 ? args[1] : "mic_recording.wav";
+                int durSec = args.Length >= 3 ? int.Parse(args[2]) : 3;
+                AudioMicRecordCmd(outPath, durSec);
+            } else if (cmd == "audio_sessions" || cmd == "audiosessions" || cmd == "sessions" || cmd == "volume_mixer") {
+                AudioSessionsCmd();
+            } else if (cmd == "audio_session_set" || cmd == "audiosessionset" || cmd == "set_session_volume") {
+                string target = args.Length >= 2 ? args[1] : "";
+                float vol = -1f;
+                if (args.Length >= 3 && !string.IsNullOrEmpty(args[2])) float.TryParse(args[2], out vol);
+                string muteStr = args.Length >= 4 ? args[3] : null;
+                AudioSessionSetCmd(target, vol, muteStr);
+            } else if (cmd == "audio_play" || cmd == "audioplay" || cmd == "play_sound" || cmd == "play_wav") {
+                string filePath = args.Length >= 2 ? args[1] : "stop";
+                AudioPlayCmd(filePath);
+            } else if (cmd == "audio_beep" || cmd == "audiobeep" || cmd == "beep") {
+                int freq = args.Length >= 2 ? int.Parse(args[1]) : 880;
+                int dur = args.Length >= 3 ? int.Parse(args[2]) : 200;
+                AudioBeepCmd(freq, dur);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

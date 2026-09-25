@@ -1421,6 +1421,110 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_audio_devices",
+        description: "Enumerates active Windows audio render (playback) and capture (recording) endpoints via IMMDeviceEnumerator, returning friendly device names, IDs, states, and default flags.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_audio_mic_listen",
+        description: "Samples live microphone input from default recording endpoint via native WASAPI. Returns peak dBFS, RMS dBFS, and speech detection with sub-millisecond precision.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            durationMs: {
+              type: "number",
+              default: 300,
+              description: "Sampling duration in milliseconds (50 to 10000ms, default: 300ms)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_audio_mic_record_wav",
+        description: "Records live microphone input directly into a standard 16-bit PCM RIFF WAV audio file via native WASAPI capture.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            outputPath: {
+              type: "string",
+              default: "mic_recording.wav",
+              description: "Target WAV file path to save audio."
+            },
+            durationSeconds: {
+              type: "number",
+              default: 3,
+              description: "Recording duration in seconds (1 to 30 seconds, default: 3s)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_audio_sessions",
+        description: "Enumerates active Windows Volume Mixer per-application audio sessions via IAudioSessionManager2, returning process ID, application name, volume percentage, mute state, and live peak level.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_audio_session_set",
+        description: "Sets per-application volume level (0-100%) and/or mute state for an audio session matched by process ID, process name, or session index in the Windows Volume Mixer.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            target: {
+              type: ["string", "number"],
+              description: "Target process ID, process name, or 0-based session index."
+            },
+            volume: {
+              type: "number",
+              description: "Volume percentage between 0 and 100."
+            },
+            mute: {
+              type: "boolean",
+              description: "Mute state (true to mute, false to unmute)."
+            }
+          },
+          required: ["target"]
+        }
+      },
+      {
+        name: "super_audio_play",
+        description: "Plays a WAV audio file asynchronously via native Win32 PlaySound, or stops active playback by specifying 'stop'.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filePath: {
+              type: "string",
+              default: "stop",
+              description: "Absolute or relative path to WAV file to play, or 'stop' to stop playback."
+            }
+          }
+        }
+      },
+      {
+        name: "super_audio_beep",
+        description: "Emits a hardware or system tone at specified frequency and duration via native Win32 Beep and MessageBeep fallback.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            frequencyHz: {
+              type: "number",
+              default: 880,
+              description: "Tone frequency in Hertz (37 to 32767 Hz, default: 880)."
+            },
+            durationMs: {
+              type: "number",
+              default: 200,
+              description: "Tone duration in milliseconds (10 to 5000 ms, default: 200)."
+            }
+          }
+        }
       }
 ];
 
@@ -2726,6 +2830,99 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🪟 [Windows Virtual Desktop Orchestrator - ${action}]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_audio_devices") {
+    const devices = await orch.getAudioDevices();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎧 [Audio Device Topology & Endpoints]:\n` + JSON.stringify(devices, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_audio_mic_listen") {
+    const durationMs = args?.durationMs || 300;
+    const res = await orch.listenMicAudio({ durationMs });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎙️ [Microphone Live Acoustic Telemetry (${durationMs}ms)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_audio_mic_record_wav") {
+    const outputPath = args?.outputPath || "mic_recording.wav";
+    const durationSeconds = args?.durationSeconds || 3;
+    const res = await orch.recordMicAudioWav({ outputPath, durationSeconds });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎙️ [Microphone WAV Recording (${durationSeconds}s)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_audio_sessions") {
+    const sessions = await orch.getAudioSessions();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎛️ [Windows Volume Mixer Active Sessions]:\n` + JSON.stringify(sessions, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_audio_session_set") {
+    const target = args?.target;
+    const volume = args?.volume;
+    const mute = args?.mute;
+    const res = await orch.setAudioSession({ target, volume, mute });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎛️ [Windows Volume Mixer Session Modified (${target})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_audio_play") {
+    const filePath = args?.filePath || "stop";
+    const res = await orch.playAudio({ filePath });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔊 [Win32 Native Audio Playback]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_audio_beep") {
+    const frequencyHz = args?.frequencyHz || 880;
+    const durationMs = args?.durationMs || 200;
+    const res = await orch.beepAudio({ frequencyHz, durationMs });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔔 [Hardware Frequency Tone Beeper (${frequencyHz}Hz, ${durationMs}ms)]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

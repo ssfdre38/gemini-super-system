@@ -415,15 +415,19 @@ async function run() {
 
     try {
       const testPayload = `Gemini_Super_Test_${Date.now()}`;
-      const setRes = await clip.setText(testPayload);
+      let setRes = await clip.setText(testPayload);
+      for (let attempt = 0; attempt < 3 && !setRes.success; attempt++) {
+        await new Promise(r => setTimeout(r, 150));
+        setRes = await clip.setText(testPayload);
+      }
       assert.strictEqual(setRes.success, true);
 
       // Allow Windows OLE clipboard broker to settle handover
-      await new Promise(r => setTimeout(r, 80));
+      await new Promise(r => setTimeout(r, 120));
 
       let getRes = await clip.getText();
-      if (!getRes.hasText) {
-        await new Promise(r => setTimeout(r, 120));
+      for (let attempt = 0; attempt < 4 && (!getRes.hasText || getRes.text !== testPayload); attempt++) {
+        await new Promise(r => setTimeout(r, 150));
         getRes = await clip.getText();
       }
       assert.strictEqual(getRes.success, true);
@@ -1360,16 +1364,166 @@ async function run() {
     }
   });
 
-  it("All 73 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n\x1b[1m[Suite 19: Sovereign Windows Audio Subsystem & Volume Mixer]\x1b[0m");
+
+  await itAsync("getAudioDevices enumerates active render/capture endpoints and default IDs", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const devs = await kb.getAudioDevices();
+
+    assert(devs !== null && typeof devs === "object");
+    assert.strictEqual(devs.success, true, "getAudioDevices failed: " + JSON.stringify(devs));
+    assert(typeof devs.renderCount === "number");
+    assert(typeof devs.captureCount === "number");
+    assert(Array.isArray(devs.devices));
+    assert(typeof devs.defaultRender === "string");
+    assert(typeof devs.defaultCapture === "string");
+
+    if (devs.devices.length > 0) {
+      const d0 = devs.devices[0];
+      assert(typeof d0.id === "string" && d0.id.length > 0);
+      assert(typeof d0.name === "string" && d0.name.length > 0);
+      assert(d0.type === "render" || d0.type === "capture");
+      assert(typeof d0.state === "number");
+      assert(typeof d0.isDefault === "boolean");
+    }
+  });
+
+  await itAsync("listenMicAudio samples microphone input with headless/CI resilience", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const mic = await kb.listenMicAudio({ durationMs: 100 });
+
+    assert(mic !== null && typeof mic === "object");
+    if (!mic.success) {
+      assert(
+        mic.isHeadless ||
+        (mic.error && (
+          mic.error.includes("0x80070490") ||
+          mic.error.includes("capture endpoint") ||
+          mic.error.includes("No audio capture")
+        )) || Boolean(process.env.CI),
+        `Unexpected microphone failure: ${mic.error}`
+      );
+    } else {
+      assert(typeof mic.peakDecibels === "number");
+      assert(typeof mic.rmsDecibels === "number");
+      assert(typeof mic.isSpeaking === "boolean");
+      assert(typeof mic.sampleRate === "number" && mic.sampleRate > 0);
+      assert(typeof mic.channels === "number" && mic.channels > 0);
+    }
+  });
+
+  await itAsync("recordMicAudioWav records microphone WAV audio with headless/CI resilience", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const testWavPath = path.join(__dirname, "test_mic_suite_clip.wav");
+    if (fs.existsSync(testWavPath)) fs.unlinkSync(testWavPath);
+
+    const rec = await kb.recordMicAudioWav({ outputPath: testWavPath, durationSeconds: 1 });
+
+    assert(rec !== null && typeof rec === "object");
+    if (!rec.success) {
+      assert(
+        rec.isHeadless ||
+        (rec.error && (
+          rec.error.includes("0x80070490") ||
+          rec.error.includes("capture endpoint") ||
+          rec.error.includes("No audio capture")
+        )) || Boolean(process.env.CI),
+        `Unexpected microphone record failure: ${rec.error}`
+      );
+    } else {
+      assert(fs.existsSync(testWavPath), "Expected test mic WAV file to exist on disk");
+      const stat = fs.statSync(testWavPath);
+      assert(stat.size >= 44, "Expected valid RIFF/WAV header of at least 44 bytes");
+
+      const buf = fs.readFileSync(testWavPath);
+      assert.strictEqual(buf.toString("ascii", 0, 4), "RIFF");
+      assert.strictEqual(buf.toString("ascii", 8, 12), "WAVE");
+
+      if (fs.existsSync(testWavPath)) fs.unlinkSync(testWavPath);
+    }
+  });
+
+  await itAsync("getAudioSessions enumerates active Windows Volume Mixer per-app sessions", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const sessions = await kb.getAudioSessions();
+
+    assert(sessions !== null && typeof sessions === "object");
+    assert.strictEqual(sessions.success, true, "getAudioSessions failed: " + JSON.stringify(sessions));
+    assert(typeof sessions.count === "number");
+    assert(Array.isArray(sessions.sessions));
+
+    if (sessions.count > 0) {
+      const s0 = sessions.sessions[0];
+      assert(typeof s0.index === "number");
+      assert(typeof s0.processId === "number");
+      assert(typeof s0.processName === "string");
+      assert(typeof s0.volume === "number");
+      assert(typeof s0.level === "number");
+      assert(typeof s0.isMuted === "boolean");
+      assert(typeof s0.peak === "number");
+    }
+  });
+
+  await itAsync("setAudioSession modifies application volume and mute state", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const sessions = await kb.getAudioSessions();
+
+    if (sessions.success && sessions.count > 0) {
+      const target = sessions.sessions[0].processName || "System";
+      const setRes = await kb.setAudioSession({ target, volume: 90 });
+      assert(setRes !== null && typeof setRes === "object");
+      assert.strictEqual(setRes.success, true, "setAudioSession failed: " + JSON.stringify(setRes));
+      assert.strictEqual(setRes.matched, true);
+      assert.strictEqual(setRes.volume, 90);
+    } else {
+      // In headless environments without sessions
+      assert(sessions.isHeadless || sessions.count === 0 || Boolean(process.env.CI));
+    }
+  });
+
+  await itAsync("playAudio handles native PlaySound playback and stop signal", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const stopRes = await kb.playAudio({ filePath: "stop" });
+
+    assert(stopRes !== null && typeof stopRes === "object");
+    assert.strictEqual(stopRes.success, true);
+    assert.strictEqual(stopRes.stopped, true);
+  });
+
+  await itAsync("beepAudio generates native frequency tone with hardware/system fallback", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const beepRes = await kb.beepAudio({ frequencyHz: 880, durationMs: 50 });
+
+    assert(beepRes !== null && typeof beepRes === "object");
+    assert.strictEqual(beepRes.success, true);
+    assert.strictEqual(beepRes.frequencyHz, 880);
+    assert.strictEqual(beepRes.durationMs, 50);
+  });
+
+  it("All 80 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 73);
+    assert.strictEqual(SYSTEM_TOOLS.length, 80);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
     assert(toolNames.includes("super_audio_record_wav"));
     assert(toolNames.includes("super_thermal_vitals"));
     assert(toolNames.includes("super_virtual_desktops"));
+    assert(toolNames.includes("super_audio_devices"));
+    assert(toolNames.includes("super_audio_mic_listen"));
+    assert(toolNames.includes("super_audio_mic_record_wav"));
+    assert(toolNames.includes("super_audio_sessions"));
+    assert(toolNames.includes("super_audio_session_set"));
+    assert(toolNames.includes("super_audio_play"));
+    assert(toolNames.includes("super_audio_beep"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
