@@ -11686,6 +11686,539 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Phase 33: Windows Background Intelligent Transfer Service (BITS) Subsystem (bits.h / qmgr.dll)
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct BG_FILE_PROGRESS {
+            public ulong BytesTotal;
+            public ulong BytesTransferred;
+            public int Completed;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct BG_JOB_PROGRESS {
+            public ulong BytesTotal;
+            public ulong BytesTransferred;
+            public uint FilesTotal;
+            public uint FilesTransferred;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct BG_JOB_TIMES {
+            public System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
+            public System.Runtime.InteropServices.ComTypes.FILETIME ModificationTime;
+            public System.Runtime.InteropServices.ComTypes.FILETIME TransferCompletionTime;
+        }
+
+        public enum BG_JOB_PRIORITY : uint {
+            BG_JOB_PRIORITY_FOREGROUND = 0,
+            BG_JOB_PRIORITY_HIGH = 1,
+            BG_JOB_PRIORITY_NORMAL = 2,
+            BG_JOB_PRIORITY_LOW = 3
+        }
+
+        public enum BG_JOB_STATE : uint {
+            BG_JOB_STATE_QUEUED = 0,
+            BG_JOB_STATE_CONNECTING = 1,
+            BG_JOB_STATE_TRANSFERRING = 2,
+            BG_JOB_STATE_SUSPENDED = 3,
+            BG_JOB_STATE_ERROR = 4,
+            BG_JOB_STATE_TRANSIENT_ERROR = 5,
+            BG_JOB_STATE_TRANSFERRED = 6,
+            BG_JOB_STATE_ACKNOWLEDGED = 7,
+            BG_JOB_STATE_CANCELLED = 8
+        }
+
+        public enum BG_JOB_TYPE : uint {
+            BG_JOB_TYPE_DOWNLOAD = 0,
+            BG_JOB_TYPE_UPLOAD = 1,
+            BG_JOB_TYPE_UPLOAD_REPLY = 2
+        }
+
+        public enum BG_ERROR_CONTEXT : uint {
+            BG_ERROR_CONTEXT_NONE = 0,
+            BG_ERROR_CONTEXT_UNKNOWN = 1,
+            BG_ERROR_CONTEXT_GENERAL_QUEUE_MANAGER = 2,
+            BG_ERROR_CONTEXT_QUEUE_MANAGER_NOTIFICATION = 3,
+            BG_ERROR_CONTEXT_LOCAL_FILE = 4,
+            BG_ERROR_CONTEXT_REMOTE_FILE = 5,
+            BG_ERROR_CONTEXT_GENERAL_TRANSPORT = 6,
+            BG_ERROR_CONTEXT_REMOTE_APPLICATION = 7,
+            BG_ERROR_CONTEXT_SERVER_CERTIFICATE_CALLBACK = 8
+        }
+
+        [ComImport, Guid("01b7bd23-fb88-4a77-8490-5891d3e4653a"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IBackgroundCopyFile {
+            void GetRemoteName([MarshalAs(UnmanagedType.LPWStr)] out string pVal);
+            void GetLocalName([MarshalAs(UnmanagedType.LPWStr)] out string pVal);
+            void GetProgress(out BG_FILE_PROGRESS pVal);
+        }
+
+        [ComImport, Guid("ca51e165-c365-424c-8d41-24aaa4ff3c40"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IEnumBackgroundCopyFiles {
+            void Next(uint celt, [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 0), Out] IBackgroundCopyFile[] rgelt, out uint pceltFetched);
+            void Skip(uint celt);
+            void Reset();
+            void Clone(out IEnumBackgroundCopyFiles ppenum);
+            void GetCount(out uint puCount);
+        }
+
+        [ComImport, Guid("19c613a0-fcb8-4f28-81ae-897c3d078f81"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IBackgroundCopyError {
+            void GetError(out BG_ERROR_CONTEXT pContext, out int pCode);
+            void GetFile(out IBackgroundCopyFile pVal);
+            void GetErrorDescription(uint LanguageId, [MarshalAs(UnmanagedType.LPWStr)] out string pErrorDescription);
+            void GetErrorContextDescription(uint LanguageId, [MarshalAs(UnmanagedType.LPWStr)] out string pContextDescription);
+            void GetProtocol([MarshalAs(UnmanagedType.LPWStr)] out string pProtocol);
+        }
+
+        [ComImport, Guid("37668d37-507e-4160-9316-26306d150b12"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IBackgroundCopyJob {
+            void AddFileSet(uint cFileCount, IntPtr pFileSet);
+            void AddFile([MarshalAs(UnmanagedType.LPWStr)] string RemoteUrl, [MarshalAs(UnmanagedType.LPWStr)] string LocalName);
+            void EnumFiles(out IEnumBackgroundCopyFiles pEnum);
+            void Suspend();
+            void Resume();
+            void Cancel();
+            void Complete();
+            void GetId(out Guid pVal);
+            void GetType(out BG_JOB_TYPE pVal);
+            void GetProgress(out BG_JOB_PROGRESS pVal);
+            void GetTimes(out BG_JOB_TIMES pVal);
+            void GetState(out BG_JOB_STATE pVal);
+            void GetError(out IBackgroundCopyError ppError);
+            void GetOwner([MarshalAs(UnmanagedType.LPWStr)] out string pVal);
+            void SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string Val);
+            void GetDisplayName([MarshalAs(UnmanagedType.LPWStr)] out string pVal);
+            void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string Val);
+            void GetDescription([MarshalAs(UnmanagedType.LPWStr)] out string pVal);
+            void SetPriority(BG_JOB_PRIORITY Val);
+            void GetPriority(out BG_JOB_PRIORITY pVal);
+            void SetNotifyFlags(uint Val);
+            void GetNotifyFlags(out uint pVal);
+            void SetNotifyInterface([MarshalAs(UnmanagedType.IUnknown)] object Val);
+            void GetNotifyInterface([MarshalAs(UnmanagedType.IUnknown)] out object pVal);
+            void SetMinimumRetryDelay(uint Seconds);
+            void GetMinimumRetryDelay(out uint Seconds);
+            void SetNoProgressTimeout(uint Seconds);
+            void GetNoProgressTimeout(out uint Seconds);
+            void GetErrorCount(out uint Errors);
+            void SetProxySettings(uint ProxyUsage, [MarshalAs(UnmanagedType.LPWStr)] string ProxyList, [MarshalAs(UnmanagedType.LPWStr)] string ProxyBypassList);
+            void GetProxySettings(out uint pProxyUsage, [MarshalAs(UnmanagedType.LPWStr)] out string pProxyList, [MarshalAs(UnmanagedType.LPWStr)] out string pProxyBypassList);
+            void TakeOwnership();
+        }
+
+        [ComImport, Guid("1af4f612-3b71-466f-8f58-7b6f73ac57ad"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IEnumBackgroundCopyJobs {
+            void Next(uint celt, [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 0), Out] IBackgroundCopyJob[] rgelt, out uint pceltFetched);
+            void Skip(uint celt);
+            void Reset();
+            void Clone(out IEnumBackgroundCopyJobs ppenum);
+            void GetCount(out uint puCount);
+        }
+
+        [ComImport, Guid("5ce34c0d-0dc9-4c1f-897c-daa1b78cee7c"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IBackgroundCopyManager {
+            void CreateJob(
+                [MarshalAs(UnmanagedType.LPWStr)] string DisplayName,
+                BG_JOB_TYPE Type,
+                out Guid pJobId,
+                out IBackgroundCopyJob ppJob);
+
+            void GetJob(
+                ref Guid jobID,
+                out IBackgroundCopyJob ppJob);
+
+            void EnumJobs(
+                uint dwFlags,
+                out IEnumBackgroundCopyJobs ppEnum);
+
+            void GetErrorDescription(
+                [MarshalAs(UnmanagedType.Error)] int hResult,
+                uint LanguageId,
+                [MarshalAs(UnmanagedType.LPWStr)] out string pErrorDescription);
+        }
+
+        static readonly Guid CLSID_BackgroundCopyManager = new Guid("4991d34b-80a1-4291-83b6-3328366b9097");
+
+        static string BitsFileTimeToIso(System.Runtime.InteropServices.ComTypes.FILETIME ft) {
+            long fileTime = ((long)ft.dwHighDateTime << 32) | (uint)ft.dwLowDateTime;
+            if (fileTime == 0) return "";
+            try {
+                DateTime dt = DateTime.FromFileTimeUtc(fileTime);
+                return dt.ToString("o");
+            } catch {
+                return "";
+            }
+        }
+
+        static string GetBitsStateName(BG_JOB_STATE state) {
+            switch (state) {
+                case BG_JOB_STATE.BG_JOB_STATE_QUEUED: return "QUEUED";
+                case BG_JOB_STATE.BG_JOB_STATE_CONNECTING: return "CONNECTING";
+                case BG_JOB_STATE.BG_JOB_STATE_TRANSFERRING: return "TRANSFERRING";
+                case BG_JOB_STATE.BG_JOB_STATE_SUSPENDED: return "SUSPENDED";
+                case BG_JOB_STATE.BG_JOB_STATE_ERROR: return "ERROR";
+                case BG_JOB_STATE.BG_JOB_STATE_TRANSIENT_ERROR: return "TRANSIENT_ERROR";
+                case BG_JOB_STATE.BG_JOB_STATE_TRANSFERRED: return "TRANSFERRED";
+                case BG_JOB_STATE.BG_JOB_STATE_ACKNOWLEDGED: return "ACKNOWLEDGED";
+                case BG_JOB_STATE.BG_JOB_STATE_CANCELLED: return "CANCELLED";
+                default: return "UNKNOWN_" + (uint)state;
+            }
+        }
+
+        static string GetBitsPriorityName(BG_JOB_PRIORITY priority) {
+            switch (priority) {
+                case BG_JOB_PRIORITY.BG_JOB_PRIORITY_FOREGROUND: return "FOREGROUND";
+                case BG_JOB_PRIORITY.BG_JOB_PRIORITY_HIGH: return "HIGH";
+                case BG_JOB_PRIORITY.BG_JOB_PRIORITY_NORMAL: return "NORMAL";
+                case BG_JOB_PRIORITY.BG_JOB_PRIORITY_LOW: return "LOW";
+                default: return "NORMAL";
+            }
+        }
+
+        static BG_JOB_PRIORITY ParseBitsPriority(string priorityStr) {
+            if (string.IsNullOrEmpty(priorityStr)) return BG_JOB_PRIORITY.BG_JOB_PRIORITY_NORMAL;
+            string p = priorityStr.Trim().ToLowerInvariant();
+            if (p == "foreground") return BG_JOB_PRIORITY.BG_JOB_PRIORITY_FOREGROUND;
+            if (p == "high") return BG_JOB_PRIORITY.BG_JOB_PRIORITY_HIGH;
+            if (p == "low") return BG_JOB_PRIORITY.BG_JOB_PRIORITY_LOW;
+            return BG_JOB_PRIORITY.BG_JOB_PRIORITY_NORMAL;
+        }
+
+        static string GetBitsTypeName(BG_JOB_TYPE jobType) {
+            switch (jobType) {
+                case BG_JOB_TYPE.BG_JOB_TYPE_DOWNLOAD: return "DOWNLOAD";
+                case BG_JOB_TYPE.BG_JOB_TYPE_UPLOAD: return "UPLOAD";
+                case BG_JOB_TYPE.BG_JOB_TYPE_UPLOAD_REPLY: return "UPLOAD_REPLY";
+                default: return "DOWNLOAD";
+            }
+        }
+
+        static BG_JOB_TYPE ParseBitsJobType(string typeStr) {
+            if (string.IsNullOrEmpty(typeStr)) return BG_JOB_TYPE.BG_JOB_TYPE_DOWNLOAD;
+            string t = typeStr.Trim().ToLowerInvariant();
+            if (t == "upload") return BG_JOB_TYPE.BG_JOB_TYPE_UPLOAD;
+            if (t == "upload_reply" || t == "uploadreply") return BG_JOB_TYPE.BG_JOB_TYPE_UPLOAD_REPLY;
+            return BG_JOB_TYPE.BG_JOB_TYPE_DOWNLOAD;
+        }
+
+        static void BitsJobsCmd(bool allUsers, string jobFilter) {
+            try {
+                Type mgrType = Type.GetTypeFromCLSID(CLSID_BackgroundCopyManager);
+                if (mgrType == null) {
+                    Console.WriteLine("{\"success\": false, \"serviceAvailable\": false, \"error\": \"CLSID_BackgroundCopyManager not found in registry\"}");
+                    return;
+                }
+
+                IBackgroundCopyManager mgr = null;
+                try {
+                    mgr = (IBackgroundCopyManager)Activator.CreateInstance(mgrType);
+                } catch (Exception exMgr) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"serviceAvailable\": false, \"jobCount\": 0, \"jobs\": [], \"warning\": \"BITS service not running or access denied: {0}\"}}", EscapeJson(exMgr.Message)));
+                    return;
+                }
+
+                IEnumBackgroundCopyJobs enumJobs = null;
+                try {
+                    mgr.EnumJobs(allUsers ? 1u : 0u, out enumJobs);
+                } catch {
+                    mgr.EnumJobs(0u, out enumJobs);
+                }
+
+                uint totalCount = 0;
+                try { enumJobs.GetCount(out totalCount); } catch {}
+
+                List<string> jobJsons = new List<string>();
+                IBackgroundCopyJob[] jobArr = new IBackgroundCopyJob[1];
+                uint fetched = 0;
+
+                while (true) {
+                    fetched = 0;
+                    try {
+                        enumJobs.Next(1, jobArr, out fetched);
+                    } catch {
+                        break;
+                    }
+                    if (fetched == 0 || jobArr[0] == null) break;
+
+                    IBackgroundCopyJob job = jobArr[0];
+                    try {
+                        Guid id;
+                        job.GetId(out id);
+                        string idStr = id.ToString("D");
+
+                        string dispName = "";
+                        try { job.GetDisplayName(out dispName); } catch {}
+
+                        string desc = "";
+                        try { job.GetDescription(out desc); } catch {}
+
+                        if (!string.IsNullOrEmpty(jobFilter)) {
+                            if (idStr.IndexOf(jobFilter, StringComparison.OrdinalIgnoreCase) < 0 &&
+                                (dispName == null || dispName.IndexOf(jobFilter, StringComparison.OrdinalIgnoreCase) < 0) &&
+                                (desc == null || desc.IndexOf(jobFilter, StringComparison.OrdinalIgnoreCase) < 0)) {
+                                continue;
+                            }
+                        }
+
+                        BG_JOB_STATE state = BG_JOB_STATE.BG_JOB_STATE_QUEUED;
+                        try { job.GetState(out state); } catch {}
+                        string stateName = GetBitsStateName(state);
+
+                        BG_JOB_PRIORITY priority = BG_JOB_PRIORITY.BG_JOB_PRIORITY_NORMAL;
+                        try { job.GetPriority(out priority); } catch {}
+                        string priorityName = GetBitsPriorityName(priority);
+
+                        BG_JOB_TYPE jType = BG_JOB_TYPE.BG_JOB_TYPE_DOWNLOAD;
+                        try { job.GetType(out jType); } catch {}
+                        string typeName = GetBitsTypeName(jType);
+
+                        BG_JOB_PROGRESS prog = new BG_JOB_PROGRESS();
+                        try { job.GetProgress(out prog); } catch {}
+
+                        BG_JOB_TIMES times = new BG_JOB_TIMES();
+                        try { job.GetTimes(out times); } catch {}
+
+                        string owner = "";
+                        try { job.GetOwner(out owner); } catch {}
+
+                        double pct = 0;
+                        if (prog.BytesTotal > 0 && prog.BytesTotal != unchecked((ulong)(-1))) {
+                            pct = Math.Round((double)prog.BytesTransferred / (double)prog.BytesTotal * 100.0, 2);
+                        }
+
+                        List<string> fileJsons = new List<string>();
+                        try {
+                            IEnumBackgroundCopyFiles enumFiles;
+                            job.EnumFiles(out enumFiles);
+                            if (enumFiles != null) {
+                                IBackgroundCopyFile[] fileArr = new IBackgroundCopyFile[1];
+                                uint fFetched = 0;
+                                while (true) {
+                                    fFetched = 0;
+                                    enumFiles.Next(1, fileArr, out fFetched);
+                                    if (fFetched == 0 || fileArr[0] == null) break;
+                                    IBackgroundCopyFile f = fileArr[0];
+                                    string rName = "";
+                                    string lName = "";
+                                    BG_FILE_PROGRESS fp = new BG_FILE_PROGRESS();
+                                    try { f.GetRemoteName(out rName); } catch {}
+                                    try { f.GetLocalName(out lName); } catch {}
+                                    try { f.GetProgress(out fp); } catch {}
+                                    fileJsons.Add(string.Format(
+                                        "{{\"remoteUrl\": \"{0}\", \"localPath\": \"{1}\", \"bytesTotal\": {2}, \"bytesTransferred\": {3}, \"completed\": {4}}}",
+                                        EscapeJson(rName ?? ""),
+                                        EscapeJson(lName ?? ""),
+                                        fp.BytesTotal == unchecked((ulong)(-1)) ? 0 : fp.BytesTotal,
+                                        fp.BytesTransferred,
+                                        fp.Completed != 0 ? "true" : "false"
+                                    ));
+                                    try { Marshal.ReleaseComObject(f); } catch {}
+                                }
+                                try { Marshal.ReleaseComObject(enumFiles); } catch {}
+                            }
+                        } catch {}
+
+                        string errorJson = "null";
+                        try {
+                            IBackgroundCopyError bgErr;
+                            job.GetError(out bgErr);
+                            if (bgErr != null) {
+                                BG_ERROR_CONTEXT errCtx = BG_ERROR_CONTEXT.BG_ERROR_CONTEXT_NONE;
+                                int errCode = 0;
+                                string errDesc = "";
+                                string errProto = "";
+                                try { bgErr.GetError(out errCtx, out errCode); } catch {}
+                                try { bgErr.GetErrorDescription(0, out errDesc); } catch {}
+                                try { bgErr.GetProtocol(out errProto); } catch {}
+                                errorJson = string.Format(
+                                    "{{\"errorCode\": {0}, \"errorCodeHex\": \"0x{1:X8}\", \"context\": \"{2}\", \"description\": \"{3}\", \"protocol\": \"{4}\"}}",
+                                    errCode,
+                                    errCode,
+                                    EscapeJson(errCtx.ToString()),
+                                    EscapeJson(errDesc ?? ""),
+                                    EscapeJson(errProto ?? "")
+                                );
+                                try { Marshal.ReleaseComObject(bgErr); } catch {}
+                            }
+                        } catch {}
+
+                        var sbJob = new StringBuilder();
+                        sbJob.Append("{");
+                        sbJob.AppendFormat("\"jobId\": \"{0}\", ", idStr);
+                        sbJob.AppendFormat("\"displayName\": \"{0}\", ", EscapeJson(dispName ?? ""));
+                        sbJob.AppendFormat("\"description\": \"{0}\", ", EscapeJson(desc ?? ""));
+                        sbJob.AppendFormat("\"state\": \"{0}\", ", stateName);
+                        sbJob.AppendFormat("\"stateCode\": {0}, ", (uint)state);
+                        sbJob.AppendFormat("\"priority\": \"{0}\", ", priorityName);
+                        sbJob.AppendFormat("\"priorityCode\": {0}, ", (uint)priority);
+                        sbJob.AppendFormat("\"jobType\": \"{0}\", ", typeName);
+                        sbJob.AppendFormat("\"jobTypeCode\": {0}, ", (uint)jType);
+                        sbJob.AppendFormat("\"bytesTotal\": {0}, ", prog.BytesTotal == unchecked((ulong)(-1)) ? 0 : prog.BytesTotal);
+                        sbJob.AppendFormat("\"bytesTransferred\": {0}, ", prog.BytesTransferred);
+                        sbJob.AppendFormat("\"filesTotal\": {0}, ", prog.FilesTotal);
+                        sbJob.AppendFormat("\"filesTransferred\": {0}, ", prog.FilesTransferred);
+                        sbJob.AppendFormat("\"progressPercent\": {0}, ", pct);
+                        sbJob.AppendFormat("\"owner\": \"{0}\", ", EscapeJson(owner ?? ""));
+                        sbJob.AppendFormat("\"creationTime\": \"{0}\", ", BitsFileTimeToIso(times.CreationTime));
+                        sbJob.AppendFormat("\"modificationTime\": \"{0}\", ", BitsFileTimeToIso(times.ModificationTime));
+                        sbJob.AppendFormat("\"transferCompletionTime\": \"{0}\", ", BitsFileTimeToIso(times.TransferCompletionTime));
+                        sbJob.AppendFormat("\"error\": {0}, ", errorJson);
+                        sbJob.AppendFormat("\"files\": [{0}]", string.Join(", ", fileJsons.ToArray()));
+                        sbJob.Append("}");
+
+                        jobJsons.Add(sbJob.ToString());
+                    } finally {
+                        try { Marshal.ReleaseComObject(job); } catch {}
+                    }
+                }
+
+                if (enumJobs != null) try { Marshal.ReleaseComObject(enumJobs); } catch {}
+                if (mgr != null) try { Marshal.ReleaseComObject(mgr); } catch {}
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"serviceAvailable\": true, \"jobCount\": {0}, \"totalSystemJobs\": {1}, \"jobs\": [{2}]}}",
+                    jobJsons.Count,
+                    totalCount,
+                    string.Join(", ", jobJsons.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void BitsCreateJobCmd(string displayName, string jobTypeStr, string priorityStr, string description, string remoteUrl, string localPath, string fileListJson, bool autoResume) {
+            try {
+                if (string.IsNullOrEmpty(displayName)) displayName = "GeminiTransfer_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                Type mgrType = Type.GetTypeFromCLSID(CLSID_BackgroundCopyManager);
+                if (mgrType == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"CLSID_BackgroundCopyManager not found in registry\"}");
+                    return;
+                }
+
+                IBackgroundCopyManager mgr = (IBackgroundCopyManager)Activator.CreateInstance(mgrType);
+                BG_JOB_TYPE jType = ParseBitsJobType(jobTypeStr);
+                Guid jobId;
+                IBackgroundCopyJob job;
+                mgr.CreateJob(displayName, jType, out jobId, out job);
+
+                if (!string.IsNullOrEmpty(description)) {
+                    job.SetDescription(description);
+                }
+
+                BG_JOB_PRIORITY priority = ParseBitsPriority(priorityStr);
+                job.SetPriority(priority);
+
+                int filesAdded = 0;
+                if (!string.IsNullOrEmpty(remoteUrl) && !string.IsNullOrEmpty(localPath)) {
+                    string expandedLocal = Environment.ExpandEnvironmentVariables(localPath);
+                    job.AddFile(remoteUrl, expandedLocal);
+                    filesAdded++;
+                }
+
+                if (!string.IsNullOrEmpty(fileListJson)) {
+                    string[] items = fileListJson.Split(new char[] { ';', '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (string item in items) {
+                        string trimmed = item.Trim();
+                        if (trimmed.Contains("|")) {
+                            string[] parts = trimmed.Split(new char[] { '|' }, 2);
+                            if (parts.Length == 2 && !string.IsNullOrEmpty(parts[0]) && !string.IsNullOrEmpty(parts[1])) {
+                                job.AddFile(parts[0].Trim(), Environment.ExpandEnvironmentVariables(parts[1].Trim()));
+                                filesAdded++;
+                            }
+                        }
+                    }
+                }
+
+                if (autoResume && filesAdded > 0) {
+                    job.Resume();
+                }
+
+                BG_JOB_STATE st = BG_JOB_STATE.BG_JOB_STATE_QUEUED;
+                try { job.GetState(out st); } catch {}
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"jobId\": \"{0}\", \"displayName\": \"{1}\", \"jobType\": \"{2}\", \"priority\": \"{3}\", \"state\": \"{4}\", \"filesAdded\": {5}, \"autoResumed\": {6}}}",
+                    jobId.ToString("D"),
+                    EscapeJson(displayName),
+                    GetBitsTypeName(jType),
+                    GetBitsPriorityName(priority),
+                    GetBitsStateName(st),
+                    filesAdded,
+                    (autoResume && filesAdded > 0) ? "true" : "false"
+                ));
+
+                try { Marshal.ReleaseComObject(job); } catch {}
+                try { Marshal.ReleaseComObject(mgr); } catch {}
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void BitsManageJobCmd(string jobIdStr, string action, string priorityStr) {
+            try {
+                if (string.IsNullOrEmpty(jobIdStr)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"jobId is required\"}");
+                    return;
+                }
+
+                Guid jobId = new Guid(jobIdStr);
+                Type mgrType = Type.GetTypeFromCLSID(CLSID_BackgroundCopyManager);
+                IBackgroundCopyManager mgr = (IBackgroundCopyManager)Activator.CreateInstance(mgrType);
+                IBackgroundCopyJob job;
+                mgr.GetJob(ref jobId, out job);
+
+                string act = (action ?? "status").Trim().ToLowerInvariant();
+                string resultingState = "UNKNOWN";
+                string resultingPriority = "";
+
+                if (act == "suspend") {
+                    job.Suspend();
+                } else if (act == "resume") {
+                    job.Resume();
+                } else if (act == "cancel" || act == "delete" || act == "remove") {
+                    job.Cancel();
+                    resultingState = "CANCELLED";
+                } else if (act == "complete" || act == "finish") {
+                    job.Complete();
+                    resultingState = "ACKNOWLEDGED";
+                } else if (act == "set_priority" || act == "priority") {
+                    BG_JOB_PRIORITY p = ParseBitsPriority(priorityStr);
+                    job.SetPriority(p);
+                    resultingPriority = GetBitsPriorityName(p);
+                }
+
+                if (resultingState != "CANCELLED" && resultingState != "ACKNOWLEDGED") {
+                    try {
+                        BG_JOB_STATE st;
+                        job.GetState(out st);
+                        resultingState = GetBitsStateName(st);
+                    } catch {}
+                    try {
+                        BG_JOB_PRIORITY pr;
+                        job.GetPriority(out pr);
+                        resultingPriority = GetBitsPriorityName(pr);
+                    } catch {}
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"jobId\": \"{0}\", \"action\": \"{1}\", \"state\": \"{2}\", \"priority\": \"{3}\"}}",
+                    jobId.ToString("D"),
+                    EscapeJson(act),
+                    resultingState,
+                    resultingPriority
+                ));
+
+                try { Marshal.ReleaseComObject(job); } catch {}
+                try { Marshal.ReleaseComObject(mgr); } catch {}
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -14880,6 +15413,25 @@ namespace GeminiSuperDesktop {
                 string contentName = args.Length >= 5 ? args[4] : "";
                 string appName = args.Length >= 6 ? args[5] : "GeminiSuperSystem";
                 AmsiScanBufferCmd(bufferPayload, encoding, filePath, contentName, appName);
+            } else if (cmd == "bits_jobs" || cmd == "bits-jobs" || cmd == "bits_list") {
+                bool allUsers = args.Length >= 2 && (args[1].ToLowerInvariant() == "true" || args[1] == "1" || args[1] == "--all" || args[1] == "all");
+                string filter = args.Length >= 3 ? args[2] : "";
+                BitsJobsCmd(allUsers, filter);
+            } else if (cmd == "bits_create_job" || cmd == "bits-create-job" || cmd == "bits_create") {
+                string displayName = args.Length >= 2 ? args[1] : "GeminiTransfer";
+                string jobType = args.Length >= 3 ? args[2] : "download";
+                string priority = args.Length >= 4 ? args[3] : "normal";
+                string description = args.Length >= 5 ? args[4] : "";
+                string remoteUrl = args.Length >= 6 ? args[5] : "";
+                string localPath = args.Length >= 7 ? args[6] : "";
+                string fileListJson = args.Length >= 8 ? args[7] : "";
+                bool autoResume = args.Length >= 9 ? (args[8].ToLowerInvariant() != "false" && args[8] != "0") : true;
+                BitsCreateJobCmd(displayName, jobType, priority, description, remoteUrl, localPath, fileListJson, autoResume);
+            } else if (cmd == "bits_manage_job" || cmd == "bits-manage-job" || cmd == "bits_manage") {
+                string jobId = args.Length >= 2 ? args[1] : "";
+                string action = args.Length >= 3 ? args[2] : "status";
+                string priority = args.Length >= 4 ? args[3] : "normal";
+                BitsManageJobCmd(jobId, action, priority);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

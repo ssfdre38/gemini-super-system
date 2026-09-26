@@ -5,6 +5,7 @@ const path = require("path");
 const assert = require("assert");
 const { execSync } = require("child_process");
 const http = require("http");
+const os = require("os");
 
 const {
   HmbEngine,
@@ -3696,10 +3697,89 @@ async function run() {
     assert(typeof fileRes.bufferSizeBytes === "number" && fileRes.bufferSizeBytes > 0);
   });
 
-  it("All 178 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // =====================================================================
+  // SUITE 52: Windows Background Intelligent Transfer Service (BITS) Subsystem (bits.h / qmgr.dll)
+  // =====================================================================
+  console.log("\n--- Suite 52: Windows Background Intelligent Transfer Service (BITS) Subsystem ---");
+
+  await itAsync("getBitsJobs enumerates active and cached BITS transfer jobs", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getBitsJobs();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getBitsJobs failed: " + JSON.stringify(res));
+    assert(typeof res.serviceAvailable === "boolean");
+    assert(typeof res.jobCount === "number");
+    assert(typeof res.totalSystemJobs === "number");
+    assert(Array.isArray(res.jobs));
+
+    if (res.jobs.length > 0) {
+      const job0 = res.jobs[0];
+      assert(typeof job0.jobId === "string" && job0.jobId.length === 36);
+      assert(typeof job0.displayName === "string");
+      assert(typeof job0.state === "string");
+      assert(typeof job0.priority === "string");
+      assert(typeof job0.jobType === "string");
+      assert(typeof job0.progressPercent === "number");
+      assert(Array.isArray(job0.files));
+    }
+  });
+
+  await itAsync("createBitsJob and manageBitsJob manage full transfer job lifecycle", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const testLocalPath = path.join(os.tmpdir(), "bits_suite_test_" + Date.now() + ".txt");
+
+    const createRes = await kb.createBitsJob({
+      displayName: "TestSuiteBitsTransfer",
+      jobType: "download",
+      priority: "high",
+      description: "Automated Test Suite BITS Job",
+      remoteUrl: "https://www.google.com/robots.txt",
+      localPath: testLocalPath,
+      autoResume: false
+    });
+
+    assert(createRes !== null && typeof createRes === "object");
+    if (!createRes.success) {
+      assert(
+        Boolean(process.env.CI) ||
+        (createRes.error && (createRes.error.includes("service") || createRes.error.includes("CLSID"))),
+        "Unexpected createBitsJob failure: " + JSON.stringify(createRes)
+      );
+    } else {
+      assert(typeof createRes.jobId === "string" && createRes.jobId.length === 36);
+      assert.strictEqual(createRes.displayName, "TestSuiteBitsTransfer");
+      assert.strictEqual(createRes.jobType, "DOWNLOAD");
+      assert.strictEqual(createRes.priority, "HIGH");
+      assert.strictEqual(createRes.filesAdded, 1);
+
+      const enumRes = await kb.getBitsJobs({ filter: createRes.jobId });
+      assert.strictEqual(enumRes.success, true);
+      assert(enumRes.jobCount >= 1, "Expected created job in enumeration");
+
+      const priorityRes = await kb.manageBitsJob({
+        jobId: createRes.jobId,
+        action: "set_priority",
+        priority: "low"
+      });
+      assert.strictEqual(priorityRes.success, true);
+      assert.strictEqual(priorityRes.priority, "LOW");
+
+      const cancelRes = await kb.manageBitsJob({
+        jobId: createRes.jobId,
+        action: "cancel"
+      });
+      assert.strictEqual(cancelRes.success, true);
+      assert.strictEqual(cancelRes.state, "CANCELLED");
+    }
+  });
+
+  it("All 181 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 178);
+    assert.strictEqual(SYSTEM_TOOLS.length, 181);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3811,6 +3891,9 @@ async function run() {
     assert(toolNames.includes("super_amsi_status"));
     assert(toolNames.includes("super_amsi_scan_string"));
     assert(toolNames.includes("super_amsi_scan_buffer"));
+    assert(toolNames.includes("super_bits_jobs"));
+    assert(toolNames.includes("super_bits_create_job"));
+    assert(toolNames.includes("super_bits_manage_job"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

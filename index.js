@@ -3502,6 +3502,96 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_bits_jobs",
+        description: "Enumerates active and queued Background Intelligent Transfer Service (BITS) transfer jobs across the system (IBackgroundCopyManager::EnumJobs), including job state, progress bytes, priority, transfer rate, owner SID, and file specifications.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            allUsers: {
+              type: "boolean",
+              default: false,
+              description: "Whether to enumerate jobs across all user sessions on the system (requires administrative elevation; defaults to false for current user jobs)."
+            },
+            filter: {
+              type: "string",
+              description: "Optional substring filter to match job ID GUID, display name, or description."
+            }
+          }
+        }
+      },
+      {
+        name: "super_bits_create_job",
+        description: "Creates and enqueues an asynchronous background download or upload job in the Windows BITS queue (IBackgroundCopyManager::CreateJob), with configurable priority, retry behavior, and auto-resume.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            displayName: {
+              type: "string",
+              description: "Human-readable display name for the BITS job."
+            },
+            jobType: {
+              type: "string",
+              enum: ["download", "upload", "upload_reply"],
+              default: "download",
+              description: "Job transfer direction: 'download' (default), 'upload', or 'upload_reply'."
+            },
+            priority: {
+              type: "string",
+              enum: ["foreground", "high", "normal", "low"],
+              default: "normal",
+              description: "Transfer priority: 'foreground' (unthrottled), 'high', 'normal' (default), or 'low' (background idle bandwidth)."
+            },
+            description: {
+              type: "string",
+              description: "Optional description metadata for the job."
+            },
+            remoteUrl: {
+              type: "string",
+              description: "Remote HTTP or HTTPS source/destination URL."
+            },
+            localPath: {
+              type: "string",
+              description: "Local file system destination or upload source path (environment variables like %TEMP% are automatically expanded)."
+            },
+            fileList: {
+              type: "string",
+              description: "Optional semicolon-delimited list of remoteUrl|localPath pairs for batch file transfer."
+            },
+            autoResume: {
+              type: "boolean",
+              default: true,
+              description: "Automatically start/resume the job after adding file targets (default: true)."
+            }
+          },
+          required: ["displayName"]
+        }
+      },
+      {
+        name: "super_bits_manage_job",
+        description: "Controls the lifecycle of a Background Intelligent Transfer Service (BITS) job (IBackgroundCopyJob), supporting suspend, resume, cancel, complete (commit transferred files), and dynamic priority modification.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            jobId: {
+              type: "string",
+              description: "Target BITS job GUID (e.g. 'c74383c2-d6d7-464a-939e-29c8e88f5cf3')."
+            },
+            action: {
+              type: "string",
+              enum: ["suspend", "resume", "cancel", "complete", "set_priority", "status"],
+              default: "status",
+              description: "Lifecycle action to perform: 'suspend' (pause transfer), 'resume' (continue transfer), 'cancel' (abort and delete temporary files), 'complete' (finalize and commit downloaded files to destination), 'set_priority' (change priority band), or 'status'."
+            },
+            priority: {
+              type: "string",
+              enum: ["foreground", "high", "normal", "low"],
+              description: "New priority band when action is 'set_priority'."
+            }
+          },
+          required: ["jobId"]
+        }
       }
 ];
 
@@ -6235,6 +6325,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `${icon} [AMSI Buffer/File Scan Result - ${res.riskLevel || "ANALYSIS"}]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_bits_jobs") {
+    const res = await orch.getBitsJobs(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📦 [BITS Active & Queued Jobs (${res.jobCount || 0} enumerated)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_bits_create_job") {
+    const res = await orch.createBitsJob(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🚀 [BITS Transfer Job Created]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_bits_manage_job") {
+    const res = await orch.manageBitsJob(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚙️ [BITS Job Lifecycle Action - ${args?.action || "STATUS"}]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

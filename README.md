@@ -82,6 +82,7 @@
   - [64. Windows Virtual Storage & Virtual Hard Disk (VHD/VHDX) Subsystem](#64--windows-virtual-storage--virtual-hard-disk-vhdvhdx-subsystem-virtdiskh--virtdiskdll)
   - [65. Windows Subsystem for Linux (WSL) Management & Linux Process Execution Subsystem](#65--windows-subsystem-for-linux-wsl-management--linux-process-execution-subsystem-wslapih--wslapidll)
   - [66. Windows Antimalware Scan Interface (AMSI) Subsystem](#66-️-windows-antimalware-scan-interface-amsi-subsystem-amsih--amsidll)
+  - [67. Windows Background Intelligent Transfer Service (BITS) Subsystem](#67--windows-background-intelligent-transfer-service-bits-subsystem-bitsh--qmgrdll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -890,6 +891,17 @@ Directly interfaces with the Windows Antimalware Scan Interface (AMSI) to provid
 - **Binary Buffer & File Protection (`super_amsi_scan_buffer`)**: Scans arbitrary binary buffers (Base64, Hex, UTF-8) or local files on disk using `AmsiScanBuffer`. Enables zero-disk-write binary analysis for autonomous agent downloads and prevents payload execution if flagged by installed security products.
 - **178 Tools Milestone**: Reaches **178 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **51 comprehensive test suites (162/162 tests passing 100%)** and **47 environment health checks**.
 - **Native MCP Tools**: `super_amsi_status`, `super_amsi_scan_string`, `super_amsi_scan_buffer`.
+
+---
+
+## 67. 📦 Windows Background Intelligent Transfer Service (BITS) Subsystem (`bits.h` / `qmgr.dll`)
+
+Directly interfaces with the Windows Background Intelligent Transfer Service (BITS) via native COM interop (`IBackgroundCopyManager`, `IBackgroundCopyJob`, `IEnumBackgroundCopyJobs`, `IBackgroundCopyFile`, `IBackgroundCopyError`) to provide resilient, network-throttled, priority-based asynchronous background file downloads and uploads:
+- **Active & Queued Transfer Job Enumeration (`super_bits_jobs`)**: Enumerates all active, transferring, suspended, error, and cached BITS jobs across the system (`IBackgroundCopyManager::EnumJobs`), returning Job ID GUIDs, display names, descriptions, job states (`QUEUED`, `CONNECTING`, `TRANSFERRING`, `SUSPENDED`, `ERROR`, `TRANSIENT_ERROR`, `TRANSFERRED`, `ACKNOWLEDGED`, `CANCELLED`), priority bands (`FOREGROUND`, `HIGH`, `NORMAL`, `LOW`), bytes transferred, total file bytes, transfer progress percentages, owner SIDs, file specifications, and error diagnostics.
+- **Asynchronous Transfer Job Creation (`super_bits_create_job`)**: Creates and enqueues background file transfers in the operating system BITS queue (`IBackgroundCopyManager::CreateJob`), supporting download and upload job types, priority assignment, batch file sets, and automated transfer resumption.
+- **Job Lifecycle & Bandwidth Priority Actuation (`super_bits_manage_job`)**: Actuates the lifecycle of existing BITS transfer jobs, supporting suspend (pause), resume (continue), cancel (abort and clean up temporary files), complete (finalize and atomically commit downloaded files into destination paths), and dynamic priority band adjustment.
+- **181 Tools Milestone**: Reaches **181 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **52 comprehensive test suites (165/165 tests passing 100%)** and **48 environment health checks**.
+- **Native MCP Tools**: `super_bits_jobs`, `super_bits_create_job`, `super_bits_manage_job`.
 
 ---
 
