@@ -3394,6 +3394,55 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_wsl_distributions",
+        description: "Discovers and inspects installed Windows Subsystem for Linux (WSL) distributions via native Win32 wslapi.dll (WslIsDistributionRegistered, WslGetDistributionConfiguration) and Lxss registry. Returns distribution names, unique GUIDs, WSL version (WSL1 vs WSL2), default UID, registration state, flags (interop, path append, drive mounting), base paths, virtual hard disk (ext4.vhdx) locations, and OS release versions.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              description: "Optional substring filter on distribution name or GUID."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wsl_execute",
+        description: "Directly launches and executes Linux commands inside any installed WSL distribution using native Win32 WslLaunch from wslapi.h / wslapi.dll with unmediated Win32 pipes. Captures standard output, standard error, execution duration, and Linux exit code.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            command: {
+              type: "string",
+              description: "The Linux command line to execute (e.g. 'uname -a', 'cat /etc/os-release', 'uptime')."
+            },
+            distribution: {
+              type: "string",
+              description: "Target WSL distribution name (e.g. 'Ubuntu', 'Ubuntu-Preview'). If omitted, defaults to the system default distribution."
+            },
+            useCurrentWorkingDirectory: {
+              type: "boolean",
+              default: false,
+              description: "Whether to execute the command within the current Windows working directory inside Linux (default: false, runs in Linux home directory)."
+            },
+            timeoutMs: {
+              type: "number",
+              default: 60000,
+              description: "Maximum execution timeout in milliseconds (default: 60000)."
+            }
+          },
+          required: ["command"]
+        }
+      },
+      {
+        name: "super_wsl_status",
+        description: "Inspects overall Windows Subsystem for Linux (WSL) subsystem health, native wslapi.dll and wsl.exe availability, default distribution, installed distribution names, kernel release version, and underlying virtualization platform (Hyper-V / Virtual Machine Platform).",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
 ];
 
@@ -6053,6 +6102,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⛓️ [Windows Storage Dependency Information (GetStorageDependencyInformation)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wsl_distributions") {
+    const res = await orch.getWslDistributions(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🐧 [Windows Subsystem for Linux Distributions (wslapi.dll)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wsl_execute") {
+    const res = await orch.executeWslCommand(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [WSL Linux Direct Execution (WslLaunch)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wsl_status") {
+    const res = await orch.getWslStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🩺 [WSL Subsystem Status & Platform Architecture]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

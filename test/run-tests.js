@@ -3547,10 +3547,72 @@ async function run() {
     assert(Array.isArray(res.parentPaths));
   });
 
-  it("All 172 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 50: Windows Subsystem for Linux (WSL) Management & Linux Process Execution Subsystem
+  console.log("\n=======================================================");
+  console.log("   🧪 [Suite 50: Windows Subsystem for Linux (WSL) Management & Linux Process Execution Subsystem]");
+  console.log("=======================================================\n");
+
+  await itAsync("super_wsl_distributions discovers installed Linux distributions via wslapi.dll", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWslDistributions();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWslDistributions failed: " + JSON.stringify(res));
+    assert(typeof res.distributionCount === "number");
+    assert(Array.isArray(res.distributions));
+
+    if (res.distributions.length > 0) {
+      const d0 = res.distributions[0];
+      assert(typeof d0.name === "string" && d0.name.length > 0);
+      assert(typeof d0.guid === "string" && d0.guid.length > 0);
+      assert(typeof d0.version === "number");
+      assert(typeof d0.isRegistered === "boolean");
+      assert(typeof d0.flagsDecoded === "object" && d0.flagsDecoded !== null);
+      assert(typeof d0.flagsDecoded.enableInterop === "boolean");
+    }
+  });
+
+  await itAsync("super_wsl_status verifies WSL subsystem, APIs, and virtualization platform", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWslStatus();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWslStatus failed: " + JSON.stringify(res));
+    assert(typeof res.wslApiAvailable === "boolean");
+    assert(typeof res.wslExeAvailable === "boolean");
+    assert(typeof res.distroCount === "number");
+    assert(Array.isArray(res.installedDistros));
+    assert(typeof res.virtualizationPlatform === "string" && res.virtualizationPlatform.length > 0);
+  });
+
+  await itAsync("super_wsl_execute validates direct Linux command execution with CI headless resilience", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.executeWslCommand({ command: "echo test_gemini", timeoutMs: 10000 });
+
+    assert(res !== null && typeof res === "object");
+    assert(typeof res.success === "boolean");
+    assert(typeof res.distribution === "string");
+    if (res.success) {
+      assert.strictEqual(res.exitCode, 0);
+      assert(typeof res.stdout === "string" && res.stdout.includes("test_gemini"));
+      assert(typeof res.executionTimeMs === "number");
+    } else {
+      assert(typeof res.exitCode === "number" || typeof res.error === "string");
+    }
+
+    const emptyRes = await kb.executeWslCommand({ command: "" });
+    assert(emptyRes !== null && typeof emptyRes === "object");
+    assert.strictEqual(emptyRes.success, false);
+    assert(typeof emptyRes.error === "string" && emptyRes.error.length > 0);
+  });
+
+  it("All 175 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 172);
+    assert.strictEqual(SYSTEM_TOOLS.length, 175);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3656,6 +3718,9 @@ async function run() {
     assert(toolNames.includes("super_vhd_attached_disks"));
     assert(toolNames.includes("super_vhd_inspect"));
     assert(toolNames.includes("super_vhd_storage_dependencies"));
+    assert(toolNames.includes("super_wsl_distributions"));
+    assert(toolNames.includes("super_wsl_execute"));
+    assert(toolNames.includes("super_wsl_status"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

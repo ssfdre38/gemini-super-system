@@ -80,6 +80,7 @@
   - [62. Windows IP Helper & Network Routing Subsystem](#62--windows-ip-helper--network-routing-subsystem-iphlpapih--iphlpapidll)
   - [63. Windows Display Devices, Monitor Topology & Graphics Modes](#63--windows-display-devices-monitor-topology--graphics-modes-wingdih--winuserh)
   - [64. Windows Virtual Storage & Virtual Hard Disk (VHD/VHDX) Subsystem](#64--windows-virtual-storage--virtual-hard-disk-vhdvhdx-subsystem-virtdiskh--virtdiskdll)
+  - [65. Windows Subsystem for Linux (WSL) Management & Linux Process Execution Subsystem](#65--windows-subsystem-for-linux-wsl-management--linux-process-execution-subsystem-wslapih--wslapidll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -867,6 +868,17 @@ Directly interrogates the Windows Virtual Storage and VHD/VHDX architecture, att
 - **Storage Dependency Graph & Hypervisor Storage Identification (`super_vhd_storage_dependencies`)**: Analyzes volume handles (e.g. `C:`, `D:`) via `GetStorageDependencyInformation` to distinguish between direct bare-metal NVMe/SATA physical storage and virtualized/nested storage stacks (Hyper-V, WSL2, Azure VMs, AWS EC2, or VHD-native boot).
 - **172 Tools Milestone**: Reaches **172 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **49 comprehensive test suites (156/156 tests passing 100%)** and **45 environment health checks**.
 - **Native MCP Tools**: `super_vhd_attached_disks`, `super_vhd_inspect`, `super_vhd_storage_dependencies`.
+
+---
+
+## 65. 🐧 Windows Subsystem for Linux (WSL) Management & Linux Process Execution Subsystem (`wslapi.h` / `wslapi.dll`)
+
+Directly manages installed Windows Subsystem for Linux (WSL) micro-VM distributions and executes unmediated Linux processes directly from the host Windows OS via native `wslapi.dll` P/Invoke:
+- **Distribution Discovery & Configuration Inspection (`super_wsl_distributions`)**: Discovers all registered WSL distributions across the host using native `WslIsDistributionRegistered` and `WslGetDistributionConfiguration` alongside `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss` registry reflection. Extracts unique distribution GUIDs, default distribution designation, WSL architectural version (WSL1 translation layer vs WSL2 lightweight Hyper-V micro-VM), default Linux UID, registration state, security flags (`enableInterop`, `appendNtPath`, `enableDriveMounting`), installation base paths, virtual hard disk image (`ext4.vhdx`) locations, and OS flavor versions.
+- **Direct Native Linux Command Execution (`super_wsl_execute`)**: Launches and executes Linux processes inside any registered distribution via native Win32 `WslLaunch` without spawning `wsl.exe` or requiring an interactive console. Connects native Win32 anonymous pipes to stdout and stderr, draining output streams asynchronously with non-blocking `PeekNamedPipe` and `ReadFile` loops. Captures standard output, standard error, execution duration, and Linux process exit codes with automated timeout enforcement.
+- **WSL Subsystem Health & Hypervisor Status (`super_wsl_status`)**: Assesses overall WSL subsystem health, native `wslapi.dll` and `wsl.exe` system availability, active/default distribution name, total distribution counts, Linux kernel release version, and underlying virtualization platform architecture (`Hyper-V / Virtual Machine Platform`).
+- **175 Tools Milestone**: Reaches **175 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **50 comprehensive test suites (159/159 tests passing 100%)** and **46 environment health checks**.
+- **Native MCP Tools**: `super_wsl_distributions`, `super_wsl_execute`, `super_wsl_status`.
 
 ---
 

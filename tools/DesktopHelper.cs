@@ -11013,6 +11013,353 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows Subsystem for Linux (WSL) Subsystem (wslapi.h / wslapi.dll)
+
+        [DllImport("wslapi.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern bool WslIsDistributionRegistered(string distributionName);
+
+        [DllImport("wslapi.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern int WslGetDistributionConfiguration(
+            string distributionName,
+            out uint distributionVersion,
+            out uint defaultUID,
+            out uint wslDistributionFlags,
+            out IntPtr defaultEnvironmentVariables,
+            out uint defaultEnvironmentVariableCount
+        );
+
+        [DllImport("wslapi.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern int WslLaunch(
+            string distributionName,
+            string command,
+            bool useCurrentWorkingDirectory,
+            IntPtr stdIn,
+            IntPtr stdOut,
+            IntPtr stdErr,
+            out IntPtr process
+        );
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WSL_SECURITY_ATTRIBUTES {
+            public int nLength;
+            public IntPtr lpSecurityDescriptor;
+            public bool bInheritHandle;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool CreatePipe(out IntPtr hReadPipe, out IntPtr hWritePipe, ref WSL_SECURITY_ATTRIBUTES lpPipeAttributes, uint nSize);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool ReadFile(IntPtr hFile, [Out] byte[] lpBuffer, uint nNumberOfBytesToRead, out uint lpNumberOfBytesRead, IntPtr lpOverlapped);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern uint WaitForSingleObject(IntPtr hHandle, uint dwMilliseconds);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool GetExitCodeProcess(IntPtr hProcess, out uint lpExitCode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool PeekNamedPipe(IntPtr hNamedPipe, byte[] lpBuffer, uint nBufferSize, out uint lpBytesRead, out uint lpTotalBytesAvail, out uint lpBytesLeftThisMessage);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        public static extern bool TerminateProcess(IntPtr hProcess, uint uExitCode);
+
+        static void WslDistributionsCmd(string filter) {
+            try {
+                var distros = new List<string>();
+                string defaultDistroGuid = "";
+                string natIp = "";
+
+                using (var rootKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss")) {
+                    if (rootKey != null) {
+                        object dVal = rootKey.GetValue("DefaultDistribution");
+                        if (dVal != null) defaultDistroGuid = dVal.ToString();
+                        object ipVal = rootKey.GetValue("NatIpAddress");
+                        if (ipVal != null) natIp = ipVal.ToString();
+
+                        string[] subKeys = rootKey.GetSubKeyNames();
+                        foreach (string sub in subKeys) {
+                            using (var subKey = rootKey.OpenSubKey(sub)) {
+                                if (subKey == null) continue;
+                                string name = (subKey.GetValue("DistributionName") ?? "").ToString();
+                                if (string.IsNullOrEmpty(name)) continue;
+
+                                if (!string.IsNullOrEmpty(filter)) {
+                                    string q = filter.Trim().ToLowerInvariant();
+                                    if (!name.ToLowerInvariant().Contains(q) && !sub.ToLowerInvariant().Contains(q)) {
+                                        continue;
+                                    }
+                                }
+
+                                int ver = 2;
+                                object vVal = subKey.GetValue("Version");
+                                if (vVal != null) int.TryParse(vVal.ToString(), out ver);
+
+                                int state = 1;
+                                object sVal = subKey.GetValue("State");
+                                if (sVal != null) int.TryParse(sVal.ToString(), out state);
+
+                                string basePath = (subKey.GetValue("BasePath") ?? "").ToString();
+                                string vhdFile = (subKey.GetValue("VhdFileName") ?? "ext4.vhdx").ToString();
+                                string fullVhdPath = Path.Combine(basePath, vhdFile);
+
+                                int defaultUid = 1000;
+                                object uVal = subKey.GetValue("DefaultUid");
+                                if (uVal != null) int.TryParse(uVal.ToString(), out defaultUid);
+
+                                int flags = 15;
+                                object fVal = subKey.GetValue("Flags");
+                                if (fVal != null) int.TryParse(fVal.ToString(), out flags);
+
+                                string flavor = (subKey.GetValue("Flavor") ?? "").ToString();
+                                string osVersion = (subKey.GetValue("OsVersion") ?? "").ToString();
+                                string packageFamily = (subKey.GetValue("PackageFamilyName") ?? "").ToString();
+
+                                bool isReg = WslIsDistributionRegistered(name);
+                                bool isDefault = (sub.Equals(defaultDistroGuid, StringComparison.OrdinalIgnoreCase));
+
+                                bool interop = (flags & 1) != 0;
+                                bool appendPath = (flags & 2) != 0;
+                                bool driveMounting = (flags & 4) != 0;
+
+                                var sbD = new StringBuilder();
+                                sbD.Append("{");
+                                sbD.AppendFormat("\"name\": \"{0}\", ", EscapeJson(name));
+                                sbD.AppendFormat("\"guid\": \"{0}\", ", EscapeJson(sub));
+                                sbD.AppendFormat("\"version\": {0}, ", ver);
+                                sbD.AppendFormat("\"isRegistered\": {0}, ", isReg ? "true" : "false");
+                                sbD.AppendFormat("\"isDefault\": {0}, ", isDefault ? "true" : "false");
+                                sbD.AppendFormat("\"state\": {0}, ", state);
+                                sbD.AppendFormat("\"defaultUid\": {0}, ", defaultUid);
+                                sbD.AppendFormat("\"flags\": {0}, ", flags);
+                                sbD.AppendFormat("\"flagsDecoded\": {{\"enableInterop\": {0}, \"appendNtPath\": {1}, \"enableDriveMounting\": {2}}}, ",
+                                    interop ? "true" : "false", appendPath ? "true" : "false", driveMounting ? "true" : "false");
+                                sbD.AppendFormat("\"basePath\": \"{0}\", ", EscapeJson(basePath));
+                                sbD.AppendFormat("\"vhdPath\": \"{0}\", ", EscapeJson(fullVhdPath));
+                                sbD.AppendFormat("\"vhdExists\": {0}, ", File.Exists(fullVhdPath) ? "true" : "false");
+                                sbD.AppendFormat("\"flavor\": \"{0}\", ", EscapeJson(flavor));
+                                sbD.AppendFormat("\"osVersion\": \"{0}\", ", EscapeJson(osVersion));
+                                sbD.AppendFormat("\"packageFamilyName\": \"{0}\"", EscapeJson(packageFamily));
+                                sbD.Append("}");
+                                distros.Add(sbD.ToString());
+                            }
+                        }
+                    }
+                }
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.AppendFormat("\"defaultDistributionGuid\": \"{0}\", ", EscapeJson(defaultDistroGuid));
+                sbOut.AppendFormat("\"natIpAddress\": \"{0}\", ", EscapeJson(natIp));
+                sbOut.AppendFormat("\"distributionCount\": {0}, ", distros.Count);
+                sbOut.AppendFormat("\"distributions\": [{0}]", string.Join(", ", distros.ToArray()));
+                sbOut.Append("}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        public class WslExecResult {
+            public bool Success;
+            public string Distribution = "";
+            public string Command = "";
+            public uint ExitCode;
+            public string Stdout = "";
+            public string Stderr = "";
+            public long ExecutionTimeMs;
+            public string Error = "";
+        }
+
+        static WslExecResult WslExecuteInternal(string command, string targetDistro, bool useCurrentDir, int timeoutMs) {
+            var res = new WslExecResult { Command = command ?? "", Distribution = targetDistro ?? "" };
+            IntPtr hOutRead = IntPtr.Zero, hOutWrite = IntPtr.Zero;
+            IntPtr hErrRead = IntPtr.Zero, hErrWrite = IntPtr.Zero;
+            IntPtr hProc = IntPtr.Zero;
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+
+            try {
+                if (string.IsNullOrEmpty(command)) {
+                    res.Error = "Command must be specified";
+                    return res;
+                }
+
+                string distro = targetDistro;
+                if (string.IsNullOrEmpty(distro)) {
+                    using (var rootKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss")) {
+                        if (rootKey != null) {
+                            string defGuid = (rootKey.GetValue("DefaultDistribution") ?? "").ToString();
+                            if (!string.IsNullOrEmpty(defGuid)) {
+                                using (var subKey = rootKey.OpenSubKey(defGuid)) {
+                                    if (subKey != null) distro = (subKey.GetValue("DistributionName") ?? "").ToString();
+                                }
+                            }
+                        }
+                    }
+                }
+                if (string.IsNullOrEmpty(distro)) distro = "Ubuntu";
+                res.Distribution = distro;
+
+                if (timeoutMs <= 0) timeoutMs = 60000;
+
+                WSL_SECURITY_ATTRIBUTES sa = new WSL_SECURITY_ATTRIBUTES();
+                sa.nLength = Marshal.SizeOf(sa);
+                sa.bInheritHandle = true;
+                sa.lpSecurityDescriptor = IntPtr.Zero;
+
+                if (!CreatePipe(out hOutRead, out hOutWrite, ref sa, 0) ||
+                    !CreatePipe(out hErrRead, out hErrWrite, ref sa, 0)) {
+                    res.Error = "Failed to create IPC pipes for WSL execution";
+                    return res;
+                }
+
+                string launchCmd = command;
+                if (!launchCmd.StartsWith("/bin/sh ") && !launchCmd.StartsWith("/bin/bash ")) {
+                    launchCmd = "/bin/sh -c \"" + command.Replace("\"", "\\\"") + "\"";
+                }
+
+                int hr = WslLaunch(distro, launchCmd, useCurrentDir, IntPtr.Zero, hOutWrite, hErrWrite, out hProc);
+
+                CloseHandle(hOutWrite); hOutWrite = IntPtr.Zero;
+                CloseHandle(hErrWrite); hErrWrite = IntPtr.Zero;
+
+                if (hr != 0 || hProc == IntPtr.Zero) {
+                    res.Error = string.Format("WslLaunch failed with HRESULT: 0x{0:X8}", hr);
+                    return res;
+                }
+
+                var sbOut = new StringBuilder();
+                var sbErr = new StringBuilder();
+
+                var outThread = new System.Threading.Thread(() => {
+                    byte[] b = new byte[4096];
+                    uint br;
+                    while (ReadFile(hOutRead, b, (uint)b.Length, out br, IntPtr.Zero) && br > 0) {
+                        sbOut.Append(Encoding.UTF8.GetString(b, 0, (int)br));
+                    }
+                });
+                var errThread = new System.Threading.Thread(() => {
+                    byte[] b = new byte[4096];
+                    uint br;
+                    while (ReadFile(hErrRead, b, (uint)b.Length, out br, IntPtr.Zero) && br > 0) {
+                        sbErr.Append(Encoding.UTF8.GetString(b, 0, (int)br));
+                    }
+                });
+
+                outThread.IsBackground = true;
+                errThread.IsBackground = true;
+                outThread.Start();
+                errThread.Start();
+
+                uint waitRes = WaitForSingleObject(hProc, (uint)timeoutMs);
+                if (waitRes != 0) {
+                    TerminateProcess(hProc, 1);
+                    res.Error = "Execution timed out after " + timeoutMs + "ms";
+                }
+
+                outThread.Join(1500);
+                errThread.Join(1500);
+
+                uint exitCode = 0;
+                GetExitCodeProcess(hProc, out exitCode);
+                sw.Stop();
+
+                res.Success = (waitRes == 0 && exitCode == 0);
+                res.ExitCode = exitCode;
+                res.Stdout = sbOut.ToString().TrimEnd();
+                res.Stderr = sbErr.ToString().TrimEnd();
+                res.ExecutionTimeMs = sw.ElapsedMilliseconds;
+                return res;
+            } catch (Exception ex) {
+                res.Error = ex.Message;
+                return res;
+            } finally {
+                if (hOutRead != IntPtr.Zero) CloseHandle(hOutRead);
+                if (hOutWrite != IntPtr.Zero) CloseHandle(hOutWrite);
+                if (hErrRead != IntPtr.Zero) CloseHandle(hErrRead);
+                if (hErrWrite != IntPtr.Zero) CloseHandle(hErrWrite);
+                if (hProc != IntPtr.Zero) CloseHandle(hProc);
+            }
+        }
+
+        static void WslExecuteCmd(string command, string targetDistro, bool useCurrentDir, int timeoutMs) {
+            var r = WslExecuteInternal(command, targetDistro, useCurrentDir, timeoutMs);
+            if (!string.IsNullOrEmpty(r.Error) && !r.Error.StartsWith("Execution timed out")) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\", \"distribution\": \"{1}\"}}", EscapeJson(r.Error), EscapeJson(r.Distribution)));
+            } else {
+                var sbJson = new StringBuilder();
+                sbJson.Append("{");
+                sbJson.AppendFormat("\"success\": {0}, ", r.Success ? "true" : "false");
+                sbJson.AppendFormat("\"distribution\": \"{0}\", ", EscapeJson(r.Distribution));
+                sbJson.AppendFormat("\"command\": \"{0}\", ", EscapeJson(r.Command));
+                sbJson.AppendFormat("\"exitCode\": {0}, ", r.ExitCode);
+                sbJson.AppendFormat("\"stdout\": \"{0}\", ", EscapeJson(r.Stdout));
+                sbJson.AppendFormat("\"stderr\": \"{0}\", ", EscapeJson(r.Stderr));
+                sbJson.AppendFormat("\"executionTimeMs\": {0}, ", r.ExecutionTimeMs);
+                sbJson.AppendFormat("\"error\": \"{0}\"", EscapeJson(r.Error ?? ""));
+                sbJson.Append("}");
+                Console.WriteLine(sbJson.ToString());
+            }
+        }
+
+        static void WslStatusCmd() {
+            try {
+                bool wslApiAvailable = File.Exists(Path.Combine(Environment.SystemDirectory, "wslapi.dll"));
+                bool wslExeAvailable = File.Exists(Path.Combine(Environment.SystemDirectory, "wsl.exe"));
+
+                string defaultDistro = "";
+                int distroCount = 0;
+                var distros = new List<string>();
+
+                using (var rootKey = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss")) {
+                    if (rootKey != null) {
+                        string defGuid = (rootKey.GetValue("DefaultDistribution") ?? "").ToString();
+                        string[] subKeys = rootKey.GetSubKeyNames();
+                        distroCount = subKeys.Length;
+
+                        foreach (string sub in subKeys) {
+                            using (var subKey = rootKey.OpenSubKey(sub)) {
+                                if (subKey == null) continue;
+                                string name = (subKey.GetValue("DistributionName") ?? "").ToString();
+                                if (!string.IsNullOrEmpty(name)) {
+                                    distros.Add(name);
+                                    if (sub.Equals(defGuid, StringComparison.OrdinalIgnoreCase)) {
+                                        defaultDistro = name;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                string kernelRelease = "";
+                if (distros.Count > 0 && !string.IsNullOrEmpty(defaultDistro)) {
+                    var r = WslExecuteInternal("uname -r", defaultDistro, false, 5000);
+                    if (r.Success) {
+                        kernelRelease = r.Stdout.Trim();
+                    }
+                }
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.AppendFormat("\"wslApiAvailable\": {0}, ", wslApiAvailable ? "true" : "false");
+                sbOut.AppendFormat("\"wslExeAvailable\": {0}, ", wslExeAvailable ? "true" : "false");
+                sbOut.AppendFormat("\"defaultDistribution\": \"{0}\", ", EscapeJson(defaultDistro));
+                sbOut.AppendFormat("\"distroCount\": {0}, ", distroCount);
+                sbOut.AppendFormat("\"installedDistros\": [\"{0}\"], ", string.Join("\", \"", distros.ToArray()));
+                sbOut.AppendFormat("\"kernelRelease\": \"{0}\", ", EscapeJson(kernelRelease));
+                sbOut.Append("\"virtualizationPlatform\": \"Hyper-V / Virtual Machine Platform\"");
+                sbOut.Append("}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -14181,6 +14528,18 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "vhd_storage_dependencies" || cmd == "storage_dependencies" || cmd == "vhd_dependencies") {
                 string drive = args.Length >= 2 ? args[1] : "C:";
                 VhdStorageDependenciesCmd(drive);
+            } else if (cmd == "wsl_distributions" || cmd == "wsl-distributions" || cmd == "wsl_distros") {
+                string filter = args.Length >= 2 ? args[1] : "";
+                WslDistributionsCmd(filter);
+            } else if (cmd == "wsl_execute" || cmd == "wsl-execute" || cmd == "wsl_exec" || cmd == "wsl_launch") {
+                string command = args.Length >= 2 ? args[1] : "";
+                string distro = args.Length >= 3 ? args[2] : "";
+                bool useCurrentDir = args.Length >= 4 ? (args[3].ToLowerInvariant() == "true" || args[3] == "1") : false;
+                int timeoutMs = 60000;
+                if (args.Length >= 5 && !string.IsNullOrEmpty(args[4])) int.TryParse(args[4], out timeoutMs);
+                WslExecuteCmd(command, distro, useCurrentDir, timeoutMs);
+            } else if (cmd == "wsl_status" || cmd == "wsl-status") {
+                WslStatusCmd();
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
