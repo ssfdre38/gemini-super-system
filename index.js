@@ -3220,6 +3220,48 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_intl_locales",
+        description: "Enumerates and inspects Windows system locales, user/system default locales, and regional formatting via native EnumSystemLocalesEx and GetLocaleInfoEx from winnls.h / kernel32.dll. Returns ISO 639 language codes, ISO 3166 country codes, English/native display names, and detailed formatting metrics (currencies, date/time formats, decimal separators, first day of week).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              description: "Optional substring or language tag filter (e.g. 'en', 'es', 'zh', 'US')."
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of matched locales to return. Default is 50. Use 0 for all."
+            },
+            detailed: {
+              type: "boolean",
+              description: "If true, extracts currency symbols, date/time patterns, number separators, and native country/language names."
+            }
+          }
+        }
+      },
+      {
+        name: "super_intl_codepages",
+        description: "Interrogates active Windows ANSI / OEM Code Pages and queries code page attributes via native GetACP, GetOEMCP, IsValidCodePage, and GetCPInfoExW from winnls.h / kernel32.dll. Returns code page names, maximum character byte sizes (SBCS/DBCS/UTF-8), default replacement characters, and lead byte range tables.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            codePages: {
+              type: "string",
+              description: "Optional comma-separated list of specific code page identifiers to inspect (e.g. '65001, 1252, 932, 936, 437'). If omitted, returns prominent system and standard code pages."
+            }
+          }
+        }
+      },
+      {
+        name: "super_intl_ui_languages",
+        description: "Queries system, user, and thread preferred UI display languages via native GetSystemPreferredUILanguages, GetUserPreferredUILanguages, and GetThreadPreferredUILanguages from winnls.h / kernel32.dll. Returns prioritized language preference lists (e.g. ['en-US']) for internationalized application rendering and multilingual perception.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
 ];
 
@@ -5735,6 +5777,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🎯 [Windows Default Printer (GetDefaultPrinterW / SetDefaultPrinterW)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_intl_locales") {
+    const res = await orch.getIntlLocales(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🌐 [Windows System Locales (EnumSystemLocalesEx / GetLocaleInfoEx)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_intl_codepages") {
+    const res = await orch.getIntlCodePages(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔤 [Windows Code Pages (GetACP / GetOEMCP / GetCPInfoExW)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_intl_ui_languages") {
+    const res = await orch.getIntlUiLanguages();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🗣️ [Windows Preferred UI Languages (Get*PreferredUILanguages)]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

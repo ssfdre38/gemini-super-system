@@ -9753,6 +9753,381 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows National Language Support (NLS) & Internationalization (winnls.h / kernel32.dll)
+
+        public delegate bool EnumLocalesProcEx(
+            [MarshalAs(UnmanagedType.LPWStr)] string lpLocaleString,
+            uint dwFlags,
+            IntPtr lParam);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool EnumSystemLocalesEx(
+            EnumLocalesProcEx lpLocaleEnumProcEx,
+            uint dwFlags,
+            IntPtr lParam,
+            IntPtr lpReserved);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern int GetUserDefaultLocaleName(
+            StringBuilder lpLocaleName,
+            int cchLocaleName);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern int GetSystemDefaultLocaleName(
+            StringBuilder lpLocaleName,
+            int cchLocaleName);
+
+        [DllImport("kernel32.dll")]
+        public static extern uint GetUserDefaultLCID();
+
+        [DllImport("kernel32.dll")]
+        public static extern uint GetSystemDefaultLCID();
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern int GetLocaleInfoEx(
+            string lpLocaleName,
+            uint LCType,
+            StringBuilder lpLCData,
+            int cchData);
+
+        [DllImport("kernel32.dll")]
+        public static extern uint GetACP();
+
+        [DllImport("kernel32.dll")]
+        public static extern uint GetOEMCP();
+
+        [DllImport("kernel32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool IsValidCodePage(uint CodePage);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct CPINFOEXW {
+            public uint MaxCharSize;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 2)]
+            public byte[] DefaultChar;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 12)]
+            public byte[] LeadByte;
+            public char UnicodeDefaultChar;
+            public uint CodePage;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+            public string CodePageName;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetCPInfoExW(
+            uint CodePage,
+            uint dwFlags,
+            out CPINFOEXW lpCPInfoEx);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetSystemPreferredUILanguages(
+            uint dwFlags,
+            out uint pulNumLanguages,
+            [Out] char[] pwszLanguagesBuffer,
+            ref uint pcchLanguagesBuffer);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetUserPreferredUILanguages(
+            uint dwFlags,
+            out uint pulNumLanguages,
+            [Out] char[] pwszLanguagesBuffer,
+            ref uint pcchLanguagesBuffer);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetThreadPreferredUILanguages(
+            uint dwFlags,
+            out uint pulNumLanguages,
+            [Out] char[] pwszLanguagesBuffer,
+            ref uint pcchLanguagesBuffer);
+
+        const uint LOCALE_SENGLISHDISPLAYNAME = 0x00000072;
+        const uint LOCALE_SNATIVEDISPLAYNAME = 0x00000073;
+        const uint LOCALE_SISO639LANGNAME = 0x00000059;
+        const uint LOCALE_SISO3166CTRYNAME = 0x0000005A;
+        const uint LOCALE_SENGLISHLANGUAGENAME = 0x00001001;
+        const uint LOCALE_SENGLISHCOUNTRYNAME = 0x00001002;
+        const uint LOCALE_SNATIVELANGUAGENAME = 0x00000004;
+        const uint LOCALE_SNATIVECTRYNAME = 0x00000008;
+        const uint LOCALE_SCURRENCY = 0x00000014;
+        const uint LOCALE_SSHORTDATE = 0x0000001F;
+        const uint LOCALE_STIMEFORMAT = 0x00001003;
+        const uint LOCALE_SDECIMAL = 0x0000000E;
+        const uint LOCALE_IFIRSTDAYOFWEEK = 0x0000100B;
+
+        static string QueryLocaleString(string localeName, uint lcType) {
+            var sb = new StringBuilder(256);
+            int len = GetLocaleInfoEx(localeName, lcType, sb, sb.Capacity);
+            if (len > 0) return sb.ToString();
+            return "";
+        }
+
+        static void IntlLocalesCmd(string filter, int limit, bool detailed) {
+            try {
+                var userDefSb = new StringBuilder(85);
+                GetUserDefaultLocaleName(userDefSb, userDefSb.Capacity);
+                string userDefault = userDefSb.ToString();
+
+                var sysDefSb = new StringBuilder(85);
+                GetSystemDefaultLocaleName(sysDefSb, sysDefSb.Capacity);
+                string sysDefault = sysDefSb.ToString();
+
+                uint userLcid = GetUserDefaultLCID();
+                uint sysLcid = GetSystemDefaultLCID();
+
+                var allLocales = new List<string>();
+                EnumLocalesProcEx callback = delegate(string localeName, uint flags, IntPtr lParam) {
+                    if (!string.IsNullOrEmpty(localeName)) {
+                        allLocales.Add(localeName);
+                    }
+                    return true;
+                };
+
+                EnumSystemLocalesEx(callback, 0x00000001 /* LOCALE_WINDOWS */, IntPtr.Zero, IntPtr.Zero);
+
+                var filtered = new List<string>();
+                foreach (var loc in allLocales) {
+                    if (string.IsNullOrEmpty(filter) || loc.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0) {
+                        filtered.Add(loc);
+                    }
+                }
+
+                int totalCount = filtered.Count;
+                if (limit > 0 && filtered.Count > limit) {
+                    filtered = filtered.GetRange(0, limit);
+                }
+
+                var localeItems = new List<string>();
+                foreach (var loc in filtered) {
+                    string engName = QueryLocaleString(loc, LOCALE_SENGLISHDISPLAYNAME);
+                    string natName = QueryLocaleString(loc, LOCALE_SNATIVEDISPLAYNAME);
+                    string isoLang = QueryLocaleString(loc, LOCALE_SISO639LANGNAME);
+                    string isoCtry = QueryLocaleString(loc, LOCALE_SISO3166CTRYNAME);
+
+                    var sbItem = new StringBuilder();
+                    sbItem.Append("{");
+                    sbItem.AppendFormat("\"name\": \"{0}\", ", EscapeJson(loc));
+                    sbItem.AppendFormat("\"englishDisplayName\": \"{0}\", ", EscapeJson(engName));
+                    sbItem.AppendFormat("\"nativeDisplayName\": \"{0}\", ", EscapeJson(natName));
+                    sbItem.AppendFormat("\"iso639Lang\": \"{0}\", ", EscapeJson(isoLang));
+                    sbItem.AppendFormat("\"iso3166Country\": \"{0}\", ", EscapeJson(isoCtry));
+                    sbItem.AppendFormat("\"isUserDefault\": {0}, ", string.Equals(loc, userDefault, StringComparison.OrdinalIgnoreCase) ? "true" : "false");
+                    sbItem.AppendFormat("\"isSystemDefault\": {0}", string.Equals(loc, sysDefault, StringComparison.OrdinalIgnoreCase) ? "true" : "false");
+
+                    if (detailed) {
+                        string engLang = QueryLocaleString(loc, LOCALE_SENGLISHLANGUAGENAME);
+                        string engCtry = QueryLocaleString(loc, LOCALE_SENGLISHCOUNTRYNAME);
+                        string natLang = QueryLocaleString(loc, LOCALE_SNATIVELANGUAGENAME);
+                        string natCtry = QueryLocaleString(loc, LOCALE_SNATIVECTRYNAME);
+                        string currency = QueryLocaleString(loc, LOCALE_SCURRENCY);
+                        string shortDate = QueryLocaleString(loc, LOCALE_SSHORTDATE);
+                        string timeFormat = QueryLocaleString(loc, LOCALE_STIMEFORMAT);
+                        string decimalSep = QueryLocaleString(loc, LOCALE_SDECIMAL);
+                        string firstDay = QueryLocaleString(loc, LOCALE_IFIRSTDAYOFWEEK);
+
+                        sbItem.AppendFormat(", \"englishLanguage\": \"{0}\"", EscapeJson(engLang));
+                        sbItem.AppendFormat(", \"englishCountry\": \"{0}\"", EscapeJson(engCtry));
+                        sbItem.AppendFormat(", \"nativeLanguage\": \"{0}\"", EscapeJson(natLang));
+                        sbItem.AppendFormat(", \"nativeCountry\": \"{0}\"", EscapeJson(natCtry));
+                        sbItem.AppendFormat(", \"currencySymbol\": \"{0}\"", EscapeJson(currency));
+                        sbItem.AppendFormat(", \"shortDateFormat\": \"{0}\"", EscapeJson(shortDate));
+                        sbItem.AppendFormat(", \"timeFormat\": \"{0}\"", EscapeJson(timeFormat));
+                        sbItem.AppendFormat(", \"decimalSeparator\": \"{0}\"", EscapeJson(decimalSep));
+                        sbItem.AppendFormat(", \"firstDayOfWeek\": \"{0}\"", EscapeJson(firstDay));
+                    }
+                    sbItem.Append("}");
+                    localeItems.Add(sbItem.ToString());
+                }
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.AppendFormat("\"userDefaultLocale\": \"{0}\", ", EscapeJson(userDefault));
+                sbOut.AppendFormat("\"systemDefaultLocale\": \"{0}\", ", EscapeJson(sysDefault));
+                sbOut.AppendFormat("\"userDefaultLCID\": {0}, ", userLcid);
+                sbOut.AppendFormat("\"systemDefaultLCID\": {0}, ", sysLcid);
+                sbOut.AppendFormat("\"totalMatched\": {0}, ", totalCount);
+                sbOut.AppendFormat("\"count\": {0}, ", localeItems.Count);
+                sbOut.Append("\"locales\": [");
+                for (int i = 0; i < localeItems.Count; i++) {
+                    if (i > 0) sbOut.Append(", ");
+                    sbOut.Append(localeItems[i]);
+                }
+                sbOut.Append("]}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void IntlCodePagesCmd(string cpQuery) {
+            try {
+                uint acp = GetACP();
+                uint oemcp = GetOEMCP();
+
+                var cpList = new List<uint>();
+                if (!string.IsNullOrEmpty(cpQuery)) {
+                    string[] parts = cpQuery.Split(new char[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (var p in parts) {
+                        uint cpId;
+                        if (uint.TryParse(p.Trim(), out cpId)) {
+                            cpList.Add(cpId);
+                        }
+                    }
+                }
+
+                if (cpList.Count == 0) {
+                    uint[] defaults = new uint[] { acp, oemcp, 65001, 1252, 437, 1200, 1201, 28591, 932, 936, 949, 950 };
+                    var set = new HashSet<uint>();
+                    foreach (var c in defaults) {
+                        if (!set.Contains(c) && IsValidCodePage(c)) {
+                            set.Add(c);
+                            cpList.Add(c);
+                        }
+                    }
+                }
+
+                var items = new List<string>();
+                foreach (var cp in cpList) {
+                    bool isValid = IsValidCodePage(cp);
+                    CPINFOEXW info = new CPINFOEXW();
+                    bool gotInfo = false;
+                    if (isValid) {
+                        try {
+                            gotInfo = GetCPInfoExW(cp, 0, out info);
+                        } catch {}
+                    }
+
+                    var sbItem = new StringBuilder();
+                    sbItem.Append("{");
+                    sbItem.AppendFormat("\"codePage\": {0}, ", cp);
+                    sbItem.AppendFormat("\"isValid\": {0}, ", isValid ? "true" : "false");
+                    sbItem.AppendFormat("\"isACP\": {0}, ", (cp == acp) ? "true" : "false");
+                    sbItem.AppendFormat("\"isOEMCP\": {0}", (cp == oemcp) ? "true" : "false");
+
+                    if (gotInfo) {
+                        string name = (info.CodePageName ?? "").Trim();
+                        sbItem.AppendFormat(", \"name\": \"{0}\"", EscapeJson(name));
+                        sbItem.AppendFormat(", \"maxCharSize\": {0}", info.MaxCharSize);
+                        sbItem.AppendFormat(", \"unicodeDefaultChar\": \"{0}\"", EscapeJson(info.UnicodeDefaultChar.ToString()));
+
+                        var leadBytes = new List<string>();
+                        if (info.LeadByte != null) {
+                            for (int b = 0; b < info.LeadByte.Length - 1; b += 2) {
+                                if (info.LeadByte[b] == 0 && info.LeadByte[b + 1] == 0) break;
+                                leadBytes.Add(string.Format("\"{0:X2}-{1:X2}\"", info.LeadByte[b], info.LeadByte[b + 1]));
+                            }
+                        }
+                        sbItem.AppendFormat(", \"leadBytes\": [{0}]", string.Join(", ", leadBytes.ToArray()));
+                    }
+                    sbItem.Append("}");
+                    items.Add(sbItem.ToString());
+                }
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.AppendFormat("\"ansiCodePage\": {0}, ", acp);
+                sbOut.AppendFormat("\"oemCodePage\": {0}, ", oemcp);
+                sbOut.AppendFormat("\"count\": {0}, ", items.Count);
+                sbOut.Append("\"codePages\": [");
+                for (int i = 0; i < items.Count; i++) {
+                    if (i > 0) sbOut.Append(", ");
+                    sbOut.Append(items[i]);
+                }
+                sbOut.Append("]}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static List<string> ParseMuiLanguages(char[] buffer, uint charCount) {
+            var list = new List<string>();
+            if (buffer == null || charCount == 0) return list;
+            int start = 0;
+            for (int i = 0; i < charCount; i++) {
+                if (buffer[i] == '\0') {
+                    if (i > start) {
+                        list.Add(new string(buffer, start, i - start));
+                    }
+                    start = i + 1;
+                }
+            }
+            return list;
+        }
+
+        static void IntlUiLanguagesCmd() {
+            try {
+                const uint MUI_LANGUAGE_NAME = 0x8;
+                uint sysCount = 0;
+                uint sysChars = 0;
+                GetSystemPreferredUILanguages(MUI_LANGUAGE_NAME, out sysCount, null, ref sysChars);
+                var sysLangs = new List<string>();
+                if (sysChars > 0) {
+                    char[] buf = new char[sysChars];
+                    if (GetSystemPreferredUILanguages(MUI_LANGUAGE_NAME, out sysCount, buf, ref sysChars)) {
+                        sysLangs = ParseMuiLanguages(buf, sysChars);
+                    }
+                }
+
+                uint userCount = 0;
+                uint userChars = 0;
+                GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, out userCount, null, ref userChars);
+                var userLangs = new List<string>();
+                if (userChars > 0) {
+                    char[] buf = new char[userChars];
+                    if (GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, out userCount, buf, ref userChars)) {
+                        userLangs = ParseMuiLanguages(buf, userChars);
+                    }
+                }
+
+                uint threadCount = 0;
+                uint threadChars = 0;
+                GetThreadPreferredUILanguages(MUI_LANGUAGE_NAME, out threadCount, null, ref threadChars);
+                var threadLangs = new List<string>();
+                if (threadChars > 0) {
+                    char[] buf = new char[threadChars];
+                    if (GetThreadPreferredUILanguages(MUI_LANGUAGE_NAME, out threadCount, buf, ref threadChars)) {
+                        threadLangs = ParseMuiLanguages(buf, threadChars);
+                    }
+                }
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.Append("\"systemPreferredLanguages\": [");
+                for (int i = 0; i < sysLangs.Count; i++) {
+                    if (i > 0) sbOut.Append(", ");
+                    sbOut.AppendFormat("\"{0}\"", EscapeJson(sysLangs[i]));
+                }
+                sbOut.Append("], ");
+
+                sbOut.Append("\"userPreferredLanguages\": [");
+                for (int i = 0; i < userLangs.Count; i++) {
+                    if (i > 0) sbOut.Append(", ");
+                    sbOut.AppendFormat("\"{0}\"", EscapeJson(userLangs[i]));
+                }
+                sbOut.Append("], ");
+
+                sbOut.Append("\"threadPreferredLanguages\": [");
+                for (int i = 0; i < threadLangs.Count; i++) {
+                    if (i > 0) sbOut.Append(", ");
+                    sbOut.AppendFormat("\"{0}\"", EscapeJson(threadLangs[i]));
+                }
+                sbOut.Append("]}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -12876,6 +13251,17 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "spooler_default_printer" || cmd == "spooler-default-printer" || cmd == "default_printer") {
                 string newDefault = args.Length >= 2 ? args[1] : null;
                 SpoolerDefaultPrinterCmd(newDefault);
+            } else if (cmd == "intl_locales" || cmd == "locales" || cmd == "nls_locales") {
+                string filter = args.Length >= 2 ? args[1] : "";
+                int limit = 50;
+                if (args.Length >= 3 && !string.IsNullOrEmpty(args[2])) int.TryParse(args[2], out limit);
+                bool detailed = args.Length >= 4 ? (args[3].ToLowerInvariant() == "true" || args[3] == "1") : false;
+                IntlLocalesCmd(filter, limit, detailed);
+            } else if (cmd == "intl_codepages" || cmd == "codepages" || cmd == "nls_codepages") {
+                string query = args.Length >= 2 ? args[1] : "";
+                IntlCodePagesCmd(query);
+            } else if (cmd == "intl_ui_languages" || cmd == "ui_languages" || cmd == "preferred_languages") {
+                IntlUiLanguagesCmd();
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

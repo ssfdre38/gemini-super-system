@@ -3300,10 +3300,76 @@ async function run() {
     assert(typeof res.defaultPrinter === "string" && res.defaultPrinter.length > 0);
   });
 
-  it("All 160 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n=======================================================");
+  console.log("   SUITE 46: Windows National Language Support & Locales (winnls.h / kernel32.dll)");
+  console.log("=======================================================\n");
+
+  await itAsync("super_intl_locales enumerates system locales and decodes regional formats", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getIntlLocales({ filter: "en", limit: 5, detailed: true });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getIntlLocales failed: " + JSON.stringify(res));
+    assert(typeof res.userDefaultLocale === "string" && res.userDefaultLocale.length > 0);
+    assert(typeof res.systemDefaultLocale === "string" && res.systemDefaultLocale.length > 0);
+    assert(typeof res.userDefaultLCID === "number" && res.userDefaultLCID > 0);
+    assert(typeof res.systemDefaultLCID === "number" && res.systemDefaultLCID > 0);
+    assert(typeof res.totalMatched === "number" && res.totalMatched > 0);
+    assert(Array.isArray(res.locales) && res.locales.length > 0);
+
+    const loc0 = res.locales[0];
+    assert(typeof loc0.name === "string" && loc0.name.length > 0);
+    assert(typeof loc0.englishDisplayName === "string");
+    assert(typeof loc0.nativeDisplayName === "string");
+    assert(typeof loc0.iso639Lang === "string");
+    assert(typeof loc0.iso3166Country === "string");
+    assert(typeof loc0.isUserDefault === "boolean");
+    assert(typeof loc0.isSystemDefault === "boolean");
+    assert(typeof loc0.currencySymbol === "string");
+    assert(typeof loc0.shortDateFormat === "string");
+  });
+
+  await itAsync("super_intl_codepages queries active ANSI/OEM and standard code page descriptors", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getIntlCodePages({ codePages: "65001,1252,437" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getIntlCodePages failed: " + JSON.stringify(res));
+    assert(typeof res.ansiCodePage === "number" && res.ansiCodePage > 0);
+    assert(typeof res.oemCodePage === "number" && res.oemCodePage > 0);
+    assert(Array.isArray(res.codePages) && res.codePages.length >= 3);
+
+    const utf8 = res.codePages.find(c => c.codePage === 65001);
+    assert(utf8, "Code page 65001 (UTF-8) not found");
+    assert.strictEqual(utf8.isValid, true);
+    assert(typeof utf8.name === "string" && utf8.name.includes("UTF-8"));
+    assert.strictEqual(utf8.maxCharSize, 4);
+
+    const cp1252 = res.codePages.find(c => c.codePage === 1252);
+    assert(cp1252, "Code page 1252 not found");
+    assert.strictEqual(cp1252.isValid, true);
+    assert.strictEqual(cp1252.maxCharSize, 1);
+  });
+
+  await itAsync("super_intl_ui_languages queries system, user, and thread UI language preferences", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getIntlUiLanguages();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getIntlUiLanguages failed: " + JSON.stringify(res));
+    assert(Array.isArray(res.systemPreferredLanguages));
+    assert(Array.isArray(res.userPreferredLanguages));
+    assert(Array.isArray(res.threadPreferredLanguages));
+    assert(res.systemPreferredLanguages.length > 0 || res.userPreferredLanguages.length > 0);
+  });
+
+  it("All 163 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 160);
+    assert.strictEqual(SYSTEM_TOOLS.length, 163);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3397,6 +3463,9 @@ async function run() {
     assert(toolNames.includes("super_spooler_printers"));
     assert(toolNames.includes("super_spooler_jobs"));
     assert(toolNames.includes("super_spooler_default_printer"));
+    assert(toolNames.includes("super_intl_locales"));
+    assert(toolNames.includes("super_intl_codepages"));
+    assert(toolNames.includes("super_intl_ui_languages"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

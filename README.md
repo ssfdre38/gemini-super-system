@@ -76,6 +76,7 @@
   - [58. Windows Data Protection API Subsystem](#58-️-windows-data-protection-api-dpapi-subsystem-dpapih--crypt32dll)
   - [59. Windows File System Volume & Storage Mount Management Subsystem](#59--windows-file-system-volume--storage-mount-management-subsystem-fileapih--winioctlh--kernel32dll)
   - [60. Windows Print Spooler Subsystem](#60--windows-print-spooler-subsystem-winspooldrv--winspoolh)
+  - [61. Windows National Language Support & Internationalization Subsystem](#61--windows-national-language-support--internationalization-subsystem-winnlsh--kernel32dll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -819,6 +820,17 @@ Directly queries, manages, and interacts with the Windows Print Spooler architec
 - **Default Printer Configuration & System Routing (`super_spooler_default_printer`)**: Queries or dynamically switches the system's default printer using native `GetDefaultPrinterW` and `SetDefaultPrinterW`. Enables autonomous agents to inspect the current output destination or route printing workflows to specific physical or virtual output targets without user intervention or registry tampering.
 - **160 Tools Milestone**: Reaches **160 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **45 comprehensive test suites (144/144 tests passing)** and **41 environment health checks**.
 - **Native MCP Tools**: `super_spooler_printers`, `super_spooler_jobs`, `super_spooler_default_printer`.
+
+---
+
+## 61. 🌐 Windows National Language Support & Internationalization Subsystem (`winnls.h` / `kernel32.dll`)
+
+Directly queries, inspects, and navigates the Windows National Language Support (NLS) subsystem, system/user locales, regional formatting standards, ANSI/OEM and multilingual code pages, and preferred UI languages via native `kernel32.dll` P/Invoke:
+- **Comprehensive System Locale Discovery & Regional Format Decoding (`super_intl_locales`)**: Directly calls native `EnumSystemLocalesEx` (`LOCALE_WINDOWS`), `GetUserDefaultLocaleName`, `GetSystemDefaultLocaleName`, `GetUserDefaultLCID`, `GetSystemDefaultLCID`, and `GetLocaleInfoEx`. Indexes over 900 supported system locales. Decodes ISO 639-1 language tags, ISO 3166-1 country codes, English display names, native localized display names, and detailed regional metrics including currency symbols, short date patterns, time formats, decimal separators, first day of the week, and native language/country names. Supports flexible substring filtering and count limiting.
+- **Active & Standard Windows Code Page Interrogation (`super_intl_codepages`)**: Invokes native `GetACP` (active ANSI code page), `GetOEMCP` (active OEM code page), `IsValidCodePage`, and `GetCPInfoExW`. Inspects system and standard code pages (e.g. `65001 (UTF-8)`, `1252 (ANSI Latin I)`, `437 (OEM United States)`, `932 (Shift-JIS)`, `936 (GBK)`, `949 (Korean)`, `950 (Big5)`, `1200 (UTF-16LE)`), returning maximum character byte widths (SBCS/DBCS/UTF-8), default replacement characters, and multi-byte lead byte range boundaries.
+- **System & User Preferred UI Display Language Preferences (`super_intl_ui_languages`)**: Interrogates Windows Multilingual User Interface (MUI) architecture via native `GetSystemPreferredUILanguages`, `GetUserPreferredUILanguages`, and `GetThreadPreferredUILanguages` (`MUI_LANGUAGE_NAME`). Retrieves ordered language preference arrays (e.g. `["en-US"]`) for multilingual awareness, internationalization, and natural cross-language rendering without third-party translation dependencies.
+- **163 Tools Milestone**: Reaches **163 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **46 comprehensive test suites (147/147 tests passing)** and **42 environment health checks**.
+- **Native MCP Tools**: `super_intl_locales`, `super_intl_codepages`, `super_intl_ui_languages`.
 
 ---
 
