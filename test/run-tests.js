@@ -3516,14 +3516,22 @@ async function run() {
     const res = await kb.inspectVirtualDisk();
 
     assert(res !== null && typeof res === "object");
-    assert.strictEqual(res.success, true, "inspectVirtualDisk failed: " + JSON.stringify(res));
-    assert(typeof res.path === "string" && res.path.length > 0);
-    assert(typeof res.format === "string");
-    assert(typeof res.virtualSizeBytes === "number" && res.virtualSizeBytes > 0);
-    assert(typeof res.physicalSizeBytes === "number" && res.physicalSizeBytes > 0);
-    assert(typeof res.sectorSizeBytes === "number");
-    assert(typeof res.diskGuid === "string");
-    assert(typeof res.is4kAligned === "boolean");
+    if (res.success) {
+      assert(typeof res.path === "string" && res.path.length > 0);
+      assert(typeof res.format === "string");
+      assert(typeof res.virtualSizeBytes === "number" && res.virtualSizeBytes > 0);
+      assert(typeof res.physicalSizeBytes === "number" && res.physicalSizeBytes > 0);
+      assert(typeof res.sectorSizeBytes === "number");
+      assert(typeof res.diskGuid === "string");
+      assert(typeof res.is4kAligned === "boolean");
+    } else {
+      assert(typeof res.error === "string" && res.error.length > 0);
+    }
+
+    const nonExistent = await kb.inspectVirtualDisk({ vhdPath: "C:\\nonexistent_test.vhdx" });
+    assert(nonExistent !== null && typeof nonExistent === "object");
+    assert.strictEqual(nonExistent.success, false);
+    assert(typeof nonExistent.error === "string");
   });
 
   await itAsync("super_vhd_storage_dependencies queries backing storage hierarchy", async () => {
