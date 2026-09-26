@@ -2882,6 +2882,51 @@ const SYSTEM_TOOLS = [
           },
           required: ["message"]
         }
+      },
+      {
+        name: "super_psapi_performance",
+        description: "Retrieves global Windows operating system performance telemetry via GetPerformanceInfo (psapi.h / psapi.dll). Extracts exact commit charge (total, limit, peak), physical RAM, system cache, kernel paged/nonpaged memory pools, and global system handle, process, and thread counts.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_psapi_device_drivers",
+        description: "Enumerates all kernel-mode device drivers loaded in system address space via EnumDeviceDrivers, GetDeviceDriverBaseNameW, and GetDeviceDriverFileNameW (psapi.h / psapi.dll). Returns 64-bit kernel load base addresses, driver base names, and system file paths.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              description: "Optional case-insensitive search term to filter driver base name or system file path."
+            },
+            limit: {
+              type: "number",
+              default: 100,
+              description: "Maximum number of driver entries to return (default: 100, max: 500)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_psapi_process_memory",
+        description: "Performs deep process memory inspection and memory-mapped file auditing via GetProcessMemoryInfo and GetMappedFileNameW (psapi.h / psapi.dll). Returns working set, peak working set, private bytes, paged/nonpaged pool quotas, page faults, and enumerates all mapped files, binaries, and DLLs in the process address space.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            processId: {
+              type: "number",
+              default: 0,
+              description: "Target process ID (0 or omitted for the current host process)."
+            },
+            includeMappedFiles: {
+              type: "boolean",
+              default: true,
+              description: "Whether to scan virtual memory regions and resolve mapped file and DLL image paths via GetMappedFileNameW (default: true)."
+            }
+          }
+        }
       }
 ];
 
@@ -5178,6 +5223,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🖥️ [Windows Terminal Services Message Actuator]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_psapi_performance") {
+    const res = await orch.getPsapiPerformance(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📊 [Windows OS Performance Telemetry (PSAPI)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_psapi_device_drivers") {
+    const res = await orch.getPsapiDeviceDrivers(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [Kernel-Mode Device Drivers (PSAPI)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_psapi_process_memory") {
+    const res = await orch.getPsapiProcessMemory(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🧠 [Process Memory Counters & Mapped Files (PSAPI)]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

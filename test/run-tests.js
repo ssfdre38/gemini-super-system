@@ -2926,10 +2926,71 @@ async function run() {
     assert.strictEqual(res.wait, false);
   });
 
-  it("All 142 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 40: Windows Process Status Subsystem (psapi.h / psapi.dll)
+  console.log("\n=======================================================");
+  console.log("   SUITE 40: Windows Process Status Subsystem (PSAPI)");
+  console.log("=======================================================\n");
+
+  await itAsync("super_psapi_performance queries global commit charge, physical memory, and system handle counts", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const bridge = getKernelBridge();
+    const res = await bridge.getPsapiPerformance();
+
+    assert(res, "Result should exist");
+    assert.strictEqual(res.success, true);
+    assert(res.pageSize > 0, "Page size should be > 0");
+    assert(res.commitTotalBytes > 0, "Commit total bytes should be > 0");
+    assert(res.commitLimitBytes > 0, "Commit limit bytes should be > 0");
+    assert(typeof res.commitUsagePercent === "number", "Commit usage % should be number");
+    assert(res.physicalTotalBytes > 0, "Physical total bytes should be > 0");
+    assert(res.physicalAvailableBytes > 0, "Physical available bytes should be > 0");
+    assert(res.kernelTotalBytes > 0, "Kernel total bytes should be > 0");
+    assert(res.kernelPagedBytes > 0, "Kernel paged bytes should be > 0");
+    assert(res.kernelNonpagedBytes > 0, "Kernel non-paged bytes should be > 0");
+    assert(res.handlesCount > 0, "System handle count should be > 0");
+    assert(res.processesCount > 0, "Process count should be > 0");
+    assert(res.threadsCount > 0, "Thread count should be > 0");
+  });
+
+  await itAsync("super_psapi_device_drivers enumerates kernel-mode drivers and resolves image base addresses", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const bridge = getKernelBridge();
+    const res = await bridge.getPsapiDeviceDrivers({ limit: 10 });
+
+    assert(res, "Result should exist");
+    assert.strictEqual(res.success, true);
+    assert(res.totalDriversCount > 0, "Should detect at least one kernel driver");
+    assert(Array.isArray(res.drivers), "Drivers should be array");
+    assert(res.drivers.length > 0, "Should return at least one driver");
+
+    const sample = res.drivers[0];
+    assert(sample.baseAddress, "Driver should have 64-bit baseAddress");
+    assert(sample.baseName, "Driver should have baseName");
+    assert(typeof sample.fileName === "string", "Driver should have fileName path");
+  });
+
+  await itAsync("super_psapi_process_memory retrieves working set, private bytes, and audits mapped files and DLLs", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const bridge = getKernelBridge();
+    const res = await bridge.getPsapiProcessMemory({ processId: 0, includeMappedFiles: true });
+
+    assert(res, "Result should exist");
+    assert.strictEqual(res.success, true);
+    assert(res.processId > 0, "Process ID should be > 0");
+    assert(res.processName, "Process name should be present");
+    assert(res.workingSetBytes > 0, "Working set bytes should be > 0");
+    assert(res.peakWorkingSetBytes > 0, "Peak working set bytes should be > 0");
+    assert(res.pageFaultCount > 0, "Page fault count should be > 0");
+    assert(res.pagefileUsageBytes > 0, "Pagefile usage bytes should be > 0");
+    assert(typeof res.mappedFilesCount === "number", "Mapped files count should be number");
+    assert(Array.isArray(res.mappedFiles), "Mapped files should be array");
+    assert(res.mappedFiles.length > 0, "Should discover mapped modules/files for host process");
+  });
+
+  it("All 145 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 142);
+    assert.strictEqual(SYSTEM_TOOLS.length, 145);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3005,6 +3066,9 @@ async function run() {
     assert(toolNames.includes("super_wts_sessions"));
     assert(toolNames.includes("super_wts_processes"));
     assert(toolNames.includes("super_wts_session_message"));
+    assert(toolNames.includes("super_psapi_performance"));
+    assert(toolNames.includes("super_psapi_device_drivers"));
+    assert(toolNames.includes("super_psapi_process_memory"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

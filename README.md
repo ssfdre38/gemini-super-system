@@ -70,6 +70,7 @@
   - [52. Windows Virtual Memory, Heap Allocations & Working Set Subsystem](#52--windows-virtual-memory-heap-allocations--working-set-subsystem-memoryapih--heapapih)
   - [53. Windows Console Subsystem, Screen Buffer & Terminal Mode Actuator](#53--windows-console-subsystem-screen-buffer--terminal-mode-actuator-winconh--consoleapih)
   - [54. Windows Terminal Services & Remote Desktop Subsystem](#54-️-windows-terminal-services--remote-desktop-subsystem-wtsapi32h--wtsapi32dll)
+  - [55. Windows Process Status, Kernel Driver Table & Performance Subsystem](#55--windows-process-status-kernel-driver-table--performance-subsystem-psapih--psapidll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -209,7 +210,7 @@ Antigravity scrolled the chat via physical mouse wheel inputs, clicked the input
 
 ---
 
-## 🧰 MCP Tool Reference (142 Sovereign Tools)
+## 🧰 MCP Tool Reference (145 Sovereign Tools)
 
 All tools are exposed natively over stdio to Antigravity, Gemini CLI, and any MCP-compliant client:
 
@@ -747,6 +748,17 @@ Directly enumerates, inspects, and notifies Windows Terminal Services (WTS) logo
 - **Desktop Session Notification & User Broadcast (`super_wts_session_message`)**: Dispatches native Windows message boxes to specific interactive sessions via `WTSSendMessageW`. Allows sending operational alerts, emergency warnings, or human-in-the-loop prompts across session boundaries with configurable buttons (`OK`, `YesNo`, `RetryCancel`), icons (`Information`, `Warning`, `Error`), and timeouts without blocking the background event loop.
 - **142 Tools Milestone**: Reaches **142 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **39 comprehensive test suites (128/128 tests passing)** and **35 environment health checks**.
 - **Native MCP Tools**: `super_wts_sessions`, `super_wts_processes`, `super_wts_session_message`.
+
+---
+
+## 55. 📊 Windows Process Status, Kernel Driver Table & Performance Subsystem (`psapi.h` / `psapi.dll`)
+
+Directly queries system-wide operating system performance metrics, enumerates kernel-mode device drivers, and performs deep virtual memory mapped-file auditing via native Win32 Process Status API (`psapi.dll`):
+- **Windows OS System Performance Telemetry (`super_psapi_performance`)**: Directly invokes `GetPerformanceInfo` from `psapi.dll`. Extracts exact system commit charge (`CommitTotal`, `CommitLimit`, `CommitPeak`, and percentage usage), physical RAM available vs total, system file cache, kernel memory pools (`KernelTotal`, `KernelPaged`, `KernelNonpaged`), system page size, and global OS object counters (open handles, active processes, and threads count) in sub-millisecond execution.
+- **Kernel-Mode Device Driver Enumeration (`super_psapi_device_drivers`)**: Invokes native `EnumDeviceDrivers`, `GetDeviceDriverBaseNameW`, and `GetDeviceDriverFileNameW`. Directly enumerates all device drivers loaded into system/kernel address space, mapping 64-bit kernel load base addresses (e.g. `0xFFFFF801...`), driver base names (e.g. `ntoskrnl.exe`, `hal.dll`, `fltmgr.sys`, `tcpip.sys`, `cng.sys`), and kernel image file paths with case-insensitive filtering.
+- **Process Memory Counters & Memory-Mapped File Audit (`super_psapi_process_memory`)**: Calls `GetProcessMemoryInfo` (`PROCESS_MEMORY_COUNTERS_EX`) and walks process virtual address spaces via `VirtualQueryEx` coupled with `GetMappedFileNameW`. Extracts working set, peak working set, private bytes, paged and non-paged pool quotas, page fault counts, and resolves the exact filesystem and NT device paths of all memory-mapped files, section objects, and loaded DLL modules.
+- **145 Tools Milestone**: Reaches **145 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **40 comprehensive test suites (132/132 tests passing)** and **36 environment health checks**.
+- **Native MCP Tools**: `super_psapi_performance`, `super_psapi_device_drivers`, `super_psapi_process_memory`.
 
 ---
 

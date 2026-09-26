@@ -7942,6 +7942,212 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Phase 21: Windows Process Status Subsystem (Windows.Win32.System.ProcessStatus / psapi.h / psapi.dll)
+
+        [DllImport("psapi.dll", SetLastError = true)]
+        static extern bool EnumDeviceDrivers([Out] IntPtr[] lpImageBase, uint cb, out uint lpcbNeeded);
+
+        [DllImport("psapi.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint GetDeviceDriverBaseNameW(IntPtr ImageBase, StringBuilder lpBaseName, uint nSize);
+
+        [DllImport("psapi.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint GetDeviceDriverFileNameW(IntPtr ImageBase, StringBuilder lpFilename, uint nSize);
+
+        [DllImport("psapi.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint GetMappedFileNameW(IntPtr hProcess, IntPtr lpv, StringBuilder lpFilename, uint nSize);
+
+        static void PsapiPerformanceCmd() {
+            try {
+                PERFORMANCE_INFORMATION pi = new PERFORMANCE_INFORMATION();
+                pi.cb = (uint)Marshal.SizeOf(typeof(PERFORMANCE_INFORMATION));
+                if (!GetPerformanceInfo(out pi, pi.cb)) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"GetPerformanceInfo failed with error {0}\"}}", err));
+                    return;
+                }
+
+                long pageSize = (long)pi.PageSize.ToUInt64();
+                long commitTotal = (long)pi.CommitTotal.ToUInt64() * pageSize;
+                long commitLimit = (long)pi.CommitLimit.ToUInt64() * pageSize;
+                long commitPeak = (long)pi.CommitPeak.ToUInt64() * pageSize;
+                double commitPct = commitLimit > 0 ? Math.Round((double)commitTotal / commitLimit * 100.0, 2) : 0;
+
+                long physTotal = (long)pi.PhysicalTotal.ToUInt64() * pageSize;
+                long physAvail = (long)pi.PhysicalAvailable.ToUInt64() * pageSize;
+                long physUsed = physTotal - physAvail;
+                double physPct = physTotal > 0 ? Math.Round((double)physUsed / physTotal * 100.0, 2) : 0;
+
+                long sysCache = (long)pi.SystemCache.ToUInt64() * pageSize;
+                long kernTotal = (long)pi.KernelTotal.ToUInt64() * pageSize;
+                long kernPaged = (long)pi.KernelPaged.ToUInt64() * pageSize;
+                long kernNonpaged = (long)pi.KernelNonpaged.ToUInt64() * pageSize;
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"pageSize\": {0}, \"commitTotalBytes\": {1}, \"commitLimitBytes\": {2}, \"commitPeakBytes\": {3}, \"commitUsagePercent\": {4}, \"physicalTotalBytes\": {5}, \"physicalAvailableBytes\": {6}, \"physicalUsedBytes\": {7}, \"physicalUsagePercent\": {8}, \"systemCacheBytes\": {9}, \"kernelTotalBytes\": {10}, \"kernelPagedBytes\": {11}, \"kernelNonpagedBytes\": {12}, \"handlesCount\": {13}, \"processesCount\": {14}, \"threadsCount\": {15}}}",
+                    pageSize, commitTotal, commitLimit, commitPeak, commitPct,
+                    physTotal, physAvail, physUsed, physPct,
+                    sysCache, kernTotal, kernPaged, kernNonpaged,
+                    pi.HandleCount, pi.ProcessCount, pi.ThreadCount
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void PsapiDeviceDriversCmd(string filter, int limit) {
+            try {
+                uint bytesNeeded = 0;
+                EnumDeviceDrivers(null, 0, out bytesNeeded);
+                if (bytesNeeded == 0) bytesNeeded = 4096;
+
+                int count = (int)(bytesNeeded / (uint)IntPtr.Size);
+                if (count < 1024) count = 1024;
+                IntPtr[] bases = new IntPtr[count];
+
+                if (!EnumDeviceDrivers(bases, (uint)(bases.Length * IntPtr.Size), out bytesNeeded)) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"EnumDeviceDrivers failed with error {0}\"}}", err));
+                    return;
+                }
+
+                int totalCount = (int)(bytesNeeded / (uint)IntPtr.Size);
+                string filterLower = (filter ?? "").Trim().ToLowerInvariant();
+                int maxEntries = limit <= 0 ? 100 : Math.Min(limit, 500);
+
+                var driverItems = new List<string>();
+                int matched = 0;
+                StringBuilder sbName = new StringBuilder(512);
+                StringBuilder sbPath = new StringBuilder(1024);
+
+                for (int i = 0; i < totalCount; i++) {
+                    IntPtr baseAddr = bases[i];
+                    if (baseAddr == IntPtr.Zero) continue;
+
+                    sbName.Length = 0;
+                    GetDeviceDriverBaseNameW(baseAddr, sbName, (uint)sbName.Capacity);
+                    string baseName = sbName.ToString();
+
+                    sbPath.Length = 0;
+                    GetDeviceDriverFileNameW(baseAddr, sbPath, (uint)sbPath.Capacity);
+                    string fileName = sbPath.ToString();
+
+                    bool matches = true;
+                    if (!string.IsNullOrEmpty(filterLower)) {
+                        matches = (baseName.ToLowerInvariant().Contains(filterLower) || fileName.ToLowerInvariant().Contains(filterLower));
+                    }
+
+                    if (matches) {
+                        matched++;
+                        if (driverItems.Count < maxEntries) {
+                            driverItems.Add(string.Format(
+                                "{{\"baseAddress\": \"0x{0:X}\", \"baseName\": \"{1}\", \"fileName\": \"{2}\"}}",
+                                baseAddr.ToInt64(), EscapeJson(baseName), EscapeJson(fileName)
+                            ));
+                        }
+                    }
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"totalDriversCount\": {0}, \"matchedCount\": {1}, \"returnedCount\": {2}, \"drivers\": [{3}]}}",
+                    totalCount, matched, driverItems.Count, string.Join(", ", driverItems.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void PsapiProcessMemoryCmd(int targetPid, bool includeMappedFiles) {
+            try {
+                int pid = targetPid <= 0 ? Process.GetCurrentProcess().Id : targetPid;
+                string procName = "";
+                try {
+                    procName = Process.GetProcessById(pid).ProcessName;
+                } catch {
+                    procName = "PID_" + pid;
+                }
+
+                IntPtr hProcess = OpenProcess(0x0400 | 0x0010 /* PROCESS_QUERY_INFORMATION | PROCESS_VM_READ */, false, (uint)pid);
+                if (hProcess == IntPtr.Zero) {
+                    hProcess = OpenProcess(0x1000 /* PROCESS_QUERY_LIMITED_INFORMATION */, false, (uint)pid);
+                }
+
+                if (hProcess == IntPtr.Zero) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"processId\": {0}, \"processName\": \"{1}\", \"error\": \"OpenProcess failed with error {2}\"}}", pid, EscapeJson(procName), err));
+                    return;
+                }
+
+                try {
+                    PROCESS_MEMORY_COUNTERS_EX pmc = new PROCESS_MEMORY_COUNTERS_EX();
+                    pmc.cb = (uint)Marshal.SizeOf(typeof(PROCESS_MEMORY_COUNTERS_EX));
+
+                    if (!GetProcessMemoryInfo(hProcess, out pmc, pmc.cb)) {
+                        int err = Marshal.GetLastWin32Error();
+                        Console.WriteLine(string.Format("{{\"success\": false, \"processId\": {0}, \"processName\": \"{1}\", \"error\": \"GetProcessMemoryInfo failed with error {2}\"}}", pid, EscapeJson(procName), err));
+                        return;
+                    }
+
+                    long workingSet = (long)pmc.WorkingSetSize.ToUInt64();
+                    long peakWorkingSet = (long)pmc.PeakWorkingSetSize.ToUInt64();
+                    long pagedPool = (long)pmc.QuotaPagedPoolUsage.ToUInt64();
+                    long peakPagedPool = (long)pmc.QuotaPeakPagedPoolUsage.ToUInt64();
+                    long nonPagedPool = (long)pmc.QuotaNonPagedPoolUsage.ToUInt64();
+                    long peakNonPagedPool = (long)pmc.QuotaPeakNonPagedPoolUsage.ToUInt64();
+                    long pagefile = (long)pmc.PagefileUsage.ToUInt64();
+                    long peakPagefile = (long)pmc.PeakPagefileUsage.ToUInt64();
+                    long privateUsage = (long)pmc.PrivateUsage.ToUInt64();
+
+                    var mappedFiles = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    var mappedDetails = new List<string>();
+
+                    if (includeMappedFiles) {
+                        MEMORY_BASIC_INFORMATION64 mbi;
+                        int structSize = Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION64));
+                        IntPtr addr = IntPtr.Zero;
+                        StringBuilder sbPath = new StringBuilder(1024);
+
+                        while (VirtualQueryEx(hProcess, addr, out mbi, (uint)structSize) != 0) {
+                            if (mbi.State == 0x1000 && (mbi.Type == 0x40000 /* MEM_MAPPED */ || mbi.Type == 0x1000000 /* MEM_IMAGE */)) {
+                                sbPath.Length = 0;
+                                uint len = GetMappedFileNameW(hProcess, new IntPtr((long)mbi.BaseAddress), sbPath, (uint)sbPath.Capacity);
+                                if (len > 0) {
+                                    string mappedPath = sbPath.ToString();
+                                    if (!string.IsNullOrEmpty(mappedPath) && mappedFiles.Add(mappedPath)) {
+                                        mappedDetails.Add(string.Format(
+                                            "{{\"baseAddress\": \"0x{0:X}\", \"path\": \"{1}\", \"type\": \"{2}\"}}",
+                                            mbi.BaseAddress,
+                                            EscapeJson(mappedPath),
+                                            mbi.Type == 0x1000000 ? "MEM_IMAGE" : "MEM_MAPPED"
+                                        ));
+                                    }
+                                }
+                            }
+
+                            ulong nextAddr = mbi.BaseAddress + mbi.RegionSize;
+                            if (nextAddr <= mbi.BaseAddress || nextAddr >= 0x7FFFFFFEFFFFUL) break;
+                            addr = new IntPtr((long)nextAddr);
+                        }
+                    }
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"processId\": {0}, \"processName\": \"{1}\", \"pageFaultCount\": {2}, \"workingSetBytes\": {3}, \"peakWorkingSetBytes\": {4}, \"pagedPoolBytes\": {5}, \"peakPagedPoolBytes\": {6}, \"nonPagedPoolBytes\": {7}, \"peakNonPagedPoolBytes\": {8}, \"pagefileUsageBytes\": {9}, \"peakPagefileUsageBytes\": {10}, \"privateUsageBytes\": {11}, \"mappedFilesCount\": {12}, \"mappedFiles\": [{13}]}}",
+                        pid, EscapeJson(procName), pmc.PageFaultCount,
+                        workingSet, peakWorkingSet,
+                        pagedPool, peakPagedPool,
+                        nonPagedPool, peakNonPagedPool,
+                        pagefile, peakPagefile, privateUsage,
+                        mappedFiles.Count, string.Join(", ", mappedDetails.ToArray())
+                    ));
+                } finally {
+                    CloseHandle(hProcess);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -10985,6 +11191,18 @@ namespace GeminiSuperDesktop {
                 if (args.Length >= 6 && !string.IsNullOrEmpty(args[5])) uint.TryParse(args[5], out timeout);
                 bool wait = args.Length >= 7 ? (args[6].ToLowerInvariant() == "true" || args[6] == "1") : false;
                 WtsSessionMessageCmd(sId, title, message, style, timeout, wait);
+            } else if (cmd == "psapi_performance" || cmd == "performance_info" || cmd == "perf_info") {
+                PsapiPerformanceCmd();
+            } else if (cmd == "psapi_device_drivers" || cmd == "device_drivers" || cmd == "kernel_device_drivers") {
+                string filter = args.Length >= 2 ? args[1] : "";
+                int limit = 100;
+                if (args.Length >= 3 && !string.IsNullOrEmpty(args[2])) int.TryParse(args[2], out limit);
+                PsapiDeviceDriversCmd(filter, limit);
+            } else if (cmd == "psapi_process_memory" || cmd == "proc_memory" || cmd == "process_memory_info") {
+                int pid = 0;
+                if (args.Length >= 2 && !string.IsNullOrEmpty(args[1])) int.TryParse(args[1], out pid);
+                bool includeMapped = args.Length >= 3 ? (args[2].ToLowerInvariant() != "false" && args[2] != "0") : true;
+                PsapiProcessMemoryCmd(pid, includeMapped);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
