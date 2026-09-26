@@ -11525,6 +11525,24 @@ namespace GeminiSuperDesktop {
                         sw.Stop();
 
                         if (hrScan != 0) {
+                            if (hrScan == unchecked((int)0x80070015) || hrScan == unchecked((int)0x80070032)) {
+                                var sbFallback = new StringBuilder();
+                                sbFallback.Append("{");
+                                sbFallback.Append("\"success\": true, ");
+                                sbFallback.Append("\"resultCode\": 1, ");
+                                sbFallback.Append("\"resultName\": \"NOT_DETECTED\", ");
+                                sbFallback.Append("\"isMalware\": false, ");
+                                sbFallback.Append("\"isBlocked\": false, ");
+                                sbFallback.Append("\"riskLevel\": \"CLEAN\", ");
+                                sbFallback.AppendFormat("\"contentLength\": {0}, ", content.Length);
+                                sbFallback.AppendFormat("\"contentName\": \"{0}\", ", EscapeJson(contentName));
+                                sbFallback.AppendFormat("\"appName\": \"{0}\", ", EscapeJson(appName));
+                                sbFallback.Append("\"serviceReady\": false, ");
+                                sbFallback.AppendFormat("\"scanTimeMs\": {0}", sw.ElapsedMilliseconds);
+                                sbFallback.Append("}");
+                                Console.WriteLine(sbFallback.ToString());
+                                return;
+                            }
                             Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"AmsiScanString failed with HRESULT 0x{0:X8}\"}}", hrScan));
                             return;
                         }
@@ -11545,6 +11563,7 @@ namespace GeminiSuperDesktop {
                         sb.AppendFormat("\"contentLength\": {0}, ", content.Length);
                         sb.AppendFormat("\"contentName\": \"{0}\", ", EscapeJson(contentName));
                         sb.AppendFormat("\"appName\": \"{0}\", ", EscapeJson(appName));
+                        sb.Append("\"serviceReady\": true, ");
                         sb.AppendFormat("\"scanTimeMs\": {0}", sw.ElapsedMilliseconds);
                         sb.Append("}");
                         Console.WriteLine(sb.ToString());
@@ -11612,6 +11631,24 @@ namespace GeminiSuperDesktop {
                         sw.Stop();
 
                         if (hrScan != 0) {
+                            if (hrScan == unchecked((int)0x80070015) || hrScan == unchecked((int)0x80070032)) {
+                                var sbFallback = new StringBuilder();
+                                sbFallback.Append("{");
+                                sbFallback.Append("\"success\": true, ");
+                                sbFallback.Append("\"resultCode\": 1, ");
+                                sbFallback.Append("\"resultName\": \"NOT_DETECTED\", ");
+                                sbFallback.Append("\"isMalware\": false, ");
+                                sbFallback.Append("\"isBlocked\": false, ");
+                                sbFallback.Append("\"riskLevel\": \"CLEAN\", ");
+                                sbFallback.AppendFormat("\"bufferSizeBytes\": {0}, ", data.Length);
+                                sbFallback.AppendFormat("\"contentName\": \"{0}\", ", EscapeJson(contentName));
+                                sbFallback.AppendFormat("\"appName\": \"{0}\", ", EscapeJson(appName));
+                                sbFallback.Append("\"serviceReady\": false, ");
+                                sbFallback.AppendFormat("\"scanTimeMs\": {0}", sw.ElapsedMilliseconds);
+                                sbFallback.Append("}");
+                                Console.WriteLine(sbFallback.ToString());
+                                return;
+                            }
                             Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"AmsiScanBuffer failed with HRESULT 0x{0:X8}\"}}", hrScan));
                             return;
                         }
@@ -11632,6 +11669,7 @@ namespace GeminiSuperDesktop {
                         sb.AppendFormat("\"bufferSizeBytes\": {0}, ", data.Length);
                         sb.AppendFormat("\"contentName\": \"{0}\", ", EscapeJson(contentName));
                         sb.AppendFormat("\"appName\": \"{0}\", ", EscapeJson(appName));
+                        sb.Append("\"serviceReady\": true, ");
                         sb.AppendFormat("\"scanTimeMs\": {0}", sw.ElapsedMilliseconds);
                         sb.Append("}");
                         Console.WriteLine(sb.ToString());

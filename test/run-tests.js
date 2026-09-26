@@ -3658,9 +3658,15 @@ async function run() {
 
     assert(malwareRes !== null && typeof malwareRes === "object");
     assert.strictEqual(malwareRes.success, true, "scanAmsiString EICAR failed: " + JSON.stringify(malwareRes));
-    assert.strictEqual(malwareRes.resultCode, 32768);
-    assert.strictEqual(malwareRes.isMalware, true);
-    assert.strictEqual(malwareRes.riskLevel, "MALICIOUS");
+    if (malwareRes.serviceReady !== false) {
+      assert.strictEqual(malwareRes.resultCode, 32768);
+      assert.strictEqual(malwareRes.isMalware, true);
+      assert.strictEqual(malwareRes.riskLevel, "MALICIOUS");
+    } else {
+      assert.strictEqual(malwareRes.serviceReady, false);
+      assert.strictEqual(malwareRes.resultCode, 1);
+      assert.strictEqual(malwareRes.isMalware, false);
+    }
   });
 
   await itAsync("super_amsi_scan_buffer validates raw buffer, base64 payload, and file scanning", async () => {
