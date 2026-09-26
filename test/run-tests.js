@@ -2750,10 +2750,68 @@ async function run() {
     }
   });
 
-  it("All 133 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 37: Windows Virtual Memory, Heap Allocations & Working Set Subsystem
+  console.log("\n=======================================================");
+  console.log("   SUITE 37: Windows Virtual Memory & Process Heaps");
+  console.log("=======================================================\n");
+
+  await itAsync("super_memory_virtual_query scans process memory space and decodes page protection attributes", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getMemoryVirtualQuery({ maxRegions: 5, stateFilter: "commit" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.pid === "number");
+    assert(typeof res.regionsSampled === "number");
+    assert(res.regionsSampled > 0);
+    assert(typeof res.totalCommittedMB === "number");
+    assert(Array.isArray(res.regions));
+
+    if (res.regions.length > 0) {
+      const reg = res.regions[0];
+      assert(typeof reg.baseAddress === "string");
+      assert(typeof reg.regionSizeBytes === "number");
+      assert.strictEqual(reg.state, "MEM_COMMIT");
+      assert(typeof reg.protect === "string");
+    }
+  });
+
+  await itAsync("super_memory_heap_summary queries active Win32 heaps and allocation quotas", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getMemoryHeapSummary();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.defaultHeapHandle === "string");
+    assert(typeof res.heapCount === "number");
+    assert(res.heapCount > 0);
+    assert(typeof res.totalAllocatedMB === "number");
+    assert(Array.isArray(res.heaps));
+    assert(res.heaps.length > 0);
+    assert(typeof res.heaps[0].allocatedBytes === "number");
+  });
+
+  await itAsync("super_memory_working_set_tune queries and validates working set quota boundaries", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.tuneMemoryWorkingSet({ emptyWorkingSet: false });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.pid === "number");
+    assert(typeof res.minWorkingSetMB === "number");
+    assert(typeof res.maxWorkingSetMB === "number");
+    assert(typeof res.hardMinEnabled === "boolean");
+    assert(typeof res.hardMaxEnabled === "boolean");
+    assert.strictEqual(res.emptied, false);
+  });
+
+  it("All 136 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 133);
+    assert.strictEqual(SYSTEM_TOOLS.length, 136);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -2820,6 +2878,9 @@ async function run() {
     assert(toolNames.includes("super_net_shares"));
     assert(toolNames.includes("super_net_sessions"));
     assert(toolNames.includes("super_net_accounts"));
+    assert(toolNames.includes("super_memory_virtual_query"));
+    assert(toolNames.includes("super_memory_heap_summary"));
+    assert(toolNames.includes("super_memory_working_set_tune"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

@@ -2680,6 +2680,68 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_memory_virtual_query",
+        description: "Scans and maps the virtual address space and page protections of a process via VirtualQueryEx (memoryapi.h). Analyzes committed, reserved, private, mapped, and image memory regions.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            targetPid: {
+              type: "number",
+              default: 0,
+              description: "Target process ID to inspect (default: 0 for current process)."
+            },
+            maxRegions: {
+              type: "number",
+              default: 50,
+              description: "Maximum memory regions to return (default: 50, range: 1-200)."
+            },
+            stateFilter: {
+              type: "string",
+              enum: ["commit", "reserve", "all"],
+              default: "commit",
+              description: "Filter memory regions by state: 'commit' (committed memory, default), 'reserve' (reserved address space), or 'all'."
+            }
+          }
+        }
+      },
+      {
+        name: "super_memory_heap_summary",
+        description: "Interrogates all active Win32 process heaps and allocations via HeapSummary and GetProcessHeaps (heapapi.h). Reports default heap handle, total allocated MB, committed MB, reserved MB, and per-heap block quotas.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_memory_working_set_tune",
+        description: "Inspects and tunes process working set quotas and memory ceilings via Get/SetProcessWorkingSetSizeEx and EmptyWorkingSet (memoryapi.h). Allows setting min/max working set limits and trimming unused pages.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            targetPid: {
+              type: "number",
+              default: 0,
+              description: "Target process ID to inspect or tune (default: 0 for current process)."
+            },
+            minWorkingSetMB: {
+              type: "number",
+              default: 0,
+              description: "Desired minimum working set limit in MB (0 to keep current)."
+            },
+            maxWorkingSetMB: {
+              type: "number",
+              default: 0,
+              description: "Desired maximum working set limit in MB (0 to keep current)."
+            },
+            emptyWorkingSet: {
+              type: "boolean",
+              default: false,
+              description: "Discard unused working set pages to trim physical RAM footprint immediately (default: false)."
+            }
+          }
+        }
       }
 ];
 
@@ -4859,6 +4921,49 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🌐 [Windows Domain/Workgroup Join State, Accounts & Security Groups]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_memory_virtual_query") {
+    const targetPid = Number(args?.targetPid) || 0;
+    const maxRegions = Number(args?.maxRegions) || 50;
+    const stateFilter = args?.stateFilter || "commit";
+    const res = await orch.getMemoryVirtualQuery({ targetPid, maxRegions, stateFilter });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🧠 [Windows Virtual Memory Scan & Region Mappings]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_memory_heap_summary") {
+    const res = await orch.getMemoryHeapSummary();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🧠 [Windows Process Win32 Heaps & Allocations]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_memory_working_set_tune") {
+    const targetPid = Number(args?.targetPid) || 0;
+    const minWorkingSetMB = Number(args?.minWorkingSetMB) || 0;
+    const maxWorkingSetMB = Number(args?.maxWorkingSetMB) || 0;
+    const emptyWorkingSet = args?.emptyWorkingSet === true;
+    const res = await orch.tuneMemoryWorkingSet({ targetPid, minWorkingSetMB, maxWorkingSetMB, emptyWorkingSet });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🧠 [Windows Working Set Quota & Memory Ceiling Actuator]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

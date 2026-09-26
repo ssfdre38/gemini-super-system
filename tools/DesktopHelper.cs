@@ -6976,6 +6976,276 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows Virtual Memory, Heap Allocations & Working Set Subsystem (heapapi.h / memoryapi.h)
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct MEMORY_BASIC_INFORMATION64 {
+            public ulong BaseAddress;
+            public ulong AllocationBase;
+            public uint AllocationProtect;
+            public uint __alignment1;
+            public ulong RegionSize;
+            public uint State;
+            public uint Protect;
+            public uint Type;
+            public uint __alignment2;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern int VirtualQueryEx(IntPtr hProcess, IntPtr lpAddress, out MEMORY_BASIC_INFORMATION64 lpBuffer, uint dwLength);
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct HEAP_SUMMARY {
+            public uint cb;
+            public UIntPtr cbAllocated;
+            public UIntPtr cbCommitted;
+            public UIntPtr cbReserved;
+            public UIntPtr cbMaxReserve;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern IntPtr GetProcessHeap();
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern uint GetProcessHeaps(uint NumberOfHeaps, [Out] IntPtr[] ProcessHeaps);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool HeapSummary(IntPtr hHeap, uint dwFlags, out HEAP_SUMMARY lpSummary);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetProcessWorkingSetSizeEx(IntPtr hProcess, out UIntPtr lpMinimumWorkingSetSize, out UIntPtr lpMaximumWorkingSetSize, out uint Flags);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool SetProcessWorkingSetSizeEx(IntPtr hProcess, UIntPtr dwMinimumWorkingSetSize, UIntPtr dwMaximumWorkingSetSize, uint Flags);
+
+        static void MemoryVirtualQueryCmd(int targetPid, int maxRegions, string stateFilter) {
+            try {
+                Process proc = null;
+                bool isSelf = (targetPid <= 0);
+                if (isSelf) {
+                    proc = Process.GetCurrentProcess();
+                } else {
+                    proc = Process.GetProcessById(targetPid);
+                }
+
+                int limit = Math.Max(1, Math.Min(maxRegions <= 0 ? 50 : maxRegions, 200));
+                string filter = (stateFilter ?? "commit").Trim().ToLowerInvariant();
+
+                var regionList = new List<string>();
+                ulong totalCommitted = 0;
+                ulong totalReserved = 0;
+                ulong totalImage = 0;
+                ulong totalMapped = 0;
+                ulong totalPrivate = 0;
+                int regionsSampled = 0;
+
+                MEMORY_BASIC_INFORMATION64 mbi;
+                IntPtr addr = IntPtr.Zero;
+                int structSize = Marshal.SizeOf(typeof(MEMORY_BASIC_INFORMATION64));
+                IntPtr hProc = proc.Handle;
+
+                while (VirtualQueryEx(hProc, addr, out mbi, (uint)structSize) != 0) {
+                    regionsSampled++;
+
+                    string stateStr = "Unknown";
+                    if (mbi.State == 0x1000) { stateStr = "MEM_COMMIT"; totalCommitted += mbi.RegionSize; }
+                    else if (mbi.State == 0x2000) { stateStr = "MEM_RESERVE"; totalReserved += mbi.RegionSize; }
+                    else if (mbi.State == 0x10000) { stateStr = "MEM_FREE"; }
+
+                    string typeStr = "None";
+                    if (mbi.Type == 0x1000000) { typeStr = "MEM_IMAGE"; totalImage += mbi.RegionSize; }
+                    else if (mbi.Type == 0x40000) { typeStr = "MEM_MAPPED"; totalMapped += mbi.RegionSize; }
+                    else if (mbi.Type == 0x20000) { typeStr = "MEM_PRIVATE"; totalPrivate += mbi.RegionSize; }
+
+                    string protectStr = FormatMemoryProtect(mbi.Protect);
+
+                    bool matchesFilter = true;
+                    if (filter == "commit" && mbi.State != 0x1000) matchesFilter = false;
+                    else if (filter == "reserve" && mbi.State != 0x2000) matchesFilter = false;
+                    else if (filter == "free" && mbi.State != 0x10000) matchesFilter = false;
+
+                    if (matchesFilter && regionList.Count < limit) {
+                        double sizeKb = Math.Round((double)mbi.RegionSize / 1024.0, 1);
+                        regionList.Add(string.Format(
+                            "{{\"baseAddress\": \"0x{0:X}\", \"allocationBase\": \"0x{1:X}\", \"regionSizeBytes\": {2}, \"regionSizeKB\": {3}, \"state\": \"{4}\", \"stateRaw\": {5}, \"protect\": \"{6}\", \"protectRaw\": {7}, \"type\": \"{8}\", \"typeRaw\": {9}}}",
+                            mbi.BaseAddress,
+                            mbi.AllocationBase,
+                            mbi.RegionSize,
+                            sizeKb.ToString("F1", System.Globalization.CultureInfo.InvariantCulture),
+                            stateStr,
+                            mbi.State,
+                            protectStr,
+                            mbi.Protect,
+                            typeStr,
+                            mbi.Type
+                        ));
+                    }
+
+                    ulong next = mbi.BaseAddress + mbi.RegionSize;
+                    if (next <= (ulong)addr.ToInt64()) break;
+                    addr = new IntPtr((long)next);
+                }
+
+                double comMb = Math.Round((double)totalCommitted / (1024.0 * 1024.0), 2);
+                double resMb = Math.Round((double)totalReserved / (1024.0 * 1024.0), 2);
+                double imgMb = Math.Round((double)totalImage / (1024.0 * 1024.0), 2);
+                double mapMb = Math.Round((double)totalMapped / (1024.0 * 1024.0), 2);
+                double prvMb = Math.Round((double)totalPrivate / (1024.0 * 1024.0), 2);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"pid\": {0}, \"process\": \"{1}\", \"stateFilter\": \"{2}\", \"regionsSampled\": {3}, \"regionsReported\": {4}, \"totalCommittedMB\": {5}, \"totalReservedMB\": {6}, \"totalImageMB\": {7}, \"totalMappedMB\": {8}, \"totalPrivateMB\": {9}, \"regions\": [{10}]}}",
+                    proc.Id,
+                    EscapeJson(proc.ProcessName),
+                    EscapeJson(filter),
+                    regionsSampled,
+                    regionList.Count,
+                    comMb.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                    resMb.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                    imgMb.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                    mapMb.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                    prvMb.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                    string.Join(", ", regionList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static string FormatMemoryProtect(uint protect) {
+            uint p = protect & 0xFF;
+            string s = "PAGE_NOACCESS";
+            if (p == 0x02) s = "PAGE_READONLY";
+            else if (p == 0x04) s = "PAGE_READWRITE";
+            else if (p == 0x08) s = "PAGE_WRITECOPY";
+            else if (p == 0x10) s = "PAGE_EXECUTE";
+            else if (p == 0x20) s = "PAGE_EXECUTE_READ";
+            else if (p == 0x40) s = "PAGE_EXECUTE_READWRITE";
+            else if (p == 0x80) s = "PAGE_EXECUTE_WRITECOPY";
+
+            if ((protect & 0x100) != 0) s += "|PAGE_GUARD";
+            if ((protect & 0x200) != 0) s += "|PAGE_NOCACHE";
+            if ((protect & 0x400) != 0) s += "|PAGE_WRITECOMBINE";
+            return s;
+        }
+
+        static void MemoryHeapSummaryCmd() {
+            try {
+                IntPtr defHeap = GetProcessHeap();
+                uint heapCount = GetProcessHeaps(0, null);
+                IntPtr[] heaps = new IntPtr[heapCount];
+                GetProcessHeaps(heapCount, heaps);
+
+                ulong totalAlloc = 0;
+                ulong totalCommit = 0;
+                ulong totalRes = 0;
+                var list = new List<string>();
+
+                for (int i = 0; i < heaps.Length; i++) {
+                    HEAP_SUMMARY hs = new HEAP_SUMMARY();
+                    hs.cb = (uint)Marshal.SizeOf(typeof(HEAP_SUMMARY));
+                    bool isDef = (heaps[i] == defHeap);
+
+                    if (HeapSummary(heaps[i], 0, out hs)) {
+                        ulong alloc = hs.cbAllocated.ToUInt64();
+                        ulong commit = hs.cbCommitted.ToUInt64();
+                        ulong res = hs.cbReserved.ToUInt64();
+                        ulong maxBlock = hs.cbMaxReserve.ToUInt64();
+
+                        totalAlloc += alloc;
+                        totalCommit += commit;
+                        totalRes += res;
+
+                        double aMb = Math.Round((double)alloc / (1024.0 * 1024.0), 3);
+                        double cMb = Math.Round((double)commit / (1024.0 * 1024.0), 3);
+                        double rMb = Math.Round((double)res / (1024.0 * 1024.0), 3);
+
+                        list.Add(string.Format(
+                            "{{\"index\": {0}, \"handle\": \"0x{1:X}\", \"isDefault\": {2}, \"allocatedMB\": {3}, \"committedMB\": {4}, \"reservedMB\": {5}, \"allocatedBytes\": {6}, \"committedBytes\": {7}, \"reservedBytes\": {8}, \"maxReserveBlockBytes\": {9}}}",
+                            i,
+                            heaps[i].ToInt64(),
+                            isDef ? "true" : "false",
+                            aMb.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                            cMb.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                            rMb.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                            alloc,
+                            commit,
+                            res,
+                            maxBlock
+                        ));
+                    }
+                }
+
+                double totAllocMb = Math.Round((double)totalAlloc / (1024.0 * 1024.0), 2);
+                double totCommitMb = Math.Round((double)totalCommit / (1024.0 * 1024.0), 2);
+                double totResMb = Math.Round((double)totalRes / (1024.0 * 1024.0), 2);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"defaultHeapHandle\": \"0x{0:X}\", \"heapCount\": {1}, \"totalAllocatedMB\": {2}, \"totalCommittedMB\": {3}, \"totalReservedMB\": {4}, \"heaps\": [{5}]}}",
+                    defHeap.ToInt64(),
+                    heaps.Length,
+                    totAllocMb.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                    totCommitMb.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                    totResMb.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                    string.Join(", ", list.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void MemoryWorkingSetTuneCmd(int targetPid, int minWsMb, int maxWsMb, bool emptyWs) {
+            try {
+                Process proc = (targetPid <= 0) ? Process.GetCurrentProcess() : Process.GetProcessById(targetPid);
+                IntPtr hProc = proc.Handle;
+
+                bool emptied = false;
+                if (emptyWs) {
+                    emptied = EmptyWorkingSet(hProc);
+                }
+
+                UIntPtr curMin, curMax;
+                uint curFlags = 0;
+                GetProcessWorkingSetSizeEx(hProc, out curMin, out curMax, out curFlags);
+
+                bool tuned = false;
+                if (minWsMb > 0 || maxWsMb > 0) {
+                    ulong newMinBytes = minWsMb > 0 ? ((ulong)minWsMb * 1024UL * 1024UL) : curMin.ToUInt64();
+                    ulong newMaxBytes = maxWsMb > 0 ? ((ulong)maxWsMb * 1024UL * 1024UL) : curMax.ToUInt64();
+
+                    uint flags = curFlags;
+                    if (minWsMb > 0) flags |= 0x00000004; // QUOTA_LIMITS_HARDWS_MIN_ENABLE
+                    if (maxWsMb > 0) flags |= 0x00000001; // QUOTA_LIMITS_HARDWS_MAX_ENABLE
+
+                    tuned = SetProcessWorkingSetSizeEx(hProc, new UIntPtr(newMinBytes), new UIntPtr(newMaxBytes), flags);
+                    GetProcessWorkingSetSizeEx(hProc, out curMin, out curMax, out curFlags);
+                }
+
+                double minMb = Math.Round((double)curMin.ToUInt64() / (1024.0 * 1024.0), 2);
+                double maxMb = Math.Round((double)curMax.ToUInt64() / (1024.0 * 1024.0), 2);
+                bool hardMin = (curFlags & 0x00000004) != 0;
+                bool hardMax = (curFlags & 0x00000001) != 0;
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"pid\": {0}, \"process\": \"{1}\", \"minWorkingSetMB\": {2}, \"maxWorkingSetMB\": {3}, \"minWorkingSetBytes\": {4}, \"maxWorkingSetBytes\": {5}, \"flags\": {6}, \"hardMinEnabled\": {7}, \"hardMaxEnabled\": {8}, \"tuned\": {9}, \"emptied\": {10}}}",
+                    proc.Id,
+                    EscapeJson(proc.ProcessName),
+                    minMb.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                    maxMb.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                    curMin.ToUInt64(),
+                    curMax.ToUInt64(),
+                    curFlags,
+                    hardMin ? "true" : "false",
+                    hardMax ? "true" : "false",
+                    tuned ? "true" : "false",
+                    emptied ? "true" : "false"
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -9954,6 +10224,24 @@ namespace GeminiSuperDesktop {
                 bool incGroups = args.Length >= 3 ? (args[2].ToLowerInvariant() != "false" && args[2] != "0") : true;
                 string targetGroup = args.Length >= 4 ? args[3] : "Administrators";
                 NetAccountsCmd(incUsers, incGroups, targetGroup);
+            } else if (cmd == "memory_virtual_query" || cmd == "virtual_query" || cmd == "vm_query") {
+                int pid = 0;
+                if (args.Length >= 2 && !string.IsNullOrEmpty(args[1])) int.TryParse(args[1], out pid);
+                int maxReg = 50;
+                if (args.Length >= 3 && !string.IsNullOrEmpty(args[2])) int.TryParse(args[2], out maxReg);
+                string filter = args.Length >= 4 ? args[3] : "commit";
+                MemoryVirtualQueryCmd(pid, maxReg, filter);
+            } else if (cmd == "memory_heap_summary" || cmd == "heap_summary" || cmd == "heaps") {
+                MemoryHeapSummaryCmd();
+            } else if (cmd == "memory_working_set_tune" || cmd == "working_set_tune" || cmd == "ws_tune") {
+                int pid = 0;
+                if (args.Length >= 2 && !string.IsNullOrEmpty(args[1])) int.TryParse(args[1], out pid);
+                int minWs = 0;
+                if (args.Length >= 3 && !string.IsNullOrEmpty(args[2])) int.TryParse(args[2], out minWs);
+                int maxWs = 0;
+                if (args.Length >= 4 && !string.IsNullOrEmpty(args[3])) int.TryParse(args[3], out maxWs);
+                bool emptyWs = args.Length >= 5 ? (args[4].ToLowerInvariant() == "true" || args[4] == "1") : false;
+                MemoryWorkingSetTuneCmd(pid, minWs, maxWs, emptyWs);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

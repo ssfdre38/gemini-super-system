@@ -67,6 +67,7 @@
   - [49. Windows System Time, Dynamic Time Zones & Chronometry Subsystem](#49--windows-system-time-dynamic-time-zones--chronometry-subsystem-timezoneapih--sysinfoapih--realtimeapiseth)
   - [50. Windows Power Policy, Execution State & Hardware Telemetry Subsystem](#50--windows-power-policy-execution-state--hardware-telemetry-subsystem-powrprofh--powerbaseh--poclassh)
   - [51. Windows Network Management, SMB Shares & Local Accounts Subsystem](#51--windows-network-management-smb-shares--local-accounts-subsystem-netapi32dll--lmh)
+  - [52. Windows Virtual Memory, Heap Allocations & Working Set Subsystem](#52--windows-virtual-memory-heap-allocations--working-set-subsystem-memoryapih--heapapih)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -711,6 +712,17 @@ Directly manages Windows network shares, inbound sessions, open files, domain/wo
 - **Domain/Workgroup Topology & Account Administration (`super_net_accounts`)**: Directly calls `NetGetJoinInformation` to verify workstation domain or workgroup membership (`Workgroup`, `Domain`, `Unjoined`), `NetUserEnum` (Level 1) to inspect local user accounts with privilege classifications (`Admin`, `User`, `Guest`) and flags (disabled, password required, locked out), and `NetLocalGroupEnum` / `NetLocalGroupGetMembers` to enumerate security groups and resolve group memberships (e.g. `Administrators`).
 - **133 Tools Milestone**: Reaches **133 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **36 comprehensive test suites (119/119 tests passing)** and **32 environment health checks**.
 - **Native MCP Tools**: `super_net_shares`, `super_net_sessions`, `super_net_accounts`.
+
+---
+
+## 52. 🧠 Windows Virtual Memory, Heap Allocations & Working Set Subsystem (`memoryapi.h` / `heapapi.h`)
+
+Directly inspects and tunes process virtual memory pages, Win32 heap allocations, and working set quotas via native Win32 `kernel32.dll` and `psapi.dll` P/Invoke without external debuggers or profiling agents:
+- **Virtual Memory Address Space Mapping (`super_memory_virtual_query`)**: Invokes native `VirtualQueryEx` to traverse and map the virtual memory space of any process. Distinguishes allocation bases, region sizes, allocation states (`MEM_COMMIT`, `MEM_RESERVE`, `MEM_FREE`), memory types (`MEM_IMAGE` for binaries/DLLs, `MEM_MAPPED` for memory-mapped files/shared memory, `MEM_PRIVATE` for heaps and stacks), and page protection masks (`PAGE_READWRITE`, `PAGE_EXECUTE_READ`, `PAGE_GUARD`), computing aggregate commit and reserve statistics.
+- **Process Win32 Heap Inspection (`super_memory_heap_summary`)**: Directly calls `GetProcessHeap`, `GetProcessHeaps`, and `HeapSummary` across all active process heaps. Extracts allocated bytes, committed bytes, reserved address space, and largest contiguous reserve block per heap with zero CRT overhead.
+- **Working Set Quota & Ceiling Governor (`super_memory_working_set_tune`)**: Interrogates and tunes process working set bounds via `GetProcessWorkingSetSizeEx`, `SetProcessWorkingSetSizeEx`, and `EmptyWorkingSet`. Allows defining minimum/maximum working set targets, enforcing hard OS working set ceilings (`QUOTA_LIMITS_HARDWS_MIN_ENABLE`, `QUOTA_LIMITS_HARDWS_MAX_ENABLE`), or immediately trimming unused physical RAM pages to minimize system memory footprint.
+- **136 Tools Milestone**: Reaches **136 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **37 comprehensive test suites (122/122 tests passing)** and **33 environment health checks**.
+- **Native MCP Tools**: `super_memory_virtual_query`, `super_memory_heap_summary`, `super_memory_working_set_tune`.
 
 ---
 
