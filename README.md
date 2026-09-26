@@ -73,6 +73,7 @@
   - [55. Windows Process Status, Kernel Driver Table & Performance Subsystem](#55--windows-process-status-kernel-driver-table--performance-subsystem-psapih--psapidll)
   - [56. Windows Credential Management Subsystem](#56--windows-credential-management-subsystem-wincredh--advapi32dll)
   - [57. Windows Domain Name System Subsystem](#57--windows-domain-name-system-dns-subsystem-windnsh--dnsapidll)
+  - [58. Windows Data Protection API Subsystem](#58-️-windows-data-protection-api-dpapi-subsystem-dpapih--crypt32dll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -783,6 +784,17 @@ Directly queries DNS resource records, resolves multi-record dual-stack hostname
 - **Dual-Stack Host Resolution & Latency Profiling (`super_dns_resolve_host`)**: High-performance multi-record resolver that queries IPv4 (`A`) and IPv6 (`AAAA`) addresses alongside canonical alias chains (`CNAME`) in parallel, measuring round-trip DNS resolution latency in milliseconds and minimum TTL discovery.
 - **151 Tools Milestone**: Reaches **151 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **42 comprehensive test suites (136/136 tests passing)** and **38 environment health checks**.
 - **Native MCP Tools**: `super_dns_query`, `super_dns_cache_flush`, `super_dns_resolve_host`.
+
+---
+
+## 58. 🛡️ Windows Data Protection API (DPAPI) Subsystem (`dpapi.h` / `crypt32.dll`)
+
+Directly encrypts and decrypts sensitive data, tokens, and files using machine- or user-scoped DPAPI keys with triple-DES / AES-CBC and SHA-256 HMAC integrity via native `crypt32.dll` P/Invoke:
+- **Sovereign In-Memory String & Secret Cryptography (`super_dpapi_protect`)**: Calls native `CryptProtectData` with user or machine scope (`CRYPTPROTECT_LOCAL_MACHINE` = 0x4) and mandatory `CRYPTPROTECT_UI_FORBIDDEN` (0x1) for non-interactive execution. Encrypts sensitive API keys, session tokens, passwords, and private parameters with optional entropy salt and description labels, returning base64-encoded encrypted cipher blobs.
+- **Zero-Key In-Memory Secret Decryption (`super_dpapi_unprotect`)**: Calls native `CryptUnprotectData` to safely decrypt protected cipher strings and retrieve original plaintext payloads and description tags. Enables sovereign AI workers to decrypt stored secrets seamlessly on the current user or machine context without managing external encryption keys or hardcoded passphrases.
+- **Direct File Encryption & Decryption (`super_dpapi_protect_file`)**: Directly reads, protects, or unprotects entire files on disk using DPAPI. Enables transparent protection of local agent configurations, sqlite databases, log files, model weights, or private memory stores with atomic file writes and zero temporary plaintext leaks.
+- **154 Tools Milestone**: Reaches **154 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **43 comprehensive test suites (139/139 tests passing)** and **39 environment health checks**.
+- **Native MCP Tools**: `super_dpapi_protect`, `super_dpapi_unprotect`, `super_dpapi_protect_file`.
 
 ---
 

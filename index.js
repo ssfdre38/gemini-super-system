@@ -3066,6 +3066,91 @@ const SYSTEM_TOOLS = [
           },
           required: ["host"]
         }
+      },
+      {
+        name: "super_dpapi_protect",
+        description: "Encrypts sensitive data, tokens, or credentials using the Windows Data Protection API (CryptProtectData / dpapi.h / crypt32.dll). Keys are derived seamlessly by the OS from user logon credentials (CurrentUser) or hardware/machine keys (LocalMachine) with optional entropy salt. Returns base64 ciphertext with zero plaintext leak.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            data: {
+              type: "string",
+              description: "The plaintext string, token, or secret to encrypt."
+            },
+            description: {
+              type: "string",
+              default: "Gemini DPAPI Protected Secret",
+              description: "Readable description label embedded in the ciphertext header."
+            },
+            scope: {
+              type: "string",
+              enum: ["CurrentUser", "LocalMachine"],
+              default: "CurrentUser",
+              description: "Protection scope: 'CurrentUser' (only decryptable by this user) or 'LocalMachine' (decryptable by any process on this system)."
+            },
+            entropy: {
+              type: "string",
+              description: "Optional secondary entropy / salt required for decryption."
+            }
+          },
+          required: ["data"]
+        }
+      },
+      {
+        name: "super_dpapi_unprotect",
+        description: "Decrypts base64 ciphertext encrypted with Windows DPAPI (CryptUnprotectData / dpapi.h / crypt32.dll). Recovers the original plaintext secret and embedded description header.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            cipherBase64: {
+              type: "string",
+              description: "The base64-encoded DPAPI ciphertext to decrypt."
+            },
+            entropy: {
+              type: "string",
+              description: "Optional secondary entropy / salt if one was provided during encryption."
+            }
+          },
+          required: ["cipherBase64"]
+        }
+      },
+      {
+        name: "super_dpapi_protect_file",
+        description: "Atomically encrypts or decrypts an entire file on disk using Windows Data Protection API (CryptProtectData / CryptUnprotectData / crypt32.dll). Secures local configuration, SQLite databases, memory vaults, and agent workspaces against physical disk inspection.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["encrypt", "decrypt"],
+              default: "encrypt",
+              description: "Action to perform: 'encrypt' or 'decrypt'."
+            },
+            sourcePath: {
+              type: "string",
+              description: "Absolute or relative path to the source file to process."
+            },
+            targetPath: {
+              type: "string",
+              description: "Optional destination file path (if omitted, overwrites the source file atomically)."
+            },
+            scope: {
+              type: "string",
+              enum: ["CurrentUser", "LocalMachine"],
+              default: "CurrentUser",
+              description: "Protection scope for encryption: 'CurrentUser' or 'LocalMachine'."
+            },
+            description: {
+              type: "string",
+              description: "Optional metadata label to store in encrypted file header."
+            },
+            entropy: {
+              type: "string",
+              description: "Optional secondary entropy salt."
+            }
+          },
+          required: ["sourcePath"]
+        }
       }
 ];
 
@@ -5470,6 +5555,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🔍 [Windows Multi-Record DNS Host Resolution]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dpapi_protect") {
+    const res = await orch.protectData(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [Windows DPAPI Data Protection (CryptProtectData)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dpapi_unprotect") {
+    const res = await orch.unprotectData(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔓 [Windows DPAPI Data Decryption (CryptUnprotectData)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dpapi_protect_file") {
+    const res = await orch.protectFile(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📁 [Windows DPAPI Atomic File Protection]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

@@ -8712,6 +8712,298 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows Data Protection API (DPAPI) Subsystem (dpapi.h / crypt32.dll)
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct DPAPI_DATA_BLOB {
+            public int cbData;
+            public IntPtr pbData;
+        }
+
+        [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool CryptProtectData(
+            ref DPAPI_DATA_BLOB pDataIn,
+            string szDataDescr,
+            ref DPAPI_DATA_BLOB pOptionalEntropy,
+            IntPtr pvReserved,
+            IntPtr pPromptStruct,
+            uint dwFlags,
+            out DPAPI_DATA_BLOB pDataOut
+        );
+
+        [DllImport("crypt32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool CryptUnprotectData(
+            ref DPAPI_DATA_BLOB pDataIn,
+            out IntPtr ppszDataDescr,
+            ref DPAPI_DATA_BLOB pOptionalEntropy,
+            IntPtr pvReserved,
+            IntPtr pPromptStruct,
+            uint dwFlags,
+            out DPAPI_DATA_BLOB pDataOut
+        );
+
+        const uint DPAPI_CRYPTPROTECT_UI_FORBIDDEN = 0x1;
+        const uint DPAPI_CRYPTPROTECT_LOCAL_MACHINE = 0x4;
+
+        static void DpapiProtectCmd(string data, string description, string scope, string entropy) {
+            try {
+                if (data == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Data parameter is required\"}");
+                    return;
+                }
+
+                byte[] plainBytes = Encoding.UTF8.GetBytes(data);
+                string desc = description ?? "Gemini DPAPI Protected Secret";
+                string sc = (scope ?? "CurrentUser").Trim();
+                bool isLocalMachine = sc.Equals("LocalMachine", StringComparison.OrdinalIgnoreCase) || sc.Equals("machine", StringComparison.OrdinalIgnoreCase);
+
+                uint flags = DPAPI_CRYPTPROTECT_UI_FORBIDDEN;
+                if (isLocalMachine) flags |= DPAPI_CRYPTPROTECT_LOCAL_MACHINE;
+
+                DPAPI_DATA_BLOB inBlob = new DPAPI_DATA_BLOB();
+                inBlob.cbData = plainBytes.Length;
+                inBlob.pbData = Marshal.AllocHGlobal(plainBytes.Length);
+                Marshal.Copy(plainBytes, 0, inBlob.pbData, plainBytes.Length);
+
+                DPAPI_DATA_BLOB entBlob = new DPAPI_DATA_BLOB();
+                bool hasEntropy = !string.IsNullOrEmpty(entropy);
+                if (hasEntropy) {
+                    byte[] entBytes = Encoding.UTF8.GetBytes(entropy);
+                    entBlob.cbData = entBytes.Length;
+                    entBlob.pbData = Marshal.AllocHGlobal(entBytes.Length);
+                    Marshal.Copy(entBytes, 0, entBlob.pbData, entBytes.Length);
+                }
+
+                DPAPI_DATA_BLOB outBlob = new DPAPI_DATA_BLOB();
+
+                try {
+                    bool ok = CryptProtectData(
+                        ref inBlob,
+                        desc,
+                        ref entBlob,
+                        IntPtr.Zero,
+                        IntPtr.Zero,
+                        flags,
+                        out outBlob
+                    );
+
+                    if (!ok) {
+                        int err = Marshal.GetLastWin32Error();
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"CryptProtectData failed with error {0}\"}}", err));
+                        return;
+                    }
+
+                    byte[] cipherBytes = new byte[outBlob.cbData];
+                    Marshal.Copy(outBlob.pbData, cipherBytes, 0, outBlob.cbData);
+                    string base64 = Convert.ToBase64String(cipherBytes);
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"cipherBase64\": \"{0}\", \"description\": \"{1}\", \"scope\": \"{2}\", \"cipherSizeBytes\": {3}, \"entropyUsed\": {4}}}",
+                        base64,
+                        EscapeJson(desc),
+                        isLocalMachine ? "LocalMachine" : "CurrentUser",
+                        cipherBytes.Length,
+                        hasEntropy ? "true" : "false"
+                    ));
+                } finally {
+                    if (outBlob.pbData != IntPtr.Zero) LocalFree(outBlob.pbData);
+                    Marshal.FreeHGlobal(inBlob.pbData);
+                    if (entBlob.pbData != IntPtr.Zero) Marshal.FreeHGlobal(entBlob.pbData);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DpapiUnprotectCmd(string cipherBase64, string entropy) {
+            try {
+                if (string.IsNullOrEmpty(cipherBase64)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"cipherBase64 parameter is required\"}");
+                    return;
+                }
+
+                byte[] cipherBytes = Convert.FromBase64String(cipherBase64);
+
+                DPAPI_DATA_BLOB inBlob = new DPAPI_DATA_BLOB();
+                inBlob.cbData = cipherBytes.Length;
+                inBlob.pbData = Marshal.AllocHGlobal(cipherBytes.Length);
+                Marshal.Copy(cipherBytes, 0, inBlob.pbData, cipherBytes.Length);
+
+                DPAPI_DATA_BLOB entBlob = new DPAPI_DATA_BLOB();
+                bool hasEntropy = !string.IsNullOrEmpty(entropy);
+                if (hasEntropy) {
+                    byte[] entBytes = Encoding.UTF8.GetBytes(entropy);
+                    entBlob.cbData = entBytes.Length;
+                    entBlob.pbData = Marshal.AllocHGlobal(entBytes.Length);
+                    Marshal.Copy(entBytes, 0, entBlob.pbData, entBytes.Length);
+                }
+
+                DPAPI_DATA_BLOB decBlob = new DPAPI_DATA_BLOB();
+                IntPtr pDescr = IntPtr.Zero;
+
+                try {
+                    bool ok = CryptUnprotectData(
+                        ref inBlob,
+                        out pDescr,
+                        ref entBlob,
+                        IntPtr.Zero,
+                        IntPtr.Zero,
+                        DPAPI_CRYPTPROTECT_UI_FORBIDDEN,
+                        out decBlob
+                    );
+
+                    if (!ok) {
+                        int err = Marshal.GetLastWin32Error();
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"CryptUnprotectData failed with error {0}\"}}", err));
+                        return;
+                    }
+
+                    byte[] decBytes = new byte[decBlob.cbData];
+                    Marshal.Copy(decBlob.pbData, decBytes, 0, decBlob.cbData);
+                    string recovered = Encoding.UTF8.GetString(decBytes);
+                    string recoveredLabel = pDescr != IntPtr.Zero ? Marshal.PtrToStringUni(pDescr) ?? "" : "";
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"data\": \"{0}\", \"description\": \"{1}\", \"plainSizeBytes\": {2}, \"entropyUsed\": {3}}}",
+                        EscapeJson(recovered),
+                        EscapeJson(recoveredLabel),
+                        decBytes.Length,
+                        hasEntropy ? "true" : "false"
+                    ));
+                } finally {
+                    if (pDescr != IntPtr.Zero) LocalFree(pDescr);
+                    if (decBlob.pbData != IntPtr.Zero) LocalFree(decBlob.pbData);
+                    Marshal.FreeHGlobal(inBlob.pbData);
+                    if (entBlob.pbData != IntPtr.Zero) Marshal.FreeHGlobal(entBlob.pbData);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DpapiProtectFileCmd(string action, string sourcePath, string targetPath, string scope, string description, string entropy) {
+            try {
+                if (string.IsNullOrEmpty(sourcePath) || !System.IO.File.Exists(sourcePath)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Source file does not exist: {0}\"}}", EscapeJson(sourcePath ?? "")));
+                    return;
+                }
+
+                string act = (action ?? "encrypt").Trim().ToLowerInvariant();
+                string outPath = string.IsNullOrEmpty(targetPath) ? sourcePath : targetPath;
+                byte[] inBytes = System.IO.File.ReadAllBytes(sourcePath);
+
+                if (act == "decrypt" || act == "unprotect") {
+                    DPAPI_DATA_BLOB inBlob = new DPAPI_DATA_BLOB();
+                    inBlob.cbData = inBytes.Length;
+                    inBlob.pbData = Marshal.AllocHGlobal(inBytes.Length);
+                    Marshal.Copy(inBytes, 0, inBlob.pbData, inBytes.Length);
+
+                    DPAPI_DATA_BLOB entBlob = new DPAPI_DATA_BLOB();
+                    bool hasEntropy = !string.IsNullOrEmpty(entropy);
+                    if (hasEntropy) {
+                        byte[] entBytes = Encoding.UTF8.GetBytes(entropy);
+                        entBlob.cbData = entBytes.Length;
+                        entBlob.pbData = Marshal.AllocHGlobal(entBytes.Length);
+                        Marshal.Copy(entBytes, 0, entBlob.pbData, entBytes.Length);
+                    }
+
+                    DPAPI_DATA_BLOB decBlob = new DPAPI_DATA_BLOB();
+                    IntPtr pDescr = IntPtr.Zero;
+
+                    try {
+                        bool ok = CryptUnprotectData(
+                            ref inBlob,
+                            out pDescr,
+                            ref entBlob,
+                            IntPtr.Zero,
+                            IntPtr.Zero,
+                            DPAPI_CRYPTPROTECT_UI_FORBIDDEN,
+                            out decBlob
+                        );
+
+                        if (!ok) {
+                            int err = Marshal.GetLastWin32Error();
+                            Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"CryptUnprotectData failed on file with error {0}\"}}", err));
+                            return;
+                        }
+
+                        byte[] decBytes = new byte[decBlob.cbData];
+                        Marshal.Copy(decBlob.pbData, decBytes, 0, decBlob.cbData);
+                        System.IO.File.WriteAllBytes(outPath, decBytes);
+
+                        string recoveredLabel = pDescr != IntPtr.Zero ? Marshal.PtrToStringUni(pDescr) ?? "" : "";
+                        Console.WriteLine(string.Format(
+                            "{{\"success\": true, \"action\": \"decrypt\", \"sourcePath\": \"{0}\", \"targetPath\": \"{1}\", \"bytesIn\": {2}, \"bytesOut\": {3}, \"description\": \"{4}\"}}",
+                            EscapeJson(sourcePath), EscapeJson(outPath), inBytes.Length, decBytes.Length, EscapeJson(recoveredLabel)
+                        ));
+                    } finally {
+                        if (pDescr != IntPtr.Zero) LocalFree(pDescr);
+                        if (decBlob.pbData != IntPtr.Zero) LocalFree(decBlob.pbData);
+                        Marshal.FreeHGlobal(inBlob.pbData);
+                        if (entBlob.pbData != IntPtr.Zero) Marshal.FreeHGlobal(entBlob.pbData);
+                    }
+                } else {
+                    string sc = (scope ?? "CurrentUser").Trim();
+                    bool isLocalMachine = sc.Equals("LocalMachine", StringComparison.OrdinalIgnoreCase) || sc.Equals("machine", StringComparison.OrdinalIgnoreCase);
+                    uint flags = DPAPI_CRYPTPROTECT_UI_FORBIDDEN;
+                    if (isLocalMachine) flags |= DPAPI_CRYPTPROTECT_LOCAL_MACHINE;
+
+                    string desc = description ?? ("DPAPI File Protection - " + System.IO.Path.GetFileName(sourcePath));
+
+                    DPAPI_DATA_BLOB inBlob = new DPAPI_DATA_BLOB();
+                    inBlob.cbData = inBytes.Length;
+                    inBlob.pbData = Marshal.AllocHGlobal(inBytes.Length);
+                    Marshal.Copy(inBytes, 0, inBlob.pbData, inBytes.Length);
+
+                    DPAPI_DATA_BLOB entBlob = new DPAPI_DATA_BLOB();
+                    bool hasEntropy = !string.IsNullOrEmpty(entropy);
+                    if (hasEntropy) {
+                        byte[] entBytes = Encoding.UTF8.GetBytes(entropy);
+                        entBlob.cbData = entBytes.Length;
+                        entBlob.pbData = Marshal.AllocHGlobal(entBytes.Length);
+                        Marshal.Copy(entBytes, 0, entBlob.pbData, entBytes.Length);
+                    }
+
+                    DPAPI_DATA_BLOB outBlob = new DPAPI_DATA_BLOB();
+
+                    try {
+                        bool ok = CryptProtectData(
+                            ref inBlob,
+                            desc,
+                            ref entBlob,
+                            IntPtr.Zero,
+                            IntPtr.Zero,
+                            flags,
+                            out outBlob
+                        );
+
+                        if (!ok) {
+                            int err = Marshal.GetLastWin32Error();
+                            Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"CryptProtectData failed on file with error {0}\"}}", err));
+                            return;
+                        }
+
+                        byte[] cipherBytes = new byte[outBlob.cbData];
+                        Marshal.Copy(outBlob.pbData, cipherBytes, 0, outBlob.cbData);
+                        System.IO.File.WriteAllBytes(outPath, cipherBytes);
+
+                        Console.WriteLine(string.Format(
+                            "{{\"success\": true, \"action\": \"encrypt\", \"sourcePath\": \"{0}\", \"targetPath\": \"{1}\", \"bytesIn\": {2}, \"bytesOut\": {3}, \"scope\": \"{4}\", \"description\": \"{5}\"}}",
+                            EscapeJson(sourcePath), EscapeJson(outPath), inBytes.Length, cipherBytes.Length, isLocalMachine ? "LocalMachine" : "CurrentUser", EscapeJson(desc)
+                        ));
+                    } finally {
+                        if (outBlob.pbData != IntPtr.Zero) LocalFree(outBlob.pbData);
+                        Marshal.FreeHGlobal(inBlob.pbData);
+                        if (entBlob.pbData != IntPtr.Zero) Marshal.FreeHGlobal(entBlob.pbData);
+                    }
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -11800,6 +12092,24 @@ namespace GeminiSuperDesktop {
                 string host = args.Length >= 2 ? args[1] : "";
                 bool bypassCache = args.Length >= 3 ? (args[2].ToLowerInvariant() == "true" || args[2] == "1") : false;
                 DnsResolveCmd(host, bypassCache);
+            } else if (cmd == "dpapi_protect" || cmd == "protect_data") {
+                string data = args.Length >= 2 ? args[1] : "";
+                string desc = args.Length >= 3 ? args[2] : "Gemini Secret";
+                string scope = args.Length >= 4 ? args[3] : "CurrentUser";
+                string entropy = args.Length >= 5 ? args[4] : null;
+                DpapiProtectCmd(data, desc, scope, entropy);
+            } else if (cmd == "dpapi_unprotect" || cmd == "unprotect_data") {
+                string cipher = args.Length >= 2 ? args[1] : "";
+                string entropy = args.Length >= 3 ? args[2] : null;
+                DpapiUnprotectCmd(cipher, entropy);
+            } else if (cmd == "dpapi_file" || cmd == "dpapi_protect_file") {
+                string action = args.Length >= 2 ? args[1] : "encrypt";
+                string src = args.Length >= 3 ? args[2] : "";
+                string dst = args.Length >= 4 ? args[3] : "";
+                string scope = args.Length >= 5 ? args[4] : "CurrentUser";
+                string desc = args.Length >= 6 ? args[5] : "";
+                string entropy = args.Length >= 7 ? args[6] : null;
+                DpapiProtectFileCmd(action, src, dst, scope, desc, entropy);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

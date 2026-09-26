@@ -3109,10 +3109,96 @@ async function run() {
     assert(res.records.length > 0, "Records length should be > 0");
   });
 
-  it("All 151 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n=======================================================");
+  console.log("   SUITE 43: Windows Data Protection API Subsystem (dpapi.h)");
+  console.log("=======================================================\n");
+
+  await itAsync("super_dpapi_protect and super_dpapi_unprotect encrypt and decrypt secrets with user master key", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const bridge = getKernelBridge();
+    const secret = "SovereignGeminiVaultKey_2026!#$";
+    const desc = "Suite 43 DPAPI Test";
+
+    // 1. Protect data
+    const protRes = await bridge.protectData({
+      data: secret,
+      description: desc,
+      scope: "CurrentUser"
+    });
+
+    assert(protRes, "Protect result should exist");
+    assert.strictEqual(protRes.success, true);
+    assert(protRes.cipherBase64, "CipherBase64 should be present");
+    assert.strictEqual(protRes.description, desc);
+    assert.strictEqual(protRes.scope, "CurrentUser");
+    assert(protRes.cipherSizeBytes > 0, "CipherSizeBytes should be > 0");
+
+    // 2. Unprotect data
+    const unprotRes = await bridge.unprotectData({
+      cipherBase64: protRes.cipherBase64
+    });
+
+    assert(unprotRes, "Unprotect result should exist");
+    assert.strictEqual(unprotRes.success, true);
+    assert.strictEqual(unprotRes.data, secret);
+    assert.strictEqual(unprotRes.description, desc);
+    assert(unprotRes.plainSizeBytes > 0, "PlainSizeBytes should be > 0");
+  });
+
+  await itAsync("super_dpapi_protect_file encrypts and decrypts whole files on disk atomically", async () => {
+    const fs = require("fs");
+    const path = require("path");
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const bridge = getKernelBridge();
+
+    const plainPath = path.join(__dirname, "temp_suite43_plain.txt");
+    const encPath = path.join(__dirname, "temp_suite43_enc.bin");
+    const decPath = path.join(__dirname, "temp_suite43_dec.txt");
+    const testContent = "Confidential autonomous agent state snapshot 0xDEADBEEF";
+
+    fs.writeFileSync(plainPath, testContent, "utf8");
+
+    try {
+      // 1. Encrypt file
+      const encRes = await bridge.protectFile({
+        action: "encrypt",
+        sourcePath: plainPath,
+        targetPath: encPath,
+        scope: "CurrentUser",
+        description: "FileTest"
+      });
+
+      assert(encRes, "Encrypt result should exist");
+      assert.strictEqual(encRes.success, true);
+      assert.strictEqual(encRes.action, "encrypt");
+      assert(fs.existsSync(encPath), "Encrypted file should exist");
+      assert(encRes.bytesOut > encRes.bytesIn, "Encrypted file should have DPAPI header overhead");
+
+      // 2. Decrypt file
+      const decRes = await bridge.protectFile({
+        action: "decrypt",
+        sourcePath: encPath,
+        targetPath: decPath
+      });
+
+      assert(decRes, "Decrypt result should exist");
+      assert.strictEqual(decRes.success, true);
+      assert.strictEqual(decRes.action, "decrypt");
+      assert(fs.existsSync(decPath), "Decrypted file should exist");
+
+      const recovered = fs.readFileSync(decPath, "utf8");
+      assert.strictEqual(recovered, testContent);
+    } finally {
+      if (fs.existsSync(plainPath)) fs.unlinkSync(plainPath);
+      if (fs.existsSync(encPath)) fs.unlinkSync(encPath);
+      if (fs.existsSync(decPath)) fs.unlinkSync(decPath);
+    }
+  });
+
+  it("All 154 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 151);
+    assert.strictEqual(SYSTEM_TOOLS.length, 154);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3197,6 +3283,9 @@ async function run() {
     assert(toolNames.includes("super_dns_query"));
     assert(toolNames.includes("super_dns_cache_flush"));
     assert(toolNames.includes("super_dns_resolve_host"));
+    assert(toolNames.includes("super_dpapi_protect"));
+    assert(toolNames.includes("super_dpapi_unprotect"));
+    assert(toolNames.includes("super_dpapi_protect_file"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
