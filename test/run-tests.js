@@ -2544,10 +2544,82 @@ async function run() {
     }
   });
 
-  it("All 124 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n=======================================================");
+  console.log("   SUITE 34: Windows System Time, Dynamic Time Zones & Chronometry");
+  console.log("=======================================================\n");
+
+  await itAsync("super_time_zone_info queries dynamic time zone, DST transition rules, and converts timestamps", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getTimeZoneInfo({ enumerateAll: true, filter: "Pacific", utcTimestamp: "2026-09-26T00:00:00Z" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.timeZoneKeyName === "string");
+    assert(typeof res.standardName === "string");
+    assert(typeof res.daylightName === "string");
+    assert(typeof res.timeZoneId === "number");
+    assert(typeof res.isDaylightSavingsActive === "boolean");
+    assert(typeof res.baseBiasMinutes === "number");
+    assert(typeof res.totalBiasMinutes === "number");
+    assert(typeof res.utcOffsetHours === "number");
+    assert(typeof res.dynamicDaylightTimeDisabled === "boolean");
+    assert(typeof res.standardTransition === "object");
+    assert(typeof res.daylightTransition === "object");
+    assert(typeof res.convertedLocalTime === "string");
+    assert(res.convertedLocalTime.length > 0);
+    assert(Array.isArray(res.timeZones));
+    assert(res.timeZones.length > 0);
+    const firstTz = res.timeZones[0];
+    assert(typeof firstTz.keyName === "string");
+    assert(typeof firstTz.utcOffsetHours === "number");
+  });
+
+  await itAsync("super_time_chronometry queries hardware QPC, interrupt times, and microsecond system file times", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getTimeChronometry();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.qpcTicks === "number");
+    assert(typeof res.qpcFrequencyHz === "number");
+    assert(res.qpcFrequencyHz > 0);
+    assert(typeof res.tickResolutionNanoseconds === "number");
+    assert(res.tickResolutionNanoseconds > 0);
+    assert(typeof res.preciseFileTime === "number");
+    assert(typeof res.utcTimestamp === "string");
+    assert(typeof res.unbiasedInterruptTime100ns === "number");
+    assert(typeof res.unbiasedUptimeSeconds === "number");
+    assert(typeof res.interruptTimePrecise100ns === "number");
+    assert(typeof res.hasPreciseInterrupt === "boolean");
+    assert(typeof res.uptimeMs === "number");
+    assert(typeof res.uptimeHours === "number");
+  });
+
+  await itAsync("super_time_adjustment queries clock tick intervals, drift rate PPM, and w32time status", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getTimeAdjustment();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.apiSuccess === "boolean");
+    assert(typeof res.timeAdjustment100ns === "number");
+    assert(typeof res.timeIncrement100ns === "number");
+    assert(res.timeIncrement100ns > 0);
+    assert(typeof res.timeAdjustmentDisabled === "boolean");
+    assert(typeof res.nominalTickMs === "number");
+    assert(res.nominalTickMs > 0);
+    assert(typeof res.adjustmentTickMs === "number");
+    assert(typeof res.driftRatePpm === "number");
+    assert(typeof res.w32timeServiceStatus === "string");
+  });
+
+  it("All 127 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 124);
+    assert.strictEqual(SYSTEM_TOOLS.length, 127);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -2605,6 +2677,9 @@ async function run() {
     assert(toolNames.includes("super_sens_network_alive"));
     assert(toolNames.includes("super_sens_destination_reachable"));
     assert(toolNames.includes("super_sens_network_connectivity"));
+    assert(toolNames.includes("super_time_zone_info"));
+    assert(toolNames.includes("super_time_chronometry"));
+    assert(toolNames.includes("super_time_adjustment"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

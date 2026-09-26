@@ -2527,6 +2527,44 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_time_zone_info",
+        description: "Queries Windows dynamic time zone information, DST transition rules, and enumerates system time zones via timezoneapi.h (GetDynamicTimeZoneInformation, EnumDynamicTimeZoneInformation). Supports UTC timestamp conversion to local time.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            enumerateAll: {
+              type: "boolean",
+              default: false,
+              description: "Enumerate all registered dynamic time zones across the operating system (default: false)."
+            },
+            filter: {
+              type: "string",
+              description: "Filter time zone enumeration by name or key substring (e.g. 'Pacific', 'Tokyo', 'UTC')."
+            },
+            utcTimestamp: {
+              type: "string",
+              description: "Optional UTC ISO timestamp (e.g. '2026-09-26T00:00:00Z') to convert to local system time zone."
+            }
+          }
+        }
+      },
+      {
+        name: "super_time_chronometry",
+        description: "High-precision hardware chronometry and timer diagnostic via sysinfoapi.h and realtimeapiset.h. Queries QueryPerformanceCounter (QPC), QPC frequency, sub-nanosecond tick resolution, GetSystemTimePreciseAsFileTime, and QueryUnbiasedInterruptTime.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_time_adjustment",
+        description: "Queries Windows system time adjustment, timer interrupt increment, clock drift PPM rate, and w32time service status via GetSystemTimeAdjustment. Identifies whether time adjustments are synchronized or disabled.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
 ];
 
@@ -4582,6 +4620,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [SENS Network Connectivity & NLM Profiles]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_time_zone_info") {
+    const enumerateAll = args?.enumerateAll === true;
+    const filter = args?.filter || "";
+    const utcTimestamp = args?.utcTimestamp || "";
+    const res = await orch.getTimeZoneInfo({ enumerateAll, filter, utcTimestamp });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Dynamic Time Zone & DST Perception]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_time_chronometry") {
+    const res = await orch.getTimeChronometry();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Hardware Chronometry & Precision Clocks]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_time_adjustment") {
+    const res = await orch.getTimeAdjustment();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [System Time Adjustment & Drift Rate]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

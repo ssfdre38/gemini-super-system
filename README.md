@@ -64,6 +64,7 @@
   - [46. Windows Multi-Provider Router & Network Drive Management Subsystem](#46--windows-multi-provider-router--network-drive-management-subsystem-winnetwkh--mprdll)
   - [47. Windows ToolHelp32 Snapshot Subsystem](#47--windows-toolhelp32-snapshot-subsystem-tlhelp32h--kernel32dll)
   - [48. Windows SENS & Network Perception Subsystem](#48--windows-system-event-notification-service-sens--network-perception-subsystem-sensapih--netlistmgrh--sensapidll)
+  - [49. Windows System Time, Dynamic Time Zones & Chronometry Subsystem](#49--windows-system-time-dynamic-time-zones--chronometry-subsystem-timezoneapih--sysinfoapih--realtimeapiseth)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -675,6 +676,17 @@ Directly senses physical network media, destination reachability, and network pr
 - **Network List Manager Profile & Adapter Enumeration (`super_sens_network_connectivity`)**: Queries the Windows Network List Manager COM interface (`INetworkListManager`, CLSID `DCB00C01-570F-4A9B-8D69-199FDBA5723B`). Retrieves comprehensive network connectivity state (IPv4/IPv6 internet, local, or none), active network profile names (e.g. NetBird, Tailscale, Wi-Fi, Ethernet), network categories (Public, Private, Domain), and physical/virtual network adapters with IP addresses, MACs, gateways, and DNS servers.
 - **Milestone Expansion**: **124 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **33 comprehensive test suites (110/110 tests passing)** and **29 environment health checks**.
 - **Native MCP Tools**: `super_sens_network_alive`, `super_sens_destination_reachable`, `super_sens_network_connectivity`.
+
+---
+
+## 49. ⏱️ Windows System Time, Dynamic Time Zones & Chronometry Subsystem (`timezoneapi.h` / `sysinfoapi.h` / `realtimeapiset.h`)
+
+Unlocks bare-metal chronometry, hardware timers, and dynamic time zone transition awareness directly from Microsoft's Win32 System Time architecture (`Windows.Win32.System.Time`):
+- **Dynamic Time Zones & DST Transition Rules (`super_time_zone_info`)**: Invokes native Win32 `GetDynamicTimeZoneInformation` and `EnumDynamicTimeZoneInformation` from `kernel32.dll` and `advapi32.dll`. Reports accurate UTC offset/bias in minutes and hours, standard/daylight transition names and schedules (`SYSTEMTIME`), and whether dynamic daylight saving time is active or disabled. Supports system-wide time zone enumeration (e.g. searching "Tokyo", "Pacific", "UTC") and instantaneous conversion of arbitrary UTC ISO timestamps into the local timezone.
+- **Hardware Performance Counters & Precision Chronometry (`super_time_chronometry`)**: Queries the CPU's invariant hardware timer via `QueryPerformanceCounter` (QPC) and `QueryPerformanceFrequency`, measuring hardware tick resolution down to sub-nanoseconds (e.g. 100ns at 10 MHz). Queries `GetSystemTimePreciseAsFileTime` for sub-microsecond UTC timestamps, `QueryUnbiasedInterruptTime` for suspension/sleep-invariant uptime, and `GetTickCount64` for total machine uptime.
+- **Clock Drift, Interrupt Pacing & Synchronization Telemetry (`super_time_adjustment`)**: Invokes `GetSystemTimeAdjustment` from `kernel32.dll` to query clock interrupt increments (e.g. 15.625ms nominal tick) and adjustment increments (e.g. 15.6252ms). Computes exact clock drift rate in parts per million (PPM), checks whether periodic time adjustments are synchronized or disabled, and inspects the live service state of the Windows Time service (`w32time`).
+- **Milestone Expansion**: **127 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **34 comprehensive test suites (113/113 tests passing)** and **30 environment health checks**.
+- **Native MCP Tools**: `super_time_zone_info`, `super_time_chronometry`, `super_time_adjustment`.
 
 ---
 

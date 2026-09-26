@@ -6107,6 +6107,241 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows System Time, Dynamic Time Zones & Chronometry Subsystem (timezoneapi.h / sysinfoapi.h)
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct TIME_SYSTEMTIME {
+            public ushort wYear;
+            public ushort wMonth;
+            public ushort wDayOfWeek;
+            public ushort wDay;
+            public ushort wHour;
+            public ushort wMinute;
+            public ushort wSecond;
+            public ushort wMilliseconds;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct TIME_DYNAMIC_TIME_ZONE_INFORMATION {
+            public int Bias;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string StandardName;
+            public TIME_SYSTEMTIME StandardDate;
+            public int StandardBias;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string DaylightName;
+            public TIME_SYSTEMTIME DaylightDate;
+            public int DaylightBias;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string TimeZoneKeyName;
+            [MarshalAs(UnmanagedType.I1)]
+            public bool DynamicDaylightTimeDisabled;
+        }
+
+        const uint TIME_ZONE_ID_INVALID = 0xFFFFFFFF;
+        const uint TIME_ZONE_ID_UNKNOWN = 0;
+        const uint TIME_ZONE_ID_STANDARD = 1;
+        const uint TIME_ZONE_ID_DAYLIGHT = 2;
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint GetDynamicTimeZoneInformation(out TIME_DYNAMIC_TIME_ZONE_INFORMATION pTimeZoneInformation);
+
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint EnumDynamicTimeZoneInformation(uint dwIndex, out TIME_DYNAMIC_TIME_ZONE_INFORMATION lpTimeZoneInformation);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetSystemTimeAdjustment(out uint lpTimeAdjustment, out uint lpTimeIncrement, out bool lpTimeAdjustmentDisabled);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool QueryPerformanceCounter(out long lpPerformanceCount);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool QueryPerformanceFrequency(out long lpFrequency);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool QueryUnbiasedInterruptTime(out ulong UnbiasedTime);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+        static extern IntPtr GetProcAddress(IntPtr hModule, string procName);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern IntPtr GetModuleHandle(string lpModuleName);
+
+        delegate void QueryTimePreciseDelegate(out ulong lpTimePrecise);
+
+        static string FormatSystemTime(TIME_SYSTEMTIME st) {
+            return string.Format("{{\"month\": {0}, \"dayOfWeek\": {1}, \"day\": {2}, \"hour\": {3}, \"minute\": {4}}}",
+                st.wMonth, st.wDayOfWeek, st.wDay, st.wHour, st.wMinute);
+        }
+
+        static void TimeGetZoneInfoCmd(bool enumerateAll, string filter, string utcTimestamp) {
+            try {
+                TIME_DYNAMIC_TIME_ZONE_INFORMATION tz = new TIME_DYNAMIC_TIME_ZONE_INFORMATION();
+                uint tzId = GetDynamicTimeZoneInformation(out tz);
+                int totalBias = tz.Bias + (tzId == TIME_ZONE_ID_DAYLIGHT ? tz.DaylightBias : tz.StandardBias);
+                double utcOffsetHours = -((double)totalBias / 60.0);
+                bool isDaylightActive = (tzId == TIME_ZONE_ID_DAYLIGHT);
+
+                string convertedLocalTime = "";
+                if (!string.IsNullOrEmpty(utcTimestamp)) {
+                    DateTime parsedUtc;
+                    if (DateTime.TryParse(utcTimestamp, null, System.Globalization.DateTimeStyles.AdjustToUniversal, out parsedUtc)) {
+                        DateTime localConverted = parsedUtc.AddMinutes(-totalBias);
+                        convertedLocalTime = localConverted.ToString("yyyy-MM-ddTHH:mm:ss.fff");
+                    }
+                }
+
+                var tzList = new List<string>();
+                if (enumerateAll || !string.IsNullOrEmpty(filter)) {
+                    string filterLower = (filter ?? "").ToLowerInvariant();
+                    for (uint i = 0; i < 200; i++) {
+                        TIME_DYNAMIC_TIME_ZONE_INFORMATION enumTz = new TIME_DYNAMIC_TIME_ZONE_INFORMATION();
+                        uint res = EnumDynamicTimeZoneInformation(i, out enumTz);
+                        if (res != 0) break;
+
+                        string key = enumTz.TimeZoneKeyName ?? "";
+                        string std = enumTz.StandardName ?? "";
+                        string dlt = enumTz.DaylightName ?? "";
+
+                        if (!string.IsNullOrEmpty(filterLower)) {
+                            if (!key.ToLowerInvariant().Contains(filterLower) &&
+                                !std.ToLowerInvariant().Contains(filterLower) &&
+                                !dlt.ToLowerInvariant().Contains(filterLower)) {
+                                continue;
+                            }
+                        }
+
+                        double offsetHours = -((double)enumTz.Bias / 60.0);
+                        tzList.Add(string.Format(
+                            "{{\"index\": {0}, \"keyName\": \"{1}\", \"standardName\": \"{2}\", \"daylightName\": \"{3}\", \"bias\": {4}, \"utcOffsetHours\": {5:F1}, \"dynamicDisabled\": {6}}}",
+                            i, EscapeJson(key), EscapeJson(std), EscapeJson(dlt), enumTz.Bias, offsetHours, enumTz.DynamicDaylightTimeDisabled ? "true" : "false"
+                        ));
+                    }
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"timeZoneKeyName\": \"{0}\", \"standardName\": \"{1}\", \"daylightName\": \"{2}\", \"timeZoneId\": {3}, \"isDaylightSavingsActive\": {4}, \"baseBiasMinutes\": {5}, \"totalBiasMinutes\": {6}, \"utcOffsetHours\": {7:F2}, \"dynamicDaylightTimeDisabled\": {8}, \"standardTransition\": {9}, \"daylightTransition\": {10}, \"convertedLocalTime\": \"{11}\", \"enumeratedCount\": {12}, \"timeZones\": [{13}]}}",
+                    EscapeJson(tz.TimeZoneKeyName ?? ""),
+                    EscapeJson(tz.StandardName ?? ""),
+                    EscapeJson(tz.DaylightName ?? ""),
+                    tzId,
+                    isDaylightActive ? "true" : "false",
+                    tz.Bias,
+                    totalBias,
+                    utcOffsetHours,
+                    tz.DynamicDaylightTimeDisabled ? "true" : "false",
+                    FormatSystemTime(tz.StandardDate),
+                    FormatSystemTime(tz.DaylightDate),
+                    EscapeJson(convertedLocalTime),
+                    tzList.Count,
+                    string.Join(", ", tzList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void TimeGetChronometryCmd() {
+            try {
+                long qpc = 0;
+                long freq = 1;
+                QueryPerformanceCounter(out qpc);
+                QueryPerformanceFrequency(out freq);
+                if (freq <= 0) freq = 1;
+                double tickNs = (1000000000.0) / (double)freq;
+
+                long preciseFileTime = 0;
+                string utcIso = "";
+                try {
+                    GetSystemTimePreciseAsFileTime(out preciseFileTime);
+                    DateTime utcDt = DateTime.FromFileTimeUtc(preciseFileTime);
+                    utcIso = utcDt.ToString("yyyy-MM-ddTHH:mm:ss.ffffffZ");
+                } catch {
+                    utcIso = DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.ffffffZ");
+                }
+
+                ulong unbiased = 0;
+                bool unbiasedSuccess = false;
+                try {
+                    unbiasedSuccess = QueryUnbiasedInterruptTime(out unbiased);
+                } catch {}
+                double unbiasedSeconds = unbiased / 10000000.0;
+
+                ulong interruptPrecise = unbiased;
+                bool interruptPreciseFound = false;
+                try {
+                    IntPtr hKernel = GetModuleHandle("kernel32.dll");
+                    IntPtr pIntPrecise = GetProcAddress(hKernel, "QueryInterruptTimePrecise");
+                    if (pIntPrecise != IntPtr.Zero) {
+                        var fn = (QueryTimePreciseDelegate)Marshal.GetDelegateForFunctionPointer(pIntPrecise, typeof(QueryTimePreciseDelegate));
+                        fn(out interruptPrecise);
+                        interruptPreciseFound = true;
+                    }
+                } catch {}
+
+                ulong uptimeMs = 0;
+                try {
+                    uptimeMs = GetTickCount64();
+                } catch {
+                    uptimeMs = (ulong)Environment.TickCount;
+                }
+                double uptimeHours = uptimeMs / 3600000.0;
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"qpcTicks\": {0}, \"qpcFrequencyHz\": {1}, \"tickResolutionNanoseconds\": {2}, \"preciseFileTime\": {3}, \"utcTimestamp\": \"{4}\", \"unbiasedInterruptTime100ns\": {5}, \"unbiasedUptimeSeconds\": {6}, \"interruptTimePrecise100ns\": {7}, \"hasPreciseInterrupt\": {8}, \"uptimeMs\": {9}, \"uptimeHours\": {10}}}",
+                    qpc, freq, tickNs.ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                    preciseFileTime, EscapeJson(utcIso), unbiased,
+                    unbiasedSeconds.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                    interruptPrecise, interruptPreciseFound ? "true" : "false", uptimeMs,
+                    uptimeHours.ToString("F2", System.Globalization.CultureInfo.InvariantCulture)
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void TimeGetAdjustmentCmd() {
+            try {
+                uint timeAdjustment = 0;
+                uint timeIncrement = 0;
+                bool timeAdjustmentDisabled = false;
+
+                bool adjSuccess = GetSystemTimeAdjustment(out timeAdjustment, out timeIncrement, out timeAdjustmentDisabled);
+                int err = adjSuccess ? 0 : Marshal.GetLastWin32Error();
+
+                double nominalTickMs = (timeIncrement > 0 ? timeIncrement : 156250) / 10000.0;
+                double adjustmentTickMs = (timeAdjustment > 0 ? timeAdjustment : 156250) / 10000.0;
+                double skewPpm = 0.0;
+                if (timeIncrement > 0 && timeAdjustment > 0) {
+                    skewPpm = (((double)timeAdjustment - (double)timeIncrement) / (double)timeIncrement) * 1000000.0;
+                }
+
+                string w32timeStatus = "NotInstalled";
+                try {
+                    using (var sc = new ServiceController("w32time")) {
+                        w32timeStatus = sc.Status.ToString();
+                    }
+                } catch {}
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"apiSuccess\": {0}, \"timeAdjustment100ns\": {1}, \"timeIncrement100ns\": {2}, \"timeAdjustmentDisabled\": {3}, \"nominalTickMs\": {4}, \"adjustmentTickMs\": {5}, \"driftRatePpm\": {6}, \"w32timeServiceStatus\": \"{7}\", \"errorCode\": {8}}}",
+                    adjSuccess ? "true" : "false",
+                    timeAdjustment,
+                    timeIncrement,
+                    timeAdjustmentDisabled ? "true" : "false",
+                    nominalTickMs.ToString("F4", System.Globalization.CultureInfo.InvariantCulture),
+                    adjustmentTickMs.ToString("F4", System.Globalization.CultureInfo.InvariantCulture),
+                    skewPpm.ToString("F2", System.Globalization.CultureInfo.InvariantCulture),
+                    EscapeJson(w32timeStatus),
+                    err
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -9051,6 +9286,15 @@ namespace GeminiSuperDesktop {
                 bool includeProfiles = args.Length >= 2 ? (args[1].ToLowerInvariant() != "false" && args[1] != "0") : true;
                 bool includeAdapters = args.Length >= 3 ? (args[2].ToLowerInvariant() != "false" && args[2] != "0") : true;
                 SensNetworkConnectivityCmd(includeProfiles, includeAdapters);
+            } else if (cmd == "time_zone_info" || cmd == "timezone_info" || cmd == "time_zone") {
+                bool enumAll = args.Length >= 2 ? (args[1].ToLowerInvariant() == "true" || args[1] == "1") : false;
+                string filter = args.Length >= 3 ? args[2] : "";
+                string utcTs = args.Length >= 4 ? args[3] : "";
+                TimeGetZoneInfoCmd(enumAll, filter, utcTs);
+            } else if (cmd == "time_chronometry" || cmd == "chronometry" || cmd == "time_clocks") {
+                TimeGetChronometryCmd();
+            } else if (cmd == "time_adjustment" || cmd == "time_drift" || cmd == "time_sync") {
+                TimeGetAdjustmentCmd();
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {
