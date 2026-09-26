@@ -3990,6 +3990,54 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_winhttp_proxy_config",
+        description: "Inspects native Windows HTTP Services (WinHTTP) proxy configurations for both current user IE settings and machine default WinHTTP proxy via WinHttpGetIEProxyConfigForCurrentUser and WinHttpGetDefaultProxyConfiguration.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_winhttp_session_status",
+        description: "Opens a native WinHTTP session and queries protocol capabilities, secure protocols (SSL3, TLS 1.0-1.3), decompression flags (GZIP, DEFLATE), HTTP/2 & HTTP/3 protocol features, and connection timeouts via WinHttpOpen and WinHttpQueryOption.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            userAgent: {
+              type: "string",
+              description: "Custom User-Agent string for the WinHTTP session. Defaults to GeminiSuperSystem/1.0."
+            }
+          }
+        }
+      },
+      {
+        name: "super_winhttp_url_crack",
+        description: "Decomposes and canonicalizes any raw URL into its individual WinHTTP components (scheme, host, port, credentials, path, query/hash) via WinHttpCrackUrl.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            url: {
+              type: "string",
+              description: "The full target URL to crack into structured components."
+            }
+          },
+          required: ["url"]
+        }
+      },
+      {
+        name: "super_winhttp_autoproxy_resolve",
+        description: "Executes Web Proxy Auto-Discovery (WPAD via DHCP / DNS_A) resolution for a specified target URL to discover corporate or network proxy bypass routes via WinHttpGetProxyForUrl.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            targetUrl: {
+              type: "string",
+              description: "Target URL to resolve proxy configuration for. Defaults to https://www.microsoft.com."
+            }
+          }
+        }
       }
 ];
 
@@ -7035,6 +7083,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🛑 [Windows AbortSystemShutdown Execution]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_winhttp_proxy_config") {
+    const res = await orch.getWinHttpProxyConfig();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🌐 [Windows WinHTTP Proxy Configuration Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_winhttp_session_status") {
+    const res = await orch.getWinHttpSessionStatus(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📡 [Windows WinHTTP Session & Protocol Status]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_winhttp_url_crack") {
+    const res = await orch.crackWinHttpUrl(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔍 [Windows WinHTTP URL Decomposition Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_winhttp_autoproxy_resolve") {
+    const res = await orch.resolveWinHttpAutoProxy(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔄 [Windows WinHTTP AutoProxy (WPAD) Resolution Telemetry]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

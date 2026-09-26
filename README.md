@@ -90,6 +90,7 @@
   - [72. Windows Native RFC 6455 WebSocket Engine Subsystem](#72--windows-native-rfc-6455-websocket-engine-subsystem-websocketh--websocketdll)
   - [73. Windows Connection Manager Subsystem](#73--windows-connection-manager-subsystem-wcmapih--wcmapidll)
   - [74. Windows Power, Shutdown & System Initiation Subsystem](#74--windows-power-shutdown--system-initiation-subsystem-initiateshutdownh--reasonh--advapi32dll)
+  - [75. Windows HTTP Services (WinHTTP) Subsystem](#75--windows-http-services-winhttp-subsystem-winhttph--winhttpdll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -988,6 +989,18 @@ Directly interfaces with the Windows Power & Shutdown Initiation APIs via native
 - **Active Shutdown Countdown Abort (`super_shutdown_abort`)**: Automatically enables token shutdown privileges and halts an in-flight system shutdown countdown with active grace period via `AbortSystemShutdownW` on the local machine or remote nodes.
 - **204 Tools Milestone**: Reaches **204 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **59 comprehensive test suites (187/187 tests passing 100%)** and **55 environment health checks**.
 - **Native MCP Tools**: `super_shutdown_reasons`, `super_shutdown_privileges`, `super_shutdown_initiate`, `super_shutdown_abort`.
+
+---
+
+## 75. 🌐 Windows HTTP Services (WinHTTP) Subsystem (`winhttp.h` / `winhttp.dll`)
+
+Directly interfaces with the native Windows HTTP Services (WinHTTP) stack via bare-metal `winhttp.dll` P/Invoke:
+- **Proxy Configuration Inspection (`super_winhttp_proxy_config`)**: Queries both current user Internet Explorer / Windows Settings proxy configuration (`WinHttpGetIEProxyConfigForCurrentUser`) and machine default WinHTTP service proxy settings (`WinHttpGetDefaultProxyConfiguration`). Inspects WPAD auto-detect flags, explicit proxy endpoints, proxy bypass lists, and PAC script URLs (`lpszAutoConfigUrl`) with zero native memory leaks (`GlobalFree`).
+- **Session Telemetry & Protocol Capabilities (`super_winhttp_session_status`)**: Opens an unmediated native WinHTTP session handle (`WinHttpOpen`) and queries transport-level capabilities via `WinHttpQueryOption`: secure protocol negotiation flags (SSL3, TLS 1.0, TLS 1.1, TLS 1.2, TLS 1.3), automated content decompression (`WINHTTP_DECOMPRESSION_FLAG_GZIP`, `DEFLATE`), next-gen HTTP protocol support (`WINHTTP_PROTOCOL_FLAG_HTTP2`, `HTTP3`), connection timeouts (connect, send, receive), and maximum connections per server.
+- **URL Decomposition & Canonicalization (`super_winhttp_url_crack`)**: Parses, canonicalizes, and decomposes arbitrary URLs into structured WinHTTP components via `WinHttpCrackUrl`: canonical scheme, hostname, port number, username/password presence, URL path, and query/anchor extra info with exact pointer length extraction.
+- **Web Proxy Auto-Discovery (WPAD) Resolution (`super_winhttp_autoproxy_resolve`)**: Probes corporate and network proxy bypass topologies for any target endpoint using native WPAD (`WinHttpGetProxyForUrl`) via DHCP options and DNS 'wpad' A-records (`WINHTTP_AUTO_DETECT_TYPE_DHCP | WINHTTP_AUTO_DETECT_TYPE_DNS_A`).
+- **208 Tools Milestone**: Reaches **208 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **60 comprehensive test suites (191/191 tests passing 100%)** and **56 environment health checks**.
+- **Native MCP Tools**: `super_winhttp_proxy_config`, `super_winhttp_session_status`, `super_winhttp_url_crack`, `super_winhttp_autoproxy_resolve`.
 
 ---
 

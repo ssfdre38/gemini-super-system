@@ -4287,10 +4287,76 @@ async function run() {
     assert(typeof res.message === "string");
   });
 
-  it("All 204 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 60: Windows HTTP Services Subsystem (winhttp.h / winhttp.dll)
+  console.log("\n\x1b[1m[Suite 60: Windows HTTP Services Subsystem]\x1b[0m");
+
+  await itAsync("getWinHttpProxyConfig queries user IE proxy and system WinHTTP proxy config", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWinHttpProxyConfig();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWinHttpProxyConfig failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.userProxyConfig === "object");
+    assert(typeof res.userProxyConfig.autoDetect === "boolean");
+    assert(typeof res.defaultWinHttpProxy === "object");
+    assert(typeof res.defaultWinHttpProxy.accessType === "string");
+  });
+
+  await itAsync("getWinHttpSessionStatus inspects native session protocols, timeouts, and features", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWinHttpSessionStatus({ userAgent: "GeminiTestAgent/1.0" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWinHttpSessionStatus failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert.strictEqual(res.userAgent, "GeminiTestAgent/1.0");
+    assert(typeof res.secureProtocols === "object");
+    assert(typeof res.secureProtocols.rawMask === "string");
+    assert(typeof res.decompression === "object");
+    assert(typeof res.httpProtocolFeatures === "object");
+    assert(typeof res.timeouts === "object");
+    assert(typeof res.timeouts.connectMs === "number");
+  });
+
+  await itAsync("crackWinHttpUrl canonicalizes and parses URL components via WinHttpCrackUrl", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.crackWinHttpUrl({ url: "https://agent:token99@api.gemini.super:8443/v1/telemetry?query=live#anchor" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "crackWinHttpUrl failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert.strictEqual(res.scheme, "https");
+    assert.strictEqual(res.isSecure, true);
+    assert.strictEqual(res.host, "api.gemini.super");
+    assert.strictEqual(res.port, 8443);
+    assert.strictEqual(res.userName, "agent");
+    assert.strictEqual(res.hasPassword, true);
+    assert.strictEqual(res.path, "/v1/telemetry");
+    assert.strictEqual(res.extraInfo, "?query=live#anchor");
+  });
+
+  await itAsync("resolveWinHttpAutoProxy probes WPAD autoproxy resolution via WinHttpGetProxyForUrl", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.resolveWinHttpAutoProxy({ targetUrl: "https://www.microsoft.com" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "resolveWinHttpAutoProxy failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.targetUrl === "string");
+    assert(typeof res.wpadResolved === "boolean");
+    assert(typeof res.accessType === "string");
+    assert(typeof res.probeResultCode === "number");
+  });
+
+  it("All 208 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 204);
+    assert.strictEqual(SYSTEM_TOOLS.length, 208);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -4428,6 +4494,10 @@ async function run() {
     assert(toolNames.includes("super_shutdown_privileges"));
     assert(toolNames.includes("super_shutdown_initiate"));
     assert(toolNames.includes("super_shutdown_abort"));
+    assert(toolNames.includes("super_winhttp_proxy_config"));
+    assert(toolNames.includes("super_winhttp_session_status"));
+    assert(toolNames.includes("super_winhttp_url_crack"));
+    assert(toolNames.includes("super_winhttp_autoproxy_resolve"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

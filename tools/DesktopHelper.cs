@@ -14549,6 +14549,318 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 75: Windows HTTP Services (WinHttp) Subsystem (winhttp.h / winhttp.dll)
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct WINHTTP_CURRENT_USER_IE_PROXY_CONFIG {
+            public bool fAutoDetect;
+            public IntPtr lpszAutoConfigUrl;
+            public IntPtr lpszProxy;
+            public IntPtr lpszProxyBypass;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct WINHTTP_PROXY_INFO {
+            public uint dwAccessType;
+            public IntPtr lpszProxy;
+            public IntPtr lpszProxyBypass;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct WINHTTP_AUTOPROXY_OPTIONS {
+            public uint dwFlags;
+            public uint dwAutoDetectFlags;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string lpszAutoConfigUrl;
+            public IntPtr lpvReserved;
+            public uint dwReserved;
+            public bool fAutoLogonIfChallenged;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct WINHTTP_URL_COMPONENTS {
+            public int dwStructSize;
+            public IntPtr lpszScheme;
+            public int dwSchemeLength;
+            public int nScheme;
+            public IntPtr lpszHostName;
+            public int dwHostNameLength;
+            public int nPort;
+            public IntPtr lpszUserName;
+            public int dwUserNameLength;
+            public IntPtr lpszPassword;
+            public int dwPasswordLength;
+            public IntPtr lpszUrlPath;
+            public int dwUrlPathLength;
+            public IntPtr lpszExtraInfo;
+            public int dwExtraInfoLength;
+        }
+
+        const uint WINHTTP_ACCESS_TYPE_DEFAULT_PROXY = 0;
+        const uint WINHTTP_ACCESS_TYPE_NO_PROXY      = 1;
+        const uint WINHTTP_ACCESS_TYPE_NAMED_PROXY   = 3;
+
+        const uint WINHTTP_OPTION_SECURE_PROTOCOLS   = 0x00000009;
+        const uint WINHTTP_OPTION_USER_AGENT         = 0x00000007;
+        const uint WINHTTP_OPTION_DECOMPRESSION      = 0x00000076;
+        const uint WINHTTP_OPTION_ENABLE_HTTP_PROTOCOL = 0x00000085;
+        const uint WINHTTP_OPTION_MAX_CONNS_PER_SERVER = 0x0000001B;
+        const uint WINHTTP_OPTION_CONNECT_TIMEOUT    = 0x00000002;
+        const uint WINHTTP_OPTION_SEND_TIMEOUT       = 0x00000004;
+        const uint WINHTTP_OPTION_RECEIVE_TIMEOUT    = 0x00000005;
+
+        const uint WINHTTP_AUTOPROXY_AUTO_DETECT     = 0x00000001;
+        const uint WINHTTP_AUTOPROXY_CONFIG_URL      = 0x00000002;
+        const uint WINHTTP_AUTO_DETECT_TYPE_DHCP     = 0x00000001;
+        const uint WINHTTP_AUTO_DETECT_TYPE_DNS_A    = 0x00000002;
+
+        [DllImport("winhttp.dll", SetLastError = true)]
+        static extern bool WinHttpGetIEProxyConfigForCurrentUser(ref WINHTTP_CURRENT_USER_IE_PROXY_CONFIG pProxyConfig);
+
+        [DllImport("winhttp.dll", SetLastError = true)]
+        static extern bool WinHttpGetDefaultProxyConfiguration(ref WINHTTP_PROXY_INFO pProxyInfo);
+
+        [DllImport("winhttp.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern IntPtr WinHttpOpen(
+            string pszAgentW,
+            uint dwAccessType,
+            string pszProxyW,
+            string pszProxyBypassW,
+            uint dwFlags
+        );
+
+        [DllImport("winhttp.dll", SetLastError = true)]
+        static extern bool WinHttpQueryOption(
+            IntPtr hInternet,
+            uint dwOption,
+            out uint lpBuffer,
+            ref uint lpdwBufferLength
+        );
+
+        [DllImport("winhttp.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool WinHttpGetProxyForUrl(
+            IntPtr hSession,
+            string lpcwszUrl,
+            ref WINHTTP_AUTOPROXY_OPTIONS pAutoProxyOptions,
+            out WINHTTP_PROXY_INFO pProxyInfo
+        );
+
+        [DllImport("winhttp.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool WinHttpCrackUrl(
+            string pwszUrl,
+            int dwUrlLength,
+            uint dwFlags,
+            ref WINHTTP_URL_COMPONENTS lpUrlComponents
+        );
+
+        [DllImport("winhttp.dll", SetLastError = true)]
+        static extern bool WinHttpCloseHandle(IntPtr hInternet);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern IntPtr GlobalFree(IntPtr hMem);
+
+        static void WinHttpProxyConfigCmd() {
+            try {
+                // 1. User IE / Windows Settings Proxy Config
+                var ieCfg = new WINHTTP_CURRENT_USER_IE_PROXY_CONFIG();
+                bool ieOk = WinHttpGetIEProxyConfigForCurrentUser(ref ieCfg);
+                string ieProxy = (ieCfg.lpszProxy != IntPtr.Zero) ? Marshal.PtrToStringUni(ieCfg.lpszProxy) : "";
+                string ieBypass = (ieCfg.lpszProxyBypass != IntPtr.Zero) ? Marshal.PtrToStringUni(ieCfg.lpszProxyBypass) : "";
+                string ieAutoUrl = (ieCfg.lpszAutoConfigUrl != IntPtr.Zero) ? Marshal.PtrToStringUni(ieCfg.lpszAutoConfigUrl) : "";
+
+                // 2. Machine Default WinHTTP Proxy Config
+                var defCfg = new WINHTTP_PROXY_INFO();
+                bool defOk = WinHttpGetDefaultProxyConfiguration(ref defCfg);
+                string defProxy = (defCfg.lpszProxy != IntPtr.Zero) ? Marshal.PtrToStringUni(defCfg.lpszProxy) : "";
+                string defBypass = (defCfg.lpszProxyBypass != IntPtr.Zero) ? Marshal.PtrToStringUni(defCfg.lpszProxyBypass) : "";
+
+                string accessType = "WINHTTP_ACCESS_TYPE_DEFAULT_PROXY";
+                if (defCfg.dwAccessType == WINHTTP_ACCESS_TYPE_NO_PROXY) accessType = "WINHTTP_ACCESS_TYPE_NO_PROXY";
+                else if (defCfg.dwAccessType == WINHTTP_ACCESS_TYPE_NAMED_PROXY) accessType = "WINHTTP_ACCESS_TYPE_NAMED_PROXY";
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append("\"userProxyConfig\": {");
+                sb.Append(string.Format("\"success\": {0}, \"autoDetect\": {1}, \"proxy\": \"{2}\", \"proxyBypass\": \"{3}\", \"autoConfigUrl\": \"{4}\"",
+                    ieOk ? "true" : "false", ieCfg.fAutoDetect ? "true" : "false", EscapeJson(ieProxy), EscapeJson(ieBypass), EscapeJson(ieAutoUrl)));
+                sb.Append("}, \"defaultWinHttpProxy\": {");
+                sb.Append(string.Format("\"success\": {0}, \"accessType\": \"{1}\", \"accessTypeCode\": {2}, \"proxy\": \"{3}\", \"proxyBypass\": \"{4}\"",
+                    defOk ? "true" : "false", accessType, defCfg.dwAccessType, EscapeJson(defProxy), EscapeJson(defBypass)));
+                sb.Append("}}");
+
+                if (ieCfg.lpszProxy != IntPtr.Zero) GlobalFree(ieCfg.lpszProxy);
+                if (ieCfg.lpszProxyBypass != IntPtr.Zero) GlobalFree(ieCfg.lpszProxyBypass);
+                if (ieCfg.lpszAutoConfigUrl != IntPtr.Zero) GlobalFree(ieCfg.lpszAutoConfigUrl);
+                if (defCfg.lpszProxy != IntPtr.Zero) GlobalFree(defCfg.lpszProxy);
+                if (defCfg.lpszProxyBypass != IntPtr.Zero) GlobalFree(defCfg.lpszProxyBypass);
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WinHttpSessionStatusCmd(string customAgent) {
+            try {
+                string userAgent = string.IsNullOrEmpty(customAgent) ? "GeminiSuperSystem/1.0" : customAgent;
+                IntPtr hSession = WinHttpOpen(userAgent, WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, null, null, 0);
+
+                if (hSession == IntPtr.Zero) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"WinHttpOpen failed with error {0}\"}}", err));
+                    return;
+                }
+
+                try {
+                    uint secProtocols = 0;
+                    uint len4 = 4;
+                    WinHttpQueryOption(hSession, WINHTTP_OPTION_SECURE_PROTOCOLS, out secProtocols, ref len4);
+
+                    uint decompress = 0;
+                    len4 = 4;
+                    WinHttpQueryOption(hSession, WINHTTP_OPTION_DECOMPRESSION, out decompress, ref len4);
+
+                    uint httpProto = 0;
+                    len4 = 4;
+                    WinHttpQueryOption(hSession, WINHTTP_OPTION_ENABLE_HTTP_PROTOCOL, out httpProto, ref len4);
+
+                    uint maxConns = 0;
+                    len4 = 4;
+                    WinHttpQueryOption(hSession, WINHTTP_OPTION_MAX_CONNS_PER_SERVER, out maxConns, ref len4);
+
+                    uint connTimeout = 0;
+                    len4 = 4;
+                    WinHttpQueryOption(hSession, WINHTTP_OPTION_CONNECT_TIMEOUT, out connTimeout, ref len4);
+
+                    uint sendTimeout = 0;
+                    len4 = 4;
+                    WinHttpQueryOption(hSession, WINHTTP_OPTION_SEND_TIMEOUT, out sendTimeout, ref len4);
+
+                    uint recvTimeout = 0;
+                    len4 = 4;
+                    WinHttpQueryOption(hSession, WINHTTP_OPTION_RECEIVE_TIMEOUT, out recvTimeout, ref len4);
+
+                    bool ssl3 = (secProtocols & 0x00000020) != 0;
+                    bool tls10 = (secProtocols & 0x00000080) != 0;
+                    bool tls11 = (secProtocols & 0x00000200) != 0;
+                    bool tls12 = (secProtocols & 0x00000800) != 0;
+                    bool tls13 = (secProtocols & 0x00002000) != 0;
+
+                    bool gzip = (decompress & 0x00000001) != 0;
+                    bool deflate = (decompress & 0x00000002) != 0;
+
+                    bool http2 = (httpProto & 0x00000001) != 0;
+                    bool http3 = (httpProto & 0x00000002) != 0;
+
+                    var sb = new StringBuilder();
+                    sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                    sb.Append(string.Format("\"userAgent\": \"{0}\", ", EscapeJson(userAgent)));
+                    sb.Append(string.Format("\"secureProtocols\": {{\"rawMask\": \"0x{0:X8}\", \"ssl3\": {1}, \"tls10\": {2}, \"tls11\": {3}, \"tls12\": {4}, \"tls13\": {5}}}, ",
+                        secProtocols, ssl3 ? "true" : "false", tls10 ? "true" : "false", tls11 ? "true" : "false", tls12 ? "true" : "false", tls13 ? "true" : "false"));
+                    sb.Append(string.Format("\"decompression\": {{\"rawMask\": \"0x{0:X8}\", \"gzip\": {1}, \"deflate\": {2}}}, ",
+                        decompress, gzip ? "true" : "false", deflate ? "true" : "false"));
+                    sb.Append(string.Format("\"httpProtocolFeatures\": {{\"rawMask\": \"0x{0:X8}\", \"http2\": {1}, \"http3\": {2}}}, ",
+                        httpProto, http2 ? "true" : "false", http3 ? "true" : "false"));
+                    sb.Append(string.Format("\"timeouts\": {{\"connectMs\": {0}, \"sendMs\": {1}, \"receiveMs\": {2}}}, ",
+                        connTimeout, sendTimeout, recvTimeout));
+                    sb.Append(string.Format("\"maxConnectionsPerServer\": {0}}}", maxConns));
+
+                    Console.WriteLine(sb.ToString());
+                } finally {
+                    WinHttpCloseHandle(hSession);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WinHttpUrlCrackCmd(string rawUrl) {
+            try {
+                if (string.IsNullOrEmpty(rawUrl)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"No URL provided to crack\"}");
+                    return;
+                }
+
+                var comp = new WINHTTP_URL_COMPONENTS();
+                comp.dwStructSize = Marshal.SizeOf(typeof(WINHTTP_URL_COMPONENTS));
+                comp.dwSchemeLength = 1;
+                comp.dwHostNameLength = 1;
+                comp.dwUserNameLength = 1;
+                comp.dwPasswordLength = 1;
+                comp.dwUrlPathLength = 1;
+                comp.dwExtraInfoLength = 1;
+
+                bool ok = WinHttpCrackUrl(rawUrl, rawUrl.Length, 0, ref comp);
+                if (!ok) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"WinHttpCrackUrl failed with error {0}\"}}", err));
+                    return;
+                }
+
+                string scheme = comp.dwSchemeLength > 0 ? Marshal.PtrToStringUni(comp.lpszScheme, comp.dwSchemeLength) : "";
+                string host = comp.dwHostNameLength > 0 ? Marshal.PtrToStringUni(comp.lpszHostName, comp.dwHostNameLength) : "";
+                string user = comp.dwUserNameLength > 0 ? Marshal.PtrToStringUni(comp.lpszUserName, comp.dwUserNameLength) : "";
+                string pass = comp.dwPasswordLength > 0 ? Marshal.PtrToStringUni(comp.lpszPassword, comp.dwPasswordLength) : "";
+                string path = comp.dwUrlPathLength > 0 ? Marshal.PtrToStringUni(comp.lpszUrlPath, comp.dwUrlPathLength) : "";
+                string extra = comp.dwExtraInfoLength > 0 ? Marshal.PtrToStringUni(comp.lpszExtraInfo, comp.dwExtraInfoLength) : "";
+
+                bool isSecure = scheme.Equals("https", StringComparison.OrdinalIgnoreCase);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"apiAvailable\": true, \"originalUrl\": \"{0}\", \"scheme\": \"{1}\", \"isSecure\": {2}, \"host\": \"{3}\", \"port\": {4}, \"userName\": \"{5}\", \"hasPassword\": {6}, \"path\": \"{7}\", \"extraInfo\": \"{8}\"}}",
+                    EscapeJson(rawUrl), EscapeJson(scheme), isSecure ? "true" : "false", EscapeJson(host), comp.nPort, EscapeJson(user), !string.IsNullOrEmpty(pass) ? "true" : "false", EscapeJson(path), EscapeJson(extra)
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WinHttpAutoProxyResolveCmd(string targetUrl) {
+            try {
+                string url = string.IsNullOrEmpty(targetUrl) ? "https://www.microsoft.com" : targetUrl;
+                IntPtr hSession = WinHttpOpen("GeminiSuper/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, null, null, 0);
+
+                if (hSession == IntPtr.Zero) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"WinHttpOpen failed with error {0}\"}}", err));
+                    return;
+                }
+
+                try {
+                    var options = new WINHTTP_AUTOPROXY_OPTIONS();
+                    options.dwFlags = WINHTTP_AUTOPROXY_AUTO_DETECT;
+                    options.dwAutoDetectFlags = WINHTTP_AUTO_DETECT_TYPE_DHCP | WINHTTP_AUTO_DETECT_TYPE_DNS_A;
+                    options.fAutoLogonIfChallenged = true;
+
+                    var proxyInfo = new WINHTTP_PROXY_INFO();
+                    bool ok = WinHttpGetProxyForUrl(hSession, url, ref options, out proxyInfo);
+                    int err = Marshal.GetLastWin32Error();
+
+                    string proxy = (ok && proxyInfo.lpszProxy != IntPtr.Zero) ? Marshal.PtrToStringUni(proxyInfo.lpszProxy) : "";
+                    string bypass = (ok && proxyInfo.lpszProxyBypass != IntPtr.Zero) ? Marshal.PtrToStringUni(proxyInfo.lpszProxyBypass) : "";
+
+                    string access = "DIRECT";
+                    if (proxyInfo.dwAccessType == WINHTTP_ACCESS_TYPE_NAMED_PROXY) access = "PROXY";
+
+                    bool resolved = ok && !string.IsNullOrEmpty(proxy);
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"apiAvailable\": true, \"targetUrl\": \"{0}\", \"wpadResolved\": {1}, \"accessType\": \"{2}\", \"proxy\": \"{3}\", \"proxyBypass\": \"{4}\", \"probeResultCode\": {5}}}",
+                        EscapeJson(url), resolved ? "true" : "false", access, EscapeJson(proxy), EscapeJson(bypass), ok ? 0 : err
+                    ));
+
+                    if (proxyInfo.lpszProxy != IntPtr.Zero) GlobalFree(proxyInfo.lpszProxy);
+                    if (proxyInfo.lpszProxyBypass != IntPtr.Zero) GlobalFree(proxyInfo.lpszProxyBypass);
+                } finally {
+                    WinHttpCloseHandle(hSession);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -17855,6 +18167,17 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "shutdown_abort" || cmd == "shutdown-abort") {
                 string mach = args.Length >= 2 ? args[1] : "";
                 ShutdownAbortCmd(mach);
+            } else if (cmd == "winhttp_proxy_config" || cmd == "winhttp-proxy-config") {
+                WinHttpProxyConfigCmd();
+            } else if (cmd == "winhttp_session_status" || cmd == "winhttp-session-status") {
+                string agent = args.Length >= 2 ? args[1] : "";
+                WinHttpSessionStatusCmd(agent);
+            } else if (cmd == "winhttp_url_crack" || cmd == "winhttp-url-crack") {
+                string raw = args.Length >= 2 ? args[1] : "";
+                WinHttpUrlCrackCmd(raw);
+            } else if (cmd == "winhttp_autoproxy_resolve" || cmd == "winhttp-autoproxy-resolve") {
+                string url = args.Length >= 2 ? args[1] : "";
+                WinHttpAutoProxyResolveCmd(url);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
