@@ -3262,6 +3262,53 @@ const SYSTEM_TOOLS = [
           type: "object",
           properties: {}
         }
+      },
+      {
+        name: "super_iphlp_routing_table",
+        description: "Queries the Windows IP routing table, active subnets, metric costs, next hop addresses, and default gateway routes via native Win32 GetIpForwardTable from iphlpapi.dll. Returns destination prefixes, subnet masks, gateway next hops, interface indices, route types (DIRECT/INDIRECT), routing protocols (NETMGMT, LOCAL, OSPF, BGP), and identifies primary default gateways (0.0.0.0).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              description: "Optional substring filter on destination IP or next hop IP."
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of routes to return. Default is 100. Use 0 for all."
+            }
+          }
+        }
+      },
+      {
+        name: "super_iphlp_arp_table",
+        description: "Queries the Windows ARP (Address Resolution Protocol) cache and hardware neighbor mappings via native Win32 GetIpNetTable from iphlpapi.dll. Returns IPv4 addresses mapped to physical MAC addresses (XX-XX-XX-XX-XX-XX), adapter interface indices, and entry types (DYNAMIC, STATIC, INVALID).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              description: "Optional substring filter on IP or MAC address."
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of ARP entries to return. Default is 100. Use 0 for all."
+            }
+          }
+        }
+      },
+      {
+        name: "super_iphlp_interfaces",
+        description: "Interrogates all physical and virtual network adapters, interface types (Ethernet, WiFi, Tunnel, Loopback), operational link states, MTU sizes, link speeds (Mbps/Gbps), MAC addresses, IPv4/IPv6 addresses, gateway routers, DNS servers, and 64-bit transmitted/received octet counters via native IP Helper API.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              description: "Optional substring filter on adapter name, ID, or description."
+            }
+          }
+        }
       }
 ];
 
@@ -5813,6 +5860,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🗣️ [Windows Preferred UI Languages (Get*PreferredUILanguages)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_iphlp_routing_table") {
+    const res = await orch.getRoutingTable(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🗺️ [Windows IP Routing Table (GetIpForwardTable)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_iphlp_arp_table") {
+    const res = await orch.getArpTable(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows ARP Table (GetIpNetTable)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_iphlp_interfaces") {
+    const res = await orch.getNetworkInterfaces(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔌 [Windows Network Interfaces (IP Helper)]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

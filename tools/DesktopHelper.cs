@@ -10128,6 +10128,342 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows IP Helper & Network Routing Subsystem (iphlpapi.h / iphlpapi.dll)
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MIB_IPFORWARDROW {
+            public uint dwForwardDest;
+            public uint dwForwardMask;
+            public uint dwForwardPolicy;
+            public uint dwForwardNextHop;
+            public uint dwForwardIfIndex;
+            public uint dwForwardType;
+            public uint dwForwardProto;
+            public uint dwForwardAge;
+            public uint dwForwardNextHopAS;
+            public uint dwForwardMetric1;
+            public uint dwForwardMetric2;
+            public uint dwForwardMetric3;
+            public uint dwForwardMetric4;
+            public uint dwForwardMetric5;
+        }
+
+        [DllImport("iphlpapi.dll", SetLastError = true)]
+        public static extern uint GetIpForwardTable(
+            IntPtr pIpForwardTable,
+            ref uint pdwSize,
+            bool bOrder);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MIB_IPNETROW {
+            public uint dwIndex;
+            public uint dwPhysAddrLen;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+            public byte[] bPhysAddr;
+            public uint dwAddr;
+            public uint dwType;
+        }
+
+        [DllImport("iphlpapi.dll", SetLastError = true)]
+        public static extern uint GetIpNetTable(
+            IntPtr pIpNetTable,
+            ref uint pdwSize,
+            bool bOrder);
+
+        static string FormatIpv4Address(uint ip) {
+            byte[] bytes = BitConverter.GetBytes(ip);
+            return string.Format("{0}.{1}.{2}.{3}", bytes[0], bytes[1], bytes[2], bytes[3]);
+        }
+
+        static string FormatMacAddress(byte[] addr, uint len) {
+            if (addr == null || len == 0) return "";
+            var parts = new List<string>();
+            for (int i = 0; i < len && i < addr.Length; i++) {
+                parts.Add(addr[i].ToString("X2"));
+            }
+            return string.Join("-", parts.ToArray());
+        }
+
+        static string DecodeRouteProtocol(uint proto) {
+            switch (proto) {
+                case 1: return "OTHER";
+                case 2: return "LOCAL";
+                case 3: return "NETMGMT";
+                case 4: return "ICMP";
+                case 5: return "EGP";
+                case 6: return "GGP";
+                case 7: return "HELLO";
+                case 8: return "RIP";
+                case 9: return "IS_IS";
+                case 10: return "ES_IS";
+                case 11: return "CISCO";
+                case 12: return "BBN";
+                case 13: return "OSPF";
+                case 14: return "BGP";
+                default: return "PROTO_" + proto;
+            }
+        }
+
+        static string DecodeRouteType(uint type) {
+            switch (type) {
+                case 1: return "OTHER";
+                case 2: return "INVALID";
+                case 3: return "DIRECT";
+                case 4: return "INDIRECT";
+                default: return "TYPE_" + type;
+            }
+        }
+
+        static string DecodeArpType(uint type) {
+            switch (type) {
+                case 1: return "OTHER";
+                case 2: return "INVALID";
+                case 3: return "DYNAMIC";
+                case 4: return "STATIC";
+                default: return "TYPE_" + type;
+            }
+        }
+
+        static void IpHlpRoutingTableCmd(string filter, int limit) {
+            try {
+                uint size = 0;
+                GetIpForwardTable(IntPtr.Zero, ref size, true);
+
+                var routes = new List<string>();
+                int defaultGatewayCount = 0;
+
+                if (size > 0) {
+                    IntPtr pBuf = Marshal.AllocHGlobal((int)size);
+                    try {
+                        uint ret = GetIpForwardTable(pBuf, ref size, true);
+                        if (ret == 0) {
+                            int numEntries = Marshal.ReadInt32(pBuf);
+                            int rowSize = Marshal.SizeOf(typeof(MIB_IPFORWARDROW));
+                            IntPtr pRowStart = new IntPtr(pBuf.ToInt64() + 4);
+
+                            for (int i = 0; i < numEntries; i++) {
+                                IntPtr pRow = new IntPtr(pRowStart.ToInt64() + i * rowSize);
+                                var row = (MIB_IPFORWARDROW)Marshal.PtrToStructure(pRow, typeof(MIB_IPFORWARDROW));
+
+                                string destIp = FormatIpv4Address(row.dwForwardDest);
+                                string mask = FormatIpv4Address(row.dwForwardMask);
+                                string nextHop = FormatIpv4Address(row.dwForwardNextHop);
+                                bool isDefaultGateway = (destIp == "0.0.0.0" && mask == "0.0.0.0");
+                                if (isDefaultGateway) defaultGatewayCount++;
+
+                                if (!string.IsNullOrEmpty(filter)) {
+                                    if (destIp.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0 &&
+                                        nextHop.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) {
+                                        continue;
+                                    }
+                                }
+
+                                var sbItem = new StringBuilder();
+                                sbItem.Append("{");
+                                sbItem.AppendFormat("\"destination\": \"{0}\", ", destIp);
+                                sbItem.AppendFormat("\"netmask\": \"{0}\", ", mask);
+                                sbItem.AppendFormat("\"nextHop\": \"{0}\", ", nextHop);
+                                sbItem.AppendFormat("\"interfaceIndex\": {0}, ", row.dwForwardIfIndex);
+                                sbItem.AppendFormat("\"metric\": {0}, ", row.dwForwardMetric1);
+                                sbItem.AppendFormat("\"type\": \"{0}\", ", DecodeRouteType(row.dwForwardType));
+                                sbItem.AppendFormat("\"protocol\": \"{0}\", ", DecodeRouteProtocol(row.dwForwardProto));
+                                sbItem.AppendFormat("\"ageSeconds\": {0}, ", row.dwForwardAge);
+                                sbItem.AppendFormat("\"isDefaultGateway\": {0}", isDefaultGateway ? "true" : "false");
+                                sbItem.Append("}");
+                                routes.Add(sbItem.ToString());
+                            }
+                        }
+                    } finally {
+                        Marshal.FreeHGlobal(pBuf);
+                    }
+                }
+
+                int totalCount = routes.Count;
+                if (limit > 0 && routes.Count > limit) {
+                    routes = routes.GetRange(0, limit);
+                }
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.AppendFormat("\"totalRoutes\": {0}, ", totalCount);
+                sbOut.AppendFormat("\"defaultGatewayCount\": {0}, ", defaultGatewayCount);
+                sbOut.AppendFormat("\"returnedCount\": {0}, ", routes.Count);
+                sbOut.Append("\"routes\": [");
+                for (int i = 0; i < routes.Count; i++) {
+                    if (i > 0) sbOut.Append(", ");
+                    sbOut.Append(routes[i]);
+                }
+                sbOut.Append("]}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void IpHlpArpTableCmd(string filter, int limit) {
+            try {
+                uint size = 0;
+                GetIpNetTable(IntPtr.Zero, ref size, true);
+
+                var entries = new List<string>();
+
+                if (size > 0) {
+                    IntPtr pBuf = Marshal.AllocHGlobal((int)size);
+                    try {
+                        uint ret = GetIpNetTable(pBuf, ref size, true);
+                        if (ret == 0) {
+                            int numEntries = Marshal.ReadInt32(pBuf);
+                            int rowSize = Marshal.SizeOf(typeof(MIB_IPNETROW));
+                            IntPtr pRowStart = new IntPtr(pBuf.ToInt64() + 4);
+
+                            for (int i = 0; i < numEntries; i++) {
+                                IntPtr pRow = new IntPtr(pRowStart.ToInt64() + i * rowSize);
+                                var row = (MIB_IPNETROW)Marshal.PtrToStructure(pRow, typeof(MIB_IPNETROW));
+
+                                string ip = FormatIpv4Address(row.dwAddr);
+                                string mac = FormatMacAddress(row.bPhysAddr, row.dwPhysAddrLen);
+                                string type = DecodeArpType(row.dwType);
+
+                                if (!string.IsNullOrEmpty(filter)) {
+                                    if (ip.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0 &&
+                                        mac.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) {
+                                        continue;
+                                    }
+                                }
+
+                                var sbItem = new StringBuilder();
+                                sbItem.Append("{");
+                                sbItem.AppendFormat("\"ipAddress\": \"{0}\", ", ip);
+                                sbItem.AppendFormat("\"macAddress\": \"{0}\", ", mac);
+                                sbItem.AppendFormat("\"interfaceIndex\": {0}, ", row.dwIndex);
+                                sbItem.AppendFormat("\"type\": \"{0}\"", type);
+                                sbItem.Append("}");
+                                entries.Add(sbItem.ToString());
+                            }
+                        }
+                    } finally {
+                        Marshal.FreeHGlobal(pBuf);
+                    }
+                }
+
+                int totalCount = entries.Count;
+                if (limit > 0 && entries.Count > limit) {
+                    entries = entries.GetRange(0, limit);
+                }
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.AppendFormat("\"totalEntries\": {0}, ", totalCount);
+                sbOut.AppendFormat("\"returnedCount\": {0}, ", entries.Count);
+                sbOut.Append("\"arpEntries\": [");
+                for (int i = 0; i < entries.Count; i++) {
+                    if (i > 0) sbOut.Append(", ");
+                    sbOut.Append(entries[i]);
+                }
+                sbOut.Append("]}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void IpHlpInterfacesCmd(string filter) {
+            try {
+                var ifaces = new List<string>();
+                var nics = System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces();
+
+                foreach (var nic in nics) {
+                    if (!string.IsNullOrEmpty(filter)) {
+                        if (nic.Name.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0 &&
+                            nic.Description.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0 &&
+                            nic.Id.IndexOf(filter, StringComparison.OrdinalIgnoreCase) < 0) {
+                            continue;
+                        }
+                    }
+
+                    var ipProps = nic.GetIPProperties();
+                    var stats = nic.GetIPv4Statistics();
+
+                    var ipList = new List<string>();
+                    if (ipProps.UnicastAddresses != null) {
+                        foreach (var u in ipProps.UnicastAddresses) {
+                            if (u.Address != null) ipList.Add(string.Format("\"{0}\"", u.Address.ToString()));
+                        }
+                    }
+
+                    var gwList = new List<string>();
+                    if (ipProps.GatewayAddresses != null) {
+                        foreach (var g in ipProps.GatewayAddresses) {
+                            if (g.Address != null) gwList.Add(string.Format("\"{0}\"", g.Address.ToString()));
+                        }
+                    }
+
+                    var dnsList = new List<string>();
+                    if (ipProps.DnsAddresses != null) {
+                        foreach (var d in ipProps.DnsAddresses) {
+                            dnsList.Add(string.Format("\"{0}\"", d.ToString()));
+                        }
+                    }
+
+                    long bytesSent = 0;
+                    long bytesReceived = 0;
+                    long inErrors = 0;
+                    long outErrors = 0;
+                    if (stats != null) {
+                        try { bytesSent = stats.BytesSent; } catch {}
+                        try { bytesReceived = stats.BytesReceived; } catch {}
+                        try { inErrors = stats.IncomingPacketsWithErrors; } catch {}
+                        try { outErrors = stats.OutgoingPacketsWithErrors; } catch {}
+                    }
+
+                    string mac = "";
+                    try {
+                        byte[] phys = nic.GetPhysicalAddress().GetAddressBytes();
+                        mac = FormatMacAddress(phys, (uint)phys.Length);
+                    } catch {}
+
+                    var sbItem = new StringBuilder();
+                    sbItem.Append("{");
+                    sbItem.AppendFormat("\"id\": \"{0}\", ", EscapeJson(nic.Id));
+                    sbItem.AppendFormat("\"name\": \"{0}\", ", EscapeJson(nic.Name));
+                    sbItem.AppendFormat("\"description\": \"{0}\", ", EscapeJson(nic.Description));
+                    sbItem.AppendFormat("\"type\": \"{0}\", ", nic.NetworkInterfaceType.ToString());
+                    sbItem.AppendFormat("\"status\": \"{0}\", ", nic.OperationalStatus.ToString());
+                    sbItem.AppendFormat("\"speedBitsPerSecond\": {0}, ", nic.Speed);
+                    sbItem.AppendFormat("\"speedMbps\": {0:F1}, ", (double)nic.Speed / 1000000.0);
+                    sbItem.AppendFormat("\"macAddress\": \"{0}\", ", mac);
+                    sbItem.AppendFormat("\"supportsMulticast\": {0}, ", nic.SupportsMulticast ? "true" : "false");
+                    sbItem.AppendFormat("\"bytesSent\": {0}, ", bytesSent);
+                    sbItem.AppendFormat("\"bytesReceived\": {0}, ", bytesReceived);
+                    sbItem.AppendFormat("\"incomingErrors\": {0}, ", inErrors);
+                    sbItem.AppendFormat("\"outgoingErrors\": {0}, ", outErrors);
+                    sbItem.AppendFormat("\"ipAddresses\": [{0}], ", string.Join(", ", ipList.ToArray()));
+                    sbItem.AppendFormat("\"gatewayAddresses\": [{0}], ", string.Join(", ", gwList.ToArray()));
+                    sbItem.AppendFormat("\"dnsAddresses\": [{0}]", string.Join(", ", dnsList.ToArray()));
+                    sbItem.Append("}");
+                    ifaces.Add(sbItem.ToString());
+                }
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.AppendFormat("\"count\": {0}, ", ifaces.Count);
+                sbOut.Append("\"interfaces\": [");
+                for (int i = 0; i < ifaces.Count; i++) {
+                    if (i > 0) sbOut.Append(", ");
+                    sbOut.Append(ifaces[i]);
+                }
+                sbOut.Append("]}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -13262,6 +13598,19 @@ namespace GeminiSuperDesktop {
                 IntlCodePagesCmd(query);
             } else if (cmd == "intl_ui_languages" || cmd == "ui_languages" || cmd == "preferred_languages") {
                 IntlUiLanguagesCmd();
+            } else if (cmd == "iphlp_routing_table" || cmd == "routing_table" || cmd == "routes") {
+                string filter = args.Length >= 2 ? args[1] : "";
+                int limit = 100;
+                if (args.Length >= 3 && !string.IsNullOrEmpty(args[2])) int.TryParse(args[2], out limit);
+                IpHlpRoutingTableCmd(filter, limit);
+            } else if (cmd == "iphlp_arp_table" || cmd == "arp_table" || cmd == "arp") {
+                string filter = args.Length >= 2 ? args[1] : "";
+                int limit = 100;
+                if (args.Length >= 3 && !string.IsNullOrEmpty(args[2])) int.TryParse(args[2], out limit);
+                IpHlpArpTableCmd(filter, limit);
+            } else if (cmd == "iphlp_interfaces" || cmd == "network_interfaces" || cmd == "interfaces") {
+                string filter = args.Length >= 2 ? args[1] : "";
+                IpHlpInterfacesCmd(filter);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

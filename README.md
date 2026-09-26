@@ -77,6 +77,7 @@
   - [59. Windows File System Volume & Storage Mount Management Subsystem](#59--windows-file-system-volume--storage-mount-management-subsystem-fileapih--winioctlh--kernel32dll)
   - [60. Windows Print Spooler Subsystem](#60--windows-print-spooler-subsystem-winspooldrv--winspoolh)
   - [61. Windows National Language Support & Internationalization Subsystem](#61--windows-national-language-support--internationalization-subsystem-winnlsh--kernel32dll)
+  - [62. Windows IP Helper & Network Routing Subsystem](#62--windows-ip-helper--network-routing-subsystem-iphlpapih--iphlpapidll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -831,6 +832,17 @@ Directly queries, inspects, and navigates the Windows National Language Support 
 - **System & User Preferred UI Display Language Preferences (`super_intl_ui_languages`)**: Interrogates Windows Multilingual User Interface (MUI) architecture via native `GetSystemPreferredUILanguages`, `GetUserPreferredUILanguages`, and `GetThreadPreferredUILanguages` (`MUI_LANGUAGE_NAME`). Retrieves ordered language preference arrays (e.g. `["en-US"]`) for multilingual awareness, internationalization, and natural cross-language rendering without third-party translation dependencies.
 - **163 Tools Milestone**: Reaches **163 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **46 comprehensive test suites (147/147 tests passing)** and **42 environment health checks**.
 - **Native MCP Tools**: `super_intl_locales`, `super_intl_codepages`, `super_intl_ui_languages`.
+
+---
+
+## 62. 🌐 Windows IP Helper & Network Routing Subsystem (`iphlpapi.h` / `iphlpapi.dll`)
+
+Directly interrogates the Windows IP Helper architecture, kernel IP routing tables, ARP address resolution caches, physical/virtual network adapters, link speeds, and traffic octet statistics via native `iphlpapi.dll` P/Invoke:
+- **Comprehensive IP Routing Table & Gateway Discovery (`super_iphlp_routing_table`)**: Directly queries native `GetIpForwardTable`. Decodes destination subnet prefixes, subnet masks, next hop gateway IPs, interface indices, metric costs, route types (`DIRECT`, `INDIRECT`), routing protocols (`NETMGMT`, `LOCAL`, `OSPF`, `BGP`), and flags primary default gateways (`0.0.0.0/0`). Enables autonomous agents to understand multi-homed network topologies, VPN/WireGuard routes, and physical egress paths.
+- **Address Resolution Protocol (ARP) Cache Interrogation (`super_iphlp_arp_table`)**: Directly queries native `GetIpNetTable`. Maps IPv4 addresses to physical MAC addresses (`XX-XX-XX-XX-XX-XX`) and interface indices, decoding entry types (`DYNAMIC`, `STATIC`, `INVALID`). Enables agents to discover neighbor hardware on the local LAN without packet sniffing or elevated Nmap scanning.
+- **Network Interface Telemetry & Bandwidth Telemetry (`super_iphlp_interfaces`)**: Interrogates all installed adapters (10 Gbps Ethernet, WireGuard `wt0`, WSL virtual switch, loopback) via IP Helper and .NET hardware counters. Inspects operational link status (`Up`, `Down`), link speeds (up to 100 Gbps), MTU sizes, physical MAC addresses, assigned IPv4 and IPv6 addresses, gateway addresses, configured DNS servers, and 64-bit sent/received octet traffic counters.
+- **166 Tools Milestone**: Reaches **166 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **47 comprehensive test suites (150/150 tests passing)** and **43 environment health checks**.
+- **Native MCP Tools**: `super_iphlp_routing_table`, `super_iphlp_arp_table`, `super_iphlp_interfaces`.
 
 ---
 

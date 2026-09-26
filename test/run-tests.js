@@ -3366,10 +3366,72 @@ async function run() {
     assert(res.systemPreferredLanguages.length > 0 || res.userPreferredLanguages.length > 0);
   });
 
-  it("All 163 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n=======================================================");
+  console.log("   SUITE 47: Windows IP Helper & Network Routing (iphlpapi.h / iphlpapi.dll)");
+  console.log("=======================================================\n");
+
+  await itAsync("super_iphlp_routing_table queries system routes and identifies default gateways", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getRoutingTable({ limit: 10 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getRoutingTable failed: " + JSON.stringify(res));
+    assert(typeof res.totalRoutes === "number" && res.totalRoutes > 0);
+    assert(typeof res.defaultGatewayCount === "number");
+    assert(Array.isArray(res.routes) && res.routes.length > 0);
+
+    const r0 = res.routes[0];
+    assert(typeof r0.destination === "string" && r0.destination.length > 0);
+    assert(typeof r0.netmask === "string");
+    assert(typeof r0.nextHop === "string");
+    assert(typeof r0.interfaceIndex === "number");
+    assert(typeof r0.type === "string");
+    assert(typeof r0.protocol === "string");
+    assert(typeof r0.isDefaultGateway === "boolean");
+  });
+
+  await itAsync("super_iphlp_arp_table queries active ARP cache and neighbor MAC bindings", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getArpTable({ limit: 10 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getArpTable failed: " + JSON.stringify(res));
+    assert(typeof res.totalEntries === "number" && res.totalEntries > 0);
+    assert(Array.isArray(res.arpEntries) && res.arpEntries.length > 0);
+
+    const a0 = res.arpEntries[0];
+    assert(typeof a0.ipAddress === "string" && a0.ipAddress.length > 0);
+    assert(typeof a0.macAddress === "string");
+    assert(typeof a0.interfaceIndex === "number");
+    assert(typeof a0.type === "string");
+  });
+
+  await itAsync("super_iphlp_interfaces inspects network adapters, speeds, and traffic octets", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getNetworkInterfaces();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getNetworkInterfaces failed: " + JSON.stringify(res));
+    assert(typeof res.count === "number" && res.count > 0);
+    assert(Array.isArray(res.interfaces) && res.interfaces.length > 0);
+
+    const if0 = res.interfaces[0];
+    assert(typeof if0.id === "string");
+    assert(typeof if0.name === "string" && if0.name.length > 0);
+    assert(typeof if0.status === "string");
+    assert(typeof if0.speedBitsPerSecond === "number");
+    assert(typeof if0.bytesSent === "number");
+    assert(typeof if0.bytesReceived === "number");
+    assert(Array.isArray(if0.ipAddresses));
+  });
+
+  it("All 166 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 163);
+    assert.strictEqual(SYSTEM_TOOLS.length, 166);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3466,6 +3528,9 @@ async function run() {
     assert(toolNames.includes("super_intl_locales"));
     assert(toolNames.includes("super_intl_codepages"));
     assert(toolNames.includes("super_intl_ui_languages"));
+    assert(toolNames.includes("super_iphlp_routing_table"));
+    assert(toolNames.includes("super_iphlp_arp_table"));
+    assert(toolNames.includes("super_iphlp_interfaces"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
