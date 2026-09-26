@@ -4028,10 +4028,66 @@ async function run() {
     }
   });
 
-  it("All 190 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 56: Windows WebAuthn, FIDO2 & Hardware Authenticator Subsystem (webauthn.h / webauthn.dll)
+  console.log("\n\x1b[1m[Suite 56: Windows WebAuthn, FIDO2 & Hardware Authenticator Subsystem]\x1b[0m");
+
+  await itAsync("getWebAuthnStatus queries API version, platform authenticator, and security policies", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWebAuthnStatus();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWebAuthnStatus failed: " + JSON.stringify(res));
+    assert.strictEqual(typeof res.apiAvailable, "boolean");
+    assert.strictEqual(typeof res.apiVersion, "number");
+    assert(res.apiVersion >= 1);
+    assert.strictEqual(typeof res.platformAuthenticatorAvailable, "boolean");
+    assert.strictEqual(typeof res.cancellationIdSupported, "boolean");
+    assert(typeof res.policies === "object");
+    assert.strictEqual(typeof res.policies.allowDomainPINLogon, "boolean");
+    assert.strictEqual(typeof res.policies.biometricsAllowed, "boolean");
+    assert.strictEqual(typeof res.policies.passportForWorkEnabled, "boolean");
+  });
+
+  await itAsync("getWebAuthnCancellationId generates cancellation GUID in standard, hex, braced, and base64 formats", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWebAuthnCancellationId();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWebAuthnCancellationId failed: " + JSON.stringify(res));
+    assert(typeof res.cancellationId === "string" && res.cancellationId.length === 36);
+    assert(typeof res.formats === "object");
+    assert.strictEqual(res.formats.standard, res.cancellationId);
+    assert(res.formats.braced.startsWith("{") && res.formats.braced.endsWith("}"));
+    assert.strictEqual(res.formats.hex.length, 32);
+    assert(typeof res.formats.base64 === "string" && res.formats.base64.length > 0);
+    assert(typeof res.timestamp === "string");
+  });
+
+  await itAsync("getWebAuthnErrorInfo resolves standard HRESULT codes into human-readable error names", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    // Test S_OK (0)
+    const okRes = await kb.getWebAuthnErrorInfo({ hresult: 0 });
+    assert(okRes !== null && typeof okRes === "object");
+    assert.strictEqual(okRes.success, true);
+    assert.strictEqual(okRes.hresult, 0);
+    assert.strictEqual(okRes.errorName, "Success");
+
+    // Test NTE_NOT_SUPPORTED (0x80090027)
+    const errRes = await kb.getWebAuthnErrorInfo({ hresult: "0x80090027" });
+    assert(errRes !== null && typeof errRes === "object");
+    assert.strictEqual(errRes.success, true);
+    assert.strictEqual(errRes.hexCode, "0x80090027");
+    assert.strictEqual(errRes.errorName, "NotSupportedError");
+  });
+
+  it("All 193 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 190);
+    assert.strictEqual(SYSTEM_TOOLS.length, 193);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -4155,6 +4211,9 @@ async function run() {
     assert(toolNames.includes("super_cab_inspect"));
     assert(toolNames.includes("super_cab_create"));
     assert(toolNames.includes("super_cab_extract"));
+    assert(toolNames.includes("super_webauthn_status"));
+    assert(toolNames.includes("super_webauthn_cancellation_id"));
+    assert(toolNames.includes("super_webauthn_error_info"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

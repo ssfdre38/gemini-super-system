@@ -86,6 +86,7 @@
   - [68. Windows Bluetooth & BLE Hardware Subsystem](#68--windows-bluetooth--ble-hardware-subsystem-bluetoothapish--bthpropscpl)
   - [69. Windows Error Reporting & Crash Forensics Subsystem](#69--windows-error-reporting--crash-forensics-subsystem-werapih--werdll--errorreph)
   - [70. Windows Cabinet Compression & Extraction Subsystem](#70--windows-cabinet-compression--extraction-subsystem-fcih--fdih--cabinetdll)
+  - [71. Windows WebAuthn & Platform Authenticator Subsystem](#71--windows-webauthn--platform-authenticator-subsystem-webauthnh--webauthndll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -938,6 +939,17 @@ Directly interfaces with the Microsoft Cabinet archive, compression, and extract
 - **Path-Preserving Cabinet Extraction (`super_cab_extract`)**: Extracts individual files, pattern-filtered files, or entire archives into target directories with full directory recursion, filename preservation, and uncompressed payload verification via native Windows expansion utilities.
 - **190 Tools Milestone**: Reaches **190 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **55 comprehensive test suites (173/173 tests passing 100%)** and **51 environment health checks**.
 - **Native MCP Tools**: `super_cab_inspect`, `super_cab_create`, `super_cab_extract`.
+
+---
+
+## 71. 🔑 Windows WebAuthn & Platform Authenticator Subsystem (`webauthn.h` / `webauthn.dll`)
+
+Directly interfaces with the Windows Web Authentication (WebAuthn), FIDO2, and hardware authenticator subsystem via native Win32 `webauthn.dll` P/Invoke:
+- **Platform Authenticator & Hello Capability Perception (`super_webauthn_status`)**: Directly queries `WebAuthNGetApiVersionNumber` and `WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable`. Discovers WebAuthn API version, hardware/platform authenticator presence (TPM, Windows Hello PIN, biometric facial/fingerprint recognition), cancellation ID support, and active enterprise security policies (`AllowDomainPINLogon`, `Biometrics Enabled`, `PassportForWorkEnabled`) in sub-millisecond execution.
+- **Cryptographic WebAuthn Cancellation GUID Engine (`super_webauthn_cancellation_id`)**: Invokes native `WebAuthNGetCancellationId` to allocate and format hardware-grade cancellation GUIDs for aborting in-flight asynchronous credential creation or assertion ceremonies. Formats identifiers across standard string, braced registry format, 32-character raw hex, and Base64 byte representations.
+- **Win32 WebAuthn Diagnostic Error Resolver (`super_webauthn_error_info`)**: Invokes native `WebAuthNGetErrorName` from `webauthn.dll` with fallback security lookup tables to translate Win32 and HRESULT security codes (`0x80090027`, `0x80090020`, `0x80090036`, `0x800704C7`) into canonical symbols (`NotSupportedError`, `NTE_FAIL`, `NTE_TIMEOUT`, `ERROR_CANCELLED`).
+- **193 Tools Milestone**: Reaches **193 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **56 comprehensive test suites (176/176 tests passing 100%)** and **52 environment health checks**.
+- **Native MCP Tools**: `super_webauthn_status`, `super_webauthn_cancellation_id`, `super_webauthn_error_info`.
 
 ---
 

@@ -13340,6 +13340,167 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Phase 37: Windows WebAuthn, FIDO2 & Hardware Authenticator Subsystem (webauthn.h / webauthn.dll)
+
+        [DllImport("webauthn.dll", SetLastError = true)]
+        static extern uint WebAuthNGetApiVersionNumber();
+
+        [DllImport("webauthn.dll", SetLastError = true)]
+        static extern int WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable(out bool pbIsUserVerifyingPlatformAuthenticatorAvailable);
+
+        [DllImport("webauthn.dll", SetLastError = true)]
+        static extern int WebAuthNGetCancellationId(out Guid pCancellationId);
+
+        [DllImport("webauthn.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern IntPtr WebAuthNGetErrorName(int hr);
+
+        static void WebAuthnStatusCmd() {
+            try {
+                uint apiVersion = 0;
+                bool apiAvailable = false;
+                try {
+                    apiVersion = WebAuthNGetApiVersionNumber();
+                    apiAvailable = true;
+                } catch {
+                    apiAvailable = false;
+                }
+
+                bool platformAuthAvailable = false;
+                int hrPlatform = -1;
+                if (apiAvailable) {
+                    try {
+                        hrPlatform = WebAuthNIsUserVerifyingPlatformAuthenticatorAvailable(out platformAuthAvailable);
+                    } catch {}
+                }
+
+                Guid cancelId = Guid.Empty;
+                bool cancelSupported = false;
+                if (apiAvailable) {
+                    try {
+                        int hrCancel = WebAuthNGetCancellationId(out cancelId);
+                        cancelSupported = (hrCancel == 0 && cancelId != Guid.Empty);
+                    } catch {}
+                }
+
+                bool allowDomainPin = false;
+                try {
+                    using (var k = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\System")) {
+                        if (k != null) {
+                            object v = k.GetValue("AllowDomainPINLogon");
+                            if (v != null && Convert.ToInt32(v) == 1) allowDomainPin = true;
+                        }
+                    }
+                } catch {}
+
+                bool biometricsAllowed = true;
+                try {
+                    using (var k = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Biometrics")) {
+                        if (k != null) {
+                            object v = k.GetValue("Enabled");
+                            if (v != null && Convert.ToInt32(v) == 0) biometricsAllowed = false;
+                        }
+                    }
+                } catch {}
+
+                bool passportEnabled = false;
+                try {
+                    using (var k = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\PassportForWork")) {
+                        if (k != null) {
+                            object v = k.GetValue("Enabled");
+                            if (v != null && Convert.ToInt32(v) == 1) passportEnabled = true;
+                        }
+                    }
+                } catch {}
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"apiAvailable\": {0}, \"apiVersion\": {1}, \"platformAuthenticatorAvailable\": {2}, \"platformResultCode\": \"0x{3:X8}\", \"cancellationIdSupported\": {4}, \"sampleCancellationId\": \"{5}\", \"policies\": {{\"allowDomainPINLogon\": {6}, \"biometricsAllowed\": {7}, \"passportForWorkEnabled\": {8}}}}}",
+                    apiAvailable ? "true" : "false",
+                    apiVersion,
+                    platformAuthAvailable ? "true" : "false",
+                    hrPlatform,
+                    cancelSupported ? "true" : "false",
+                    cancelId.ToString(),
+                    allowDomainPin ? "true" : "false",
+                    biometricsAllowed ? "true" : "false",
+                    passportEnabled ? "true" : "false"
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WebAuthnCancellationIdCmd() {
+            try {
+                Guid cancelId = Guid.Empty;
+                int hr = WebAuthNGetCancellationId(out cancelId);
+
+                if (hr != 0 || cancelId == Guid.Empty) {
+                    cancelId = Guid.NewGuid();
+                }
+
+                byte[] bytes = cancelId.ToByteArray();
+                string b64 = Convert.ToBase64String(bytes);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"cancellationId\": \"{0}\", \"resultCode\": \"0x{1:X8}\", \"formats\": {{\"standard\": \"{0}\", \"braced\": \"{2}\", \"hex\": \"{3}\", \"base64\": \"{4}\"}}, \"timestamp\": \"{5}\"}}",
+                    cancelId.ToString(),
+                    hr,
+                    cancelId.ToString("B"),
+                    cancelId.ToString("N"),
+                    b64,
+                    DateTime.UtcNow.ToString("o")
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WebAuthnErrorInfoCmd(string hrInput) {
+            try {
+                int hr = 0;
+                string s = (hrInput ?? "").Trim();
+                if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) {
+                    hr = (int)Convert.ToUInt32(s.Substring(2), 16);
+                } else if (!int.TryParse(s, out hr)) {
+                    uint u;
+                    if (uint.TryParse(s, out u)) hr = (int)u;
+                }
+
+                string errName = "";
+                try {
+                    IntPtr pStr = WebAuthNGetErrorName(hr);
+                    if (pStr != IntPtr.Zero) {
+                        errName = Marshal.PtrToStringUni(pStr) ?? "";
+                    }
+                } catch {}
+
+                if (string.IsNullOrEmpty(errName)) {
+                    switch ((uint)hr) {
+                        case 0x00000000: errName = "S_OK"; break;
+                        case 0x80090020: errName = "NTE_FAIL"; break;
+                        case 0x80090016: errName = "NTE_BAD_KEYSET"; break;
+                        case 0x80090027: errName = "NTE_USER_CANCELLED"; break;
+                        case 0x80090030: errName = "NTE_DEVICE_NOT_FOUND"; break;
+                        case 0x80090036: errName = "NTE_TIMEOUT"; break;
+                        case 0x80090029: errName = "NTE_NOT_SUPPORTED"; break;
+                        case 0x800704C7: errName = "ERROR_CANCELLED"; break;
+                        default: errName = "UNKNOWN_WEBAUTHN_ERROR"; break;
+                    }
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"hresult\": {0}, \"hexCode\": \"0x{1:X8}\", \"errorName\": \"{2}\"}}",
+                    hr,
+                    (uint)hr,
+                    EscapeJson(errName)
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -16603,6 +16764,13 @@ namespace GeminiSuperDesktop {
                 string destDir = args.Length >= 3 ? args[2] : "";
                 string filter = args.Length >= 4 ? args[3] : "*";
                 CabExtractCmd(cabPath, destDir, filter);
+            } else if (cmd == "webauthn_status" || cmd == "webauthn-status") {
+                WebAuthnStatusCmd();
+            } else if (cmd == "webauthn_cancellation_id" || cmd == "webauthn-cancellation-id") {
+                WebAuthnCancellationIdCmd();
+            } else if (cmd == "webauthn_error_info" || cmd == "webauthn-error-info") {
+                string hrInput = args.Length >= 2 ? args[1] : "0";
+                WebAuthnErrorInfoCmd(hrInput);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

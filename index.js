@@ -3812,6 +3812,35 @@ const SYSTEM_TOOLS = [
           },
           required: ["cabinetPath"]
         }
+      },
+      {
+        name: "super_webauthn_status",
+        description: "Inspects Windows WebAuthn & Platform Authenticator capabilities, API version number, platform authenticator availability (Windows Hello/TPM), biometric policies, and cancellation support via webauthn.dll / webauthn.h.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_webauthn_cancellation_id",
+        description: "Generates a cryptographic cancellation GUID for WebAuthn asynchronous credential creation and assertion operations via webauthn.dll (WebAuthNGetCancellationId), formatted as standard GUID, braced GUID, raw hex, and base64.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_webauthn_error_info",
+        description: "Resolves a WebAuthn or security HRESULT / error code into its canonical human-readable symbol and diagnostic description via webauthn.dll (WebAuthNGetErrorName).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            hresult: {
+              description: "Integer error code or hex string (e.g. 0, '0x80090027', or -2146893785) to map."
+            }
+          },
+          required: ["hresult"]
+        }
       }
 ];
 
@@ -6689,6 +6718,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `📂 [Cabinet Archive Extracted - ${res.filesExtracted || 0} file(s)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_webauthn_status") {
+    const res = await orch.getWebAuthnStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔑 [Windows WebAuthn & Platform Authenticator Status]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_webauthn_cancellation_id") {
+    const res = await orch.getWebAuthnCancellationId();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [WebAuthn Cancellation ID Generated]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_webauthn_error_info") {
+    const res = await orch.getWebAuthnErrorInfo(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚠️ [WebAuthn Error Diagnosis]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
