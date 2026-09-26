@@ -4084,10 +4084,82 @@ async function run() {
     assert.strictEqual(errRes.errorName, "NotSupportedError");
   });
 
-  it("All 193 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 57: Windows Native RFC 6455 WebSocket Engine (websocket.h / websocket.dll)
+  console.log("\n\x1b[1m[Suite 57: Windows Native RFC 6455 WebSocket Engine]\x1b[0m");
+
+  await itAsync("getWebSocketStatus queries native protocol engine, version, and global properties", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWebSocketStatus();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWebSocketStatus failed: " + JSON.stringify(res));
+    assert.strictEqual(res.engineAvailable, true);
+    assert.strictEqual(res.rfc6455Version, "13");
+    assert.strictEqual(typeof res.clientHandleSupported, "boolean");
+    assert.strictEqual(typeof res.serverHandleSupported, "boolean");
+    assert(typeof res.properties === "object");
+    assert(typeof res.properties.keepAliveIntervalMs === "number");
+    assert(res.properties.keepAliveIntervalMs >= 0);
+  });
+
+  await itAsync("createWebSocketHandshake generates RFC 6455 handshake keys and expected server accept token", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.createWebSocketHandshake({
+      subprotocols: ["super-control", "chat"],
+      extensions: ["permessage-deflate"]
+    });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "createWebSocketHandshake failed: " + JSON.stringify(res));
+    assert(typeof res.secWebSocketKey === "string" && res.secWebSocketKey.length > 10);
+    assert(typeof res.expectedServerAccept === "string" && res.expectedServerAccept.length > 10);
+    assert(Array.isArray(res.headers) && res.headers.length >= 4);
+    assert(res.headers.some(h => h.name.toLowerCase() === "upgrade" && h.value.toLowerCase() === "websocket"));
+    assert(res.headers.some(h => h.name.toLowerCase() === "connection" && h.value.toLowerCase() === "upgrade"));
+    assert(Array.isArray(res.subprotocolsRequested) && res.subprotocolsRequested.includes("super-control"));
+  });
+
+  await itAsync("inspectWebSocketFrame decodes RFC 6455 frame headers, opcodes, and unmasks payloads", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    // 1. Text frame with masked "Hello"
+    const textRes = await kb.inspectWebSocketFrame({ frameData: "818537fa213d7f9f4d5158" });
+    assert(textRes !== null && typeof textRes === "object");
+    assert.strictEqual(textRes.success, true, "inspectWebSocketFrame failed: " + JSON.stringify(textRes));
+    assert.strictEqual(textRes.fin, true);
+    assert.strictEqual(textRes.opcode, 1);
+    assert.strictEqual(textRes.opcodeName, "TEXT");
+    assert.strictEqual(textRes.masked, true);
+    assert.strictEqual(textRes.maskingKey, "37fa213d");
+    assert.strictEqual(textRes.payloadLength, 5);
+    assert.strictEqual(textRes.textPreview, "Hello");
+
+    // 2. Ping control frame (Opcode 9)
+    const pingRes = await kb.inspectWebSocketFrame({ frameData: "890474657374" });
+    assert(pingRes !== null && typeof pingRes === "object");
+    assert.strictEqual(pingRes.success, true);
+    assert.strictEqual(pingRes.opcode, 9);
+    assert.strictEqual(pingRes.opcodeName, "PING");
+    assert.strictEqual(pingRes.isControlFrame, true);
+    assert.strictEqual(pingRes.textPreview, "test");
+
+    // 3. Close control frame (Opcode 8) with code 1000
+    const closeRes = await kb.inspectWebSocketFrame({ frameData: "880803e84e6f726d616c" });
+    assert(closeRes !== null && typeof closeRes === "object");
+    assert.strictEqual(closeRes.success, true);
+    assert.strictEqual(closeRes.opcode, 8);
+    assert.strictEqual(closeRes.opcodeName, "CLOSE");
+    assert.strictEqual(closeRes.closeStatusCode, 1000);
+    assert.strictEqual(closeRes.closeReason, "Normal");
+  });
+
+  it("All 196 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 193);
+    assert.strictEqual(SYSTEM_TOOLS.length, 196);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -4214,6 +4286,9 @@ async function run() {
     assert(toolNames.includes("super_webauthn_status"));
     assert(toolNames.includes("super_webauthn_cancellation_id"));
     assert(toolNames.includes("super_webauthn_error_info"));
+    assert(toolNames.includes("super_websocket_status"));
+    assert(toolNames.includes("super_websocket_handshake"));
+    assert(toolNames.includes("super_websocket_frame_inspect"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

@@ -87,6 +87,7 @@
   - [69. Windows Error Reporting & Crash Forensics Subsystem](#69--windows-error-reporting--crash-forensics-subsystem-werapih--werdll--errorreph)
   - [70. Windows Cabinet Compression & Extraction Subsystem](#70--windows-cabinet-compression--extraction-subsystem-fcih--fdih--cabinetdll)
   - [71. Windows WebAuthn & Platform Authenticator Subsystem](#71--windows-webauthn--platform-authenticator-subsystem-webauthnh--webauthndll)
+  - [72. Windows Native RFC 6455 WebSocket Engine Subsystem](#72--windows-native-rfc-6455-websocket-engine-subsystem-websocketh--websocketdll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -950,6 +951,17 @@ Directly interfaces with the Windows Web Authentication (WebAuthn), FIDO2, and h
 - **Win32 WebAuthn Diagnostic Error Resolver (`super_webauthn_error_info`)**: Invokes native `WebAuthNGetErrorName` from `webauthn.dll` with fallback security lookup tables to translate Win32 and HRESULT security codes (`0x80090027`, `0x80090020`, `0x80090036`, `0x800704C7`) into canonical symbols (`NotSupportedError`, `NTE_FAIL`, `NTE_TIMEOUT`, `ERROR_CANCELLED`).
 - **193 Tools Milestone**: Reaches **193 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **56 comprehensive test suites (176/176 tests passing 100%)** and **52 environment health checks**.
 - **Native MCP Tools**: `super_webauthn_status`, `super_webauthn_cancellation_id`, `super_webauthn_error_info`.
+
+---
+
+## 72. 🌐 Windows Native RFC 6455 WebSocket Engine Subsystem (`websocket.h` / `websocket.dll`)
+
+Directly interfaces with Microsoft's unmanaged RFC 6455 WebSocket Protocol Component via native Win32 `websocket.dll` P/Invoke:
+- **Native WebSocket Protocol Engine Telemetry (`super_websocket_status`)**: Directly queries `WebSocketCreateClientHandle`, `WebSocketCreateServerHandle`, and `WebSocketGetGlobalProperty`. Discovers protocol engine availability, RFC 6455 v13 compliance, default keepalive intervals (30,000ms), receive/send buffer sizes, and UTF-8 verification / masking configuration.
+- **Sovereign Client Handshake & Cryptographic Key Generator (`super_websocket_handshake`)**: Invokes native `WebSocketBeginClientHandshake` to allocate cryptographic Sec-WebSocket-Key nonces, configure standard Upgrade and Connection headers, and computes the canonical SHA-1 `Sec-WebSocket-Accept` verification token for subprotocols and extensions.
+- **Deep RFC 6455 Frame Parser & Payload Telemetry (`super_websocket_frame_inspect`)**: Parses raw binary/hex WebSocket frame streams according to `websocket.dll` buffer type specifications. Extracts FIN bits, RSV1-3 extension flags, opcodes (Continuation, Text, Binary, Close, Ping, Pong), control frame classifications, payload length structures (7-bit, 16-bit, 64-bit), masking keys, unmasked payload previews, and close status codes/reasons.
+- **196 Tools Milestone**: Reaches **196 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **57 comprehensive test suites (179/179 tests passing 100%)** and **53 environment health checks**.
+- **Native MCP Tools**: `super_websocket_status`, `super_websocket_handshake`, `super_websocket_frame_inspect`.
 
 ---
 

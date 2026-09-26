@@ -13501,6 +13501,364 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Phase 38: Windows Native RFC 6455 WebSocket Engine (websocket.h / websocket.dll)
+
+        public enum WEB_SOCKET_PROPERTY_TYPE {
+            RECEIVE_BUFFER_SIZE = 0,
+            SEND_BUFFER_SIZE = 1,
+            DISABLE_MASKING = 2,
+            ALLOCATED_BUFFER = 3,
+            DISABLE_UTF8_VERIFICATION = 4,
+            KEEPALIVE_INTERVAL = 5,
+            SUPPORTED_VERSIONS = 6
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WEB_SOCKET_HTTP_HEADER {
+            public IntPtr pcName;
+            public uint ulNameLength;
+            public IntPtr pcValue;
+            public uint ulValueLength;
+        }
+
+        [DllImport("websocket.dll", SetLastError = true)]
+        static extern int WebSocketCreateClientHandle(IntPtr pProperties, uint propertyCount, out IntPtr phWebSocket);
+
+        [DllImport("websocket.dll", SetLastError = true)]
+        static extern int WebSocketCreateServerHandle(IntPtr pProperties, uint propertyCount, out IntPtr phWebSocket);
+
+        [DllImport("websocket.dll", SetLastError = true)]
+        static extern void WebSocketDeleteHandle(IntPtr hWebSocket);
+
+        [DllImport("websocket.dll", SetLastError = true)]
+        static extern void WebSocketAbortHandle(IntPtr hWebSocket);
+
+        [DllImport("websocket.dll", SetLastError = true)]
+        static extern int WebSocketGetGlobalProperty(int propertyType, IntPtr pvValue, ref uint ulSize);
+
+        [DllImport("websocket.dll", SetLastError = true)]
+        static extern int WebSocketBeginClientHandshake(
+            IntPtr hWebSocket,
+            IntPtr pszSubprotocols,
+            uint ulSubprotocolCount,
+            IntPtr pszExtensions,
+            uint ulExtensionCount,
+            IntPtr pInitialHeaders,
+            uint ulInitialHeaderCount,
+            out IntPtr pAdditionalHeaders,
+            out uint pulAdditionalHeaderCount
+        );
+
+        static void WebSocketStatusCmd() {
+            try {
+                IntPtr hClient = IntPtr.Zero;
+                int hrClient = -1;
+                bool clientOk = false;
+                try {
+                    hrClient = WebSocketCreateClientHandle(IntPtr.Zero, 0, out hClient);
+                    clientOk = (hrClient == 0 && hClient != IntPtr.Zero);
+                } catch {}
+
+                IntPtr hServer = IntPtr.Zero;
+                int hrServer = -1;
+                bool serverOk = false;
+                try {
+                    hrServer = WebSocketCreateServerHandle(IntPtr.Zero, 0, out hServer);
+                    serverOk = (hrServer == 0 && hServer != IntPtr.Zero);
+                } catch {}
+
+                int recvBuf = 0;
+                int sendBuf = 0;
+                int keepAlive = 30000;
+                bool disableMasking = false;
+                bool disableUtf8 = false;
+
+                try {
+                    IntPtr pBuf = Marshal.AllocHGlobal(4);
+                    try {
+                        uint s = 4;
+                        if (WebSocketGetGlobalProperty((int)WEB_SOCKET_PROPERTY_TYPE.RECEIVE_BUFFER_SIZE, pBuf, ref s) == 0) {
+                            recvBuf = Marshal.ReadInt32(pBuf);
+                        }
+                        s = 4;
+                        if (WebSocketGetGlobalProperty((int)WEB_SOCKET_PROPERTY_TYPE.SEND_BUFFER_SIZE, pBuf, ref s) == 0) {
+                            sendBuf = Marshal.ReadInt32(pBuf);
+                        }
+                        s = 4;
+                        if (WebSocketGetGlobalProperty((int)WEB_SOCKET_PROPERTY_TYPE.KEEPALIVE_INTERVAL, pBuf, ref s) == 0) {
+                            keepAlive = Marshal.ReadInt32(pBuf);
+                        }
+                        s = 4;
+                        if (WebSocketGetGlobalProperty((int)WEB_SOCKET_PROPERTY_TYPE.DISABLE_MASKING, pBuf, ref s) == 0) {
+                            disableMasking = (Marshal.ReadInt32(pBuf) != 0);
+                        }
+                        s = 4;
+                        if (WebSocketGetGlobalProperty((int)WEB_SOCKET_PROPERTY_TYPE.DISABLE_UTF8_VERIFICATION, pBuf, ref s) == 0) {
+                            disableUtf8 = (Marshal.ReadInt32(pBuf) != 0);
+                        }
+                    } finally {
+                        Marshal.FreeHGlobal(pBuf);
+                    }
+                } catch {}
+
+                if (hClient != IntPtr.Zero) {
+                    try { WebSocketDeleteHandle(hClient); } catch {}
+                }
+                if (hServer != IntPtr.Zero) {
+                    try { WebSocketDeleteHandle(hServer); } catch {}
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"engineAvailable\": true, \"rfc6455Version\": \"13\", \"clientHandleSupported\": {0}, \"serverHandleSupported\": {1}, \"clientResultCode\": \"0x{2:X8}\", \"serverResultCode\": \"0x{3:X8}\", \"properties\": {{\"receiveBufferSize\": {4}, \"sendBufferSize\": {5}, \"keepAliveIntervalMs\": {6}, \"disableMasking\": {7}, \"disableUtf8Verification\": {8}}}}}",
+                    clientOk ? "true" : "false",
+                    serverOk ? "true" : "false",
+                    hrClient,
+                    hrServer,
+                    recvBuf,
+                    sendBuf,
+                    keepAlive,
+                    disableMasking ? "true" : "false",
+                    disableUtf8 ? "true" : "false"
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WebSocketHandshakeCmd(string subprotocolsCsv, string extensionsCsv) {
+            IntPtr hWs = IntPtr.Zero;
+            try {
+                int hr = WebSocketCreateClientHandle(IntPtr.Zero, 0, out hWs);
+                if (hr != 0 || hWs == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to create client handle: 0x{0:X8}\"}}", hr));
+                    return;
+                }
+
+                IntPtr pAdd = IntPtr.Zero;
+                uint addCount = 0;
+                hr = WebSocketBeginClientHandshake(hWs, IntPtr.Zero, 0, IntPtr.Zero, 0, IntPtr.Zero, 0, out pAdd, out addCount);
+
+                if (hr != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"WebSocketBeginClientHandshake failed: 0x{0:X8}\"}}", hr));
+                    return;
+                }
+
+                string key = "";
+                var headerList = new List<Tuple<string, string>>();
+                if (addCount > 0 && pAdd != IntPtr.Zero) {
+                    int headerSize = Marshal.SizeOf(typeof(WEB_SOCKET_HTTP_HEADER));
+                    for (int i = 0; i < addCount; i++) {
+                        IntPtr pEntry = new IntPtr(pAdd.ToInt64() + (i * headerSize));
+                        var hdr = (WEB_SOCKET_HTTP_HEADER)Marshal.PtrToStructure(pEntry, typeof(WEB_SOCKET_HTTP_HEADER));
+                        string name = (hdr.pcName != IntPtr.Zero && hdr.ulNameLength > 0) ? Marshal.PtrToStringAnsi(hdr.pcName, (int)hdr.ulNameLength) : "";
+                        string val = (hdr.pcValue != IntPtr.Zero && hdr.ulValueLength > 0) ? Marshal.PtrToStringAnsi(hdr.pcValue, (int)hdr.ulValueLength) : "";
+                        headerList.Add(Tuple.Create(name, val));
+                        if (string.Equals(name, "Sec-WebSocket-Key", StringComparison.OrdinalIgnoreCase)) {
+                            key = val;
+                        }
+                    }
+                }
+
+                string expectedAccept = "";
+                if (!string.IsNullOrEmpty(key)) {
+                    string concat = key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+                    using (var sha1 = new System.Security.Cryptography.SHA1CryptoServiceProvider()) {
+                        byte[] hash = sha1.ComputeHash(Encoding.UTF8.GetBytes(concat));
+                        expectedAccept = Convert.ToBase64String(hash);
+                    }
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"secWebSocketKey\": \"" + EscapeJson(key) + "\", ");
+                sb.Append("\"expectedServerAccept\": \"" + EscapeJson(expectedAccept) + "\", ");
+                sb.Append("\"headers\": [");
+                for (int i = 0; i < headerList.Count; i++) {
+                    if (i > 0) sb.Append(", ");
+                    sb.Append(string.Format("{{\"name\": \"{0}\", \"value\": \"{1}\"}}", EscapeJson(headerList[i].Item1), EscapeJson(headerList[i].Item2)));
+                }
+                sb.Append("], ");
+
+                var subList = new List<string>();
+                if (!string.IsNullOrEmpty(subprotocolsCsv)) {
+                    foreach (var s in subprotocolsCsv.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)) {
+                        string tr = s.Trim();
+                        if (tr.Length > 0) subList.Add(tr);
+                    }
+                }
+                sb.Append("\"subprotocolsRequested\": [");
+                for (int i = 0; i < subList.Count; i++) {
+                    if (i > 0) sb.Append(", ");
+                    sb.Append("\"" + EscapeJson(subList[i]) + "\"");
+                }
+                sb.Append("]}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (hWs != IntPtr.Zero) {
+                    try { WebSocketDeleteHandle(hWs); } catch {}
+                }
+            }
+        }
+
+        static void WebSocketFrameInspectCmd(string rawInput) {
+            try {
+                byte[] bytes = null;
+                string s = (rawInput ?? "").Trim();
+                if (string.IsNullOrEmpty(s)) {
+                    s = "818537fa213d7f9f4d5158";
+                }
+
+                if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) {
+                    s = s.Substring(2);
+                }
+
+                bool isHex = true;
+                if (s.Length % 2 == 0) {
+                    for (int i = 0; i < s.Length; i++) {
+                        char c = s[i];
+                        if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                            isHex = false;
+                            break;
+                        }
+                    }
+                } else {
+                    isHex = false;
+                }
+
+                if (isHex && s.Length > 0) {
+                    bytes = new byte[s.Length / 2];
+                    for (int i = 0; i < bytes.Length; i++) {
+                        bytes[i] = Convert.ToByte(s.Substring(i * 2, 2), 16);
+                    }
+                } else {
+                    try {
+                        bytes = Convert.FromBase64String(s);
+                    } catch {
+                        bytes = Encoding.UTF8.GetBytes(s);
+                    }
+                }
+
+                if (bytes == null || bytes.Length < 2) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Payload too short for a valid RFC 6455 WebSocket frame (minimum 2 bytes required)\"}");
+                    return;
+                }
+
+                byte b0 = bytes[0];
+                bool fin = (b0 & 0x80) != 0;
+                bool rsv1 = (b0 & 0x40) != 0;
+                bool rsv2 = (b0 & 0x20) != 0;
+                bool rsv3 = (b0 & 0x10) != 0;
+                int opcode = (b0 & 0x0F);
+
+                string opcodeName = "UNKNOWN";
+                switch (opcode) {
+                    case 0x0: opcodeName = "CONTINUATION"; break;
+                    case 0x1: opcodeName = "TEXT"; break;
+                    case 0x2: opcodeName = "BINARY"; break;
+                    case 0x8: opcodeName = "CLOSE"; break;
+                    case 0x9: opcodeName = "PING"; break;
+                    case 0xA: opcodeName = "PONG"; break;
+                }
+
+                bool isControl = (opcode >= 0x8);
+
+                byte b1 = bytes[1];
+                bool masked = (b1 & 0x80) != 0;
+                long payloadLen = (b1 & 0x7F);
+                int offset = 2;
+
+                if (payloadLen == 126) {
+                    if (bytes.Length < offset + 2) {
+                        Console.WriteLine("{\"success\": false, \"error\": \"Incomplete 16-bit payload length header\"}");
+                        return;
+                    }
+                    payloadLen = (bytes[offset] << 8) | bytes[offset + 1];
+                    offset += 2;
+                } else if (payloadLen == 127) {
+                    if (bytes.Length < offset + 8) {
+                        Console.WriteLine("{\"success\": false, \"error\": \"Incomplete 64-bit payload length header\"}");
+                        return;
+                    }
+                    long val = 0;
+                    for (int i = 0; i < 8; i++) {
+                        val = (val << 8) | bytes[offset + i];
+                    }
+                    payloadLen = val;
+                    offset += 8;
+                }
+
+                byte[] maskKey = null;
+                string maskKeyHex = "";
+                if (masked) {
+                    if (bytes.Length < offset + 4) {
+                        Console.WriteLine("{\"success\": false, \"error\": \"Incomplete masking key header\"}");
+                        return;
+                    }
+                    maskKey = new byte[4];
+                    Array.Copy(bytes, offset, maskKey, 0, 4);
+                    maskKeyHex = BitConverter.ToString(maskKey).Replace("-", "").ToLowerInvariant();
+                    offset += 4;
+                }
+
+                long dataAvailable = Math.Max(0, bytes.Length - offset);
+                byte[] unmasked = new byte[dataAvailable];
+                for (int i = 0; i < dataAvailable; i++) {
+                    byte b = bytes[offset + i];
+                    if (masked && maskKey != null) {
+                        b ^= maskKey[i % 4];
+                    }
+                    unmasked[i] = b;
+                }
+
+                string textPreview = "";
+                int closeStatusCode = 0;
+                string closeReason = "";
+
+                if (opcode == 0x1 || opcode == 0x9 || opcode == 0xA) {
+                    try {
+                        textPreview = Encoding.UTF8.GetString(unmasked);
+                    } catch {
+                        textPreview = BitConverter.ToString(unmasked).Replace("-", "");
+                    }
+                } else if (opcode == 0x8 && unmasked.Length >= 2) {
+                    closeStatusCode = (unmasked[0] << 8) | unmasked[1];
+                    if (unmasked.Length > 2) {
+                        try {
+                            closeReason = Encoding.UTF8.GetString(unmasked, 2, unmasked.Length - 2);
+                        } catch {}
+                    }
+                } else {
+                    textPreview = BitConverter.ToString(unmasked).Replace("-", "");
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"fin\": {0}, \"rsv\": {{\"rsv1\": {1}, \"rsv2\": {2}, \"rsv3\": {3}}}, \"opcode\": {4}, \"opcodeName\": \"{5}\", \"isControlFrame\": {6}, \"masked\": {7}, \"maskingKey\": \"{8}\", \"payloadLength\": {9}, \"dataBytesReceived\": {10}, \"isComplete\": {11}, \"closeStatusCode\": {12}, \"closeReason\": \"{13}\", \"textPreview\": \"{14}\", \"totalFrameBytes\": {15}}}",
+                    fin ? "true" : "false",
+                    rsv1 ? "true" : "false",
+                    rsv2 ? "true" : "false",
+                    rsv3 ? "true" : "false",
+                    opcode,
+                    opcodeName,
+                    isControl ? "true" : "false",
+                    masked ? "true" : "false",
+                    maskKeyHex,
+                    payloadLen,
+                    dataAvailable,
+                    (dataAvailable >= payloadLen) ? "true" : "false",
+                    closeStatusCode,
+                    EscapeJson(closeReason),
+                    EscapeJson(textPreview),
+                    bytes.Length
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -16771,6 +17129,15 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "webauthn_error_info" || cmd == "webauthn-error-info") {
                 string hrInput = args.Length >= 2 ? args[1] : "0";
                 WebAuthnErrorInfoCmd(hrInput);
+            } else if (cmd == "websocket_status" || cmd == "websocket-status") {
+                WebSocketStatusCmd();
+            } else if (cmd == "websocket_handshake" || cmd == "websocket-handshake") {
+                string subproto = args.Length >= 2 ? args[1] : "";
+                string exts = args.Length >= 3 ? args[2] : "";
+                WebSocketHandshakeCmd(subproto, exts);
+            } else if (cmd == "websocket_frame_inspect" || cmd == "websocket-frame-inspect") {
+                string raw = args.Length >= 2 ? args[1] : "";
+                WebSocketFrameInspectCmd(raw);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

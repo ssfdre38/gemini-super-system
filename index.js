@@ -3841,6 +3841,42 @@ const SYSTEM_TOOLS = [
           },
           required: ["hresult"]
         }
+      },
+      {
+        name: "super_websocket_status",
+        description: "Inspects Microsoft's native Win32 RFC 6455 WebSocket Engine status, protocol version, default buffer sizes, keepalive interval, and handle creation capabilities via websocket.dll / websocket.h.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_websocket_handshake",
+        description: "Generates or simulates an RFC 6455 client WebSocket handshake using Microsoft's native protocol engine (WebSocketBeginClientHandshake), allocating Sec-WebSocket-Key and computing expected server Sec-WebSocket-Accept hashes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            subprotocols: {
+              description: "Optional subprotocol name or array of subprotocols (e.g. 'graphql-ws' or ['chat', 'super-rpc'])."
+            },
+            extensions: {
+              description: "Optional extension string or array of extensions (e.g. 'permessage-deflate')."
+            }
+          }
+        }
+      },
+      {
+        name: "super_websocket_frame_inspect",
+        description: "Decodes, parses, and validates raw hex or binary RFC 6455 WebSocket frame headers, payloads, opcodes (Text, Binary, Close, Ping, Pong), masking keys, and unmasked text/binary payloads according to websocket.dll protocol rules.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            frameData: {
+              type: "string",
+              description: "Hex string (e.g. '818537fa213d7f9f4d5158' or '890474657374') or base64 string representing raw WebSocket frame bytes. Omit for sample frame inspection."
+            }
+          }
+        }
       }
 ];
 
@@ -6754,6 +6790,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚠️ [WebAuthn Error Diagnosis]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_websocket_status") {
+    const res = await orch.getWebSocketStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🌐 [Windows Native RFC 6455 WebSocket Engine Status]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_websocket_handshake") {
+    const res = await orch.createWebSocketHandshake(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🤝 [RFC 6455 WebSocket Handshake Generated]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_websocket_frame_inspect") {
+    const res = await orch.inspectWebSocketFrame(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔍 [RFC 6455 WebSocket Frame Telemetry]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
