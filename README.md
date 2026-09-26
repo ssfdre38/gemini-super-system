@@ -65,6 +65,7 @@
   - [47. Windows ToolHelp32 Snapshot Subsystem](#47--windows-toolhelp32-snapshot-subsystem-tlhelp32h--kernel32dll)
   - [48. Windows SENS & Network Perception Subsystem](#48--windows-system-event-notification-service-sens--network-perception-subsystem-sensapih--netlistmgrh--sensapidll)
   - [49. Windows System Time, Dynamic Time Zones & Chronometry Subsystem](#49--windows-system-time-dynamic-time-zones--chronometry-subsystem-timezoneapih--sysinfoapih--realtimeapiseth)
+  - [50. Windows Power Policy, Execution State & Hardware Telemetry Subsystem](#50--windows-power-policy-execution-state--hardware-telemetry-subsystem-powrprofh--powerbaseh--poclassh)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -687,6 +688,17 @@ Unlocks bare-metal chronometry, hardware timers, and dynamic time zone transitio
 - **Clock Drift, Interrupt Pacing & Synchronization Telemetry (`super_time_adjustment`)**: Invokes `GetSystemTimeAdjustment` from `kernel32.dll` to query clock interrupt increments (e.g. 15.625ms nominal tick) and adjustment increments (e.g. 15.6252ms). Computes exact clock drift rate in parts per million (PPM), checks whether periodic time adjustments are synchronized or disabled, and inspects the live service state of the Windows Time service (`w32time`).
 - **Milestone Expansion**: **127 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **34 comprehensive test suites (113/113 tests passing)** and **30 environment health checks**.
 - **Native MCP Tools**: `super_time_zone_info`, `super_time_chronometry`, `super_time_adjustment`.
+
+---
+
+## 50. 🔋 Windows Power Policy, Execution State & Hardware Telemetry Subsystem (`powrprof.h` / `powerbase.h` / `poclass.h`)
+
+Directly manages Windows power schemes, thread execution states, and CPU/battery hardware telemetry via native Win32 `powrprof.dll` and `kernel32.dll` P/Invoke without external utilities or PowerShell overhead:
+- **Windows Power Schemes & Active Policy Enumeration (`super_power_schemes_list`)**: Directly invokes `PowerEnumerate`, `PowerGetActiveScheme`, `PowerReadFriendlyName`, and `PowerReadDescription` across all registered system schemes (`ACCESS_SCHEME`). Discovers scheme GUIDs, human-readable titles, descriptions, and active status in sub-millisecond execution.
+- **Thread Execution State & Keep-Awake Governor (`super_power_execution_state`)**: Directly invokes `SetThreadExecutionState` from `kernel32.dll`. Enables continuous (`ES_CONTINUOUS`) assertion of system required (`ES_SYSTEM_REQUIRED`), display required (`ES_DISPLAY_REQUIRED`), and away mode (`ES_AWAYMODE_REQUIRED`) to prevent OS sleep, display blanking, or idle suspension during long-running builds, video generation, or model inference, and smoothly restores default OS sleep policies on completion.
+- **Silicon Throttling & Battery Chemistry Telemetry (`super_power_hardware_telemetry`)**: Directly invokes `CallNtPowerInformation` from `powrprof.dll` across multiple Information Levels: Level 11 (`ProcessorPowerInformation` for per-core current MHz, max MHz, limit MHz, idle states, and throttle flags), Level 5 (`SystemBatteryState` for AC/DC status, battery presence, charging state, estimated run-time, and capacity in mWh), and Level 4 (`SystemPowerCapabilities` for ACPI sleep states S1-S5, hibernation support, and battery counts).
+- **130 Tools Milestone**: Reaches **130 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **35 comprehensive test suites (116/116 tests passing)** and **31 environment health checks**.
+- **Native MCP Tools**: `super_power_schemes_list`, `super_power_execution_state`, `super_power_hardware_telemetry`.
 
 ---
 

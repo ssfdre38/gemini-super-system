@@ -6342,6 +6342,279 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows Power Policy, Execution State & Battery Subsystem (powrprof.h / powerbase.h / poclass.h)
+
+        const uint ES_SYSTEM_REQUIRED = 0x00000001;
+        const uint ES_DISPLAY_REQUIRED = 0x00000002;
+        const uint ES_USER_PRESENT = 0x00000004;
+        const uint ES_AWAYMODE_REQUIRED = 0x00000040;
+        const uint ES_CONTINUOUS = 0x80000000;
+
+        const uint POWER_ACCESS_SCHEME = 16;
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern uint SetThreadExecutionState(uint esFlags);
+
+        [DllImport("powrprof.dll")]
+        static extern uint PowerEnumerate(IntPtr RootPowerKey, IntPtr SchemeGuid, IntPtr SubGroupOfPowerSettingsGuid, uint AccessFlags, uint Index, byte[] Buffer, ref uint BufferSize);
+
+        [DllImport("powrprof.dll", CharSet = CharSet.Unicode)]
+        static extern uint PowerReadDescription(IntPtr RootPowerKey, ref Guid SchemeGuid, IntPtr SubGroupOfPowerSettingsGuid, IntPtr PowerSettingGuid, StringBuilder Buffer, ref uint BufferSize);
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct POWER_SYSTEM_BATTERY_STATE {
+            [MarshalAs(UnmanagedType.I1)] public bool AcOnLine;
+            [MarshalAs(UnmanagedType.I1)] public bool BatteryPresent;
+            [MarshalAs(UnmanagedType.I1)] public bool Charging;
+            [MarshalAs(UnmanagedType.I1)] public bool Discharging;
+            public byte Spare1;
+            public byte Spare2;
+            public byte Spare3;
+            public byte Spare4;
+            public uint Tag;
+            public uint MaxCapacity;
+            public uint RemainingCapacity;
+            public int Rate;
+            public uint EstimatedTime;
+            public uint DefaultAlert1;
+            public uint DefaultAlert2;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct POWER_SYSTEM_POWER_CAPABILITIES {
+            [MarshalAs(UnmanagedType.I1)] public bool PowerButtonPresent;
+            [MarshalAs(UnmanagedType.I1)] public bool SleepButtonPresent;
+            [MarshalAs(UnmanagedType.I1)] public bool LidPresent;
+            [MarshalAs(UnmanagedType.I1)] public bool SystemS1;
+            [MarshalAs(UnmanagedType.I1)] public bool SystemS2;
+            [MarshalAs(UnmanagedType.I1)] public bool SystemS3;
+            [MarshalAs(UnmanagedType.I1)] public bool SystemS4;
+            [MarshalAs(UnmanagedType.I1)] public bool SystemS5;
+            [MarshalAs(UnmanagedType.I1)] public bool HiberFilePresent;
+            [MarshalAs(UnmanagedType.I1)] public bool FullWake;
+            [MarshalAs(UnmanagedType.I1)] public bool VideoDimPresent;
+            [MarshalAs(UnmanagedType.I1)] public bool ApmPresent;
+            [MarshalAs(UnmanagedType.I1)] public bool UpsPresent;
+            [MarshalAs(UnmanagedType.I1)] public bool ThermalControl;
+            [MarshalAs(UnmanagedType.I1)] public bool ProcessorThrottle;
+            public byte ProcessorMinThrottle;
+            public byte ProcessorMaxThrottle;
+            [MarshalAs(UnmanagedType.I1)] public bool FastSystemS4;
+            [MarshalAs(UnmanagedType.I1)] public bool Hiberboot;
+            [MarshalAs(UnmanagedType.I1)] public bool WakeAlarmPresent;
+            [MarshalAs(UnmanagedType.I1)] public bool AoAc;
+            [MarshalAs(UnmanagedType.I1)] public bool DiskSpinDown;
+            public byte HiberFileType;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 16)] public byte[] Spare2;
+            public uint SystemBatteriesPresent;
+            public int DefaultLowLatencyWake;
+        }
+
+        static void PowerSchemesListCmd() {
+            try {
+                IntPtr pActive;
+                Guid activeGuid = Guid.Empty;
+                if (PowerGetActiveScheme(IntPtr.Zero, out pActive) == 0 && pActive != IntPtr.Zero) {
+                    activeGuid = (Guid)Marshal.PtrToStructure(pActive, typeof(Guid));
+                }
+
+                string activeName = "";
+                var schemeList = new List<string>();
+                uint idx = 0;
+                while (idx < 64) {
+                    byte[] buf = new byte[16];
+                    uint bufSize = (uint)buf.Length;
+                    uint res = PowerEnumerate(IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, POWER_ACCESS_SCHEME, idx, buf, ref bufSize);
+                    if (res != 0) break;
+
+                    Guid g = new Guid(buf);
+                    StringBuilder sbName = new StringBuilder(256);
+                    uint nameSize = (uint)sbName.Capacity * 2;
+                    string name = "";
+                    if (PowerReadFriendlyName(IntPtr.Zero, ref g, IntPtr.Zero, IntPtr.Zero, sbName, ref nameSize) == 0) {
+                        name = sbName.ToString();
+                    }
+
+                    StringBuilder sbDesc = new StringBuilder(512);
+                    uint descSize = (uint)sbDesc.Capacity * 2;
+                    string desc = "";
+                    if (PowerReadDescription(IntPtr.Zero, ref g, IntPtr.Zero, IntPtr.Zero, sbDesc, ref descSize) == 0) {
+                        desc = sbDesc.ToString();
+                    }
+
+                    bool isActive = (g == activeGuid);
+                    if (isActive) activeName = name;
+
+                    schemeList.Add(string.Format(
+                        "{{\"index\": {0}, \"guid\": \"{1}\", \"friendlyName\": \"{2}\", \"description\": \"{3}\", \"isActive\": {4}}}",
+                        idx, g.ToString(), EscapeJson(name), EscapeJson(desc), isActive ? "true" : "false"
+                    ));
+                    idx++;
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"activeSchemeGuid\": \"{0}\", \"activeSchemeName\": \"{1}\", \"schemeCount\": {2}, \"schemes\": [{3}]}}",
+                    activeGuid.ToString(), EscapeJson(activeName), schemeList.Count, string.Join(", ", schemeList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void PowerExecutionStateCmd(bool systemRequired, bool displayRequired, bool awayMode, bool continuous, bool restore) {
+            try {
+                uint flags = 0;
+                var flagNames = new List<string>();
+
+                if (restore) {
+                    flags = ES_CONTINUOUS;
+                    flagNames.Add("\"ES_CONTINUOUS\"");
+                } else {
+                    if (continuous) {
+                        flags |= ES_CONTINUOUS;
+                        flagNames.Add("\"ES_CONTINUOUS\"");
+                    }
+                    if (systemRequired) {
+                        flags |= ES_SYSTEM_REQUIRED;
+                        flagNames.Add("\"ES_SYSTEM_REQUIRED\"");
+                    }
+                    if (displayRequired) {
+                        flags |= ES_DISPLAY_REQUIRED;
+                        flagNames.Add("\"ES_DISPLAY_REQUIRED\"");
+                    }
+                    if (awayMode) {
+                        flags |= ES_AWAYMODE_REQUIRED;
+                        flagNames.Add("\"ES_AWAYMODE_REQUIRED\"");
+                    }
+                }
+
+                uint prev = SetThreadExecutionState(flags);
+                bool success = (prev != 0);
+
+                string stateDesc = restore ? "DEFAULT_OS_POLICY_RESTORED" :
+                    ((flags & ES_SYSTEM_REQUIRED) != 0 ? "KEEP_AWAKE_ACTIVE" : "EXECUTION_STATE_ASSERTED");
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": {0}, \"state\": \"{1}\", \"requestedFlagsHex\": \"0x{2:X8}\", \"previousStateHex\": \"0x{3:X8}\", \"appliedFlags\": [{4}], \"isSystemRequired\": {5}, \"isDisplayRequired\": {6}, \"isAwayMode\": {7}, \"isContinuous\": {8}}}",
+                    success ? "true" : "false",
+                    stateDesc,
+                    flags,
+                    prev,
+                    string.Join(", ", flagNames.ToArray()),
+                    (flags & ES_SYSTEM_REQUIRED) != 0 ? "true" : "false",
+                    (flags & ES_DISPLAY_REQUIRED) != 0 ? "true" : "false",
+                    (flags & ES_AWAYMODE_REQUIRED) != 0 ? "true" : "false",
+                    (flags & ES_CONTINUOUS) != 0 ? "true" : "false"
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void PowerHardwareTelemetryCmd() {
+            try {
+                int coreCount = Environment.ProcessorCount;
+                int structSize = Marshal.SizeOf(typeof(PROCESSOR_POWER_INFORMATION));
+                IntPtr pOut = Marshal.AllocHGlobal(structSize * coreCount);
+                var coreList = new List<string>();
+                double totalMhz = 0;
+                bool throttled = false;
+
+                try {
+                    int status = CallNtPowerInformation(11, IntPtr.Zero, 0, pOut, (uint)(structSize * coreCount));
+                    if (status == 0) {
+                        for (int i = 0; i < coreCount; i++) {
+                            IntPtr pItem = new IntPtr(pOut.ToInt64() + i * structSize);
+                            var info = (PROCESSOR_POWER_INFORMATION)Marshal.PtrToStructure(pItem, typeof(PROCESSOR_POWER_INFORMATION));
+                            totalMhz += info.CurrentMhz;
+                            if (info.MhzLimit < info.MaxMhz) throttled = true;
+
+                            coreList.Add(string.Format(
+                                "{{\"core\": {0}, \"currentMhz\": {1}, \"maxMhz\": {2}, \"mhzLimit\": {3}, \"currentIdleState\": {4}, \"maxIdleState\": {5}}}",
+                                info.Number, info.CurrentMhz, info.MaxMhz, info.MhzLimit, info.CurrentIdleState, info.MaxIdleState
+                            ));
+                        }
+                    }
+                } finally {
+                    Marshal.FreeHGlobal(pOut);
+                }
+                double avgMhz = coreCount > 0 ? (totalMhz / coreCount) : 0;
+
+                int batSize = Marshal.SizeOf(typeof(POWER_SYSTEM_BATTERY_STATE));
+                IntPtr pBat = Marshal.AllocHGlobal(batSize);
+                bool acOnLine = true;
+                bool batteryPresent = false;
+                bool charging = false;
+                bool discharging = false;
+                uint maxCap = 0;
+                uint remCap = 0;
+                int rateMw = 0;
+                uint estSec = 0;
+
+                try {
+                    int status = CallNtPowerInformation(5, IntPtr.Zero, 0, pBat, (uint)batSize);
+                    if (status == 0) {
+                        var bat = (POWER_SYSTEM_BATTERY_STATE)Marshal.PtrToStructure(pBat, typeof(POWER_SYSTEM_BATTERY_STATE));
+                        acOnLine = bat.AcOnLine;
+                        batteryPresent = bat.BatteryPresent;
+                        charging = bat.Charging;
+                        discharging = bat.Discharging;
+                        maxCap = bat.MaxCapacity;
+                        remCap = bat.RemainingCapacity;
+                        rateMw = bat.Rate;
+                        estSec = bat.EstimatedTime;
+                    }
+                } finally {
+                    Marshal.FreeHGlobal(pBat);
+                }
+
+                int capSize = Marshal.SizeOf(typeof(POWER_SYSTEM_POWER_CAPABILITIES));
+                IntPtr pCap = Marshal.AllocHGlobal(capSize);
+                var sleepList = new List<string>();
+                bool thermalCtrl = false;
+                bool procThrottle = false;
+
+                try {
+                    int status = CallNtPowerInformation(4, IntPtr.Zero, 0, pCap, (uint)capSize);
+                    if (status == 0) {
+                        var cap = (POWER_SYSTEM_POWER_CAPABILITIES)Marshal.PtrToStructure(pCap, typeof(POWER_SYSTEM_POWER_CAPABILITIES));
+                        if (cap.SystemS1) sleepList.Add("\"S1\"");
+                        if (cap.SystemS2) sleepList.Add("\"S2\"");
+                        if (cap.SystemS3) sleepList.Add("\"S3_Standby\"");
+                        if (cap.SystemS4) sleepList.Add("\"S4_Hibernate\"");
+                        if (cap.SystemS5) sleepList.Add("\"S5_Shutdown\"");
+                        thermalCtrl = cap.ThermalControl;
+                        procThrottle = cap.ProcessorThrottle;
+                    }
+                } finally {
+                    Marshal.FreeHGlobal(pCap);
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"cpu\": {{\"logicalCoreCount\": {0}, \"avgCurrentMhz\": {1}, \"throttlingDetected\": {2}, \"cores\": [{3}]}}, \"battery\": {{\"acOnLine\": {4}, \"batteryPresent\": {5}, \"charging\": {6}, \"discharging\": {7}, \"maxCapacityMWh\": {8}, \"remainingCapacityMWh\": {9}, \"rateMW\": {10}, \"estimatedTimeSeconds\": {11}}}, \"capabilities\": {{\"sleepStatesSupported\": [{12}], \"thermalControl\": {13}, \"processorThrottle\": {14}}}}}",
+                    coreCount,
+                    avgMhz.ToString("F1", System.Globalization.CultureInfo.InvariantCulture),
+                    throttled ? "true" : "false",
+                    string.Join(", ", coreList.ToArray()),
+                    acOnLine ? "true" : "false",
+                    batteryPresent ? "true" : "false",
+                    charging ? "true" : "false",
+                    discharging ? "true" : "false",
+                    maxCap,
+                    remCap,
+                    rateMw,
+                    estSec,
+                    string.Join(", ", sleepList.ToArray()),
+                    thermalCtrl ? "true" : "false",
+                    procThrottle ? "true" : "false"
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -9295,6 +9568,17 @@ namespace GeminiSuperDesktop {
                 TimeGetChronometryCmd();
             } else if (cmd == "time_adjustment" || cmd == "time_drift" || cmd == "time_sync") {
                 TimeGetAdjustmentCmd();
+            } else if (cmd == "power_schemes" || cmd == "power_schemes_list" || cmd == "list_power_schemes") {
+                PowerSchemesListCmd();
+            } else if (cmd == "power_execution_state" || cmd == "keep_awake" || cmd == "set_execution_state") {
+                bool sysReq = args.Length >= 2 ? (args[1].ToLowerInvariant() != "false" && args[1] != "0") : true;
+                bool dispReq = args.Length >= 3 ? (args[2].ToLowerInvariant() == "true" || args[2] == "1") : false;
+                bool away = args.Length >= 4 ? (args[3].ToLowerInvariant() == "true" || args[3] == "1") : false;
+                bool cont = args.Length >= 5 ? (args[4].ToLowerInvariant() != "false" && args[4] != "0") : true;
+                bool rest = args.Length >= 6 ? (args[5].ToLowerInvariant() == "true" || args[5] == "1") : false;
+                PowerExecutionStateCmd(sysReq, dispReq, away, cont, rest);
+            } else if (cmd == "power_hardware_telemetry" || cmd == "power_telemetry" || cmd == "battery_state") {
+                PowerHardwareTelemetryCmd();
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

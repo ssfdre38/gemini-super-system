@@ -2565,6 +2565,56 @@ const SYSTEM_TOOLS = [
           type: "object",
           properties: {}
         }
+      },
+      {
+        name: "super_power_schemes_list",
+        description: "Enumerates all registered Windows power schemes and active policy GUID via powrprof.dll (PowerEnumerate, PowerReadFriendlyName, PowerReadDescription, PowerGetActiveScheme).",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_power_execution_state",
+        description: "Controls Windows thread execution state to prevent system sleep or display timeout during background tasks via SetThreadExecutionState. Supports restoring default OS power policy.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            systemRequired: {
+              type: "boolean",
+              default: true,
+              description: "Prevent operating system from going to sleep while task is running (default: true)."
+            },
+            displayRequired: {
+              type: "boolean",
+              default: false,
+              description: "Prevent display from turning off (default: false)."
+            },
+            awayMode: {
+              type: "boolean",
+              default: false,
+              description: "Enable silent away mode for headless background processing (default: false)."
+            },
+            continuous: {
+              type: "boolean",
+              default: true,
+              description: "Maintain execution state continuously until next call (default: true)."
+            },
+            restore: {
+              type: "boolean",
+              default: false,
+              description: "Reset execution state to default Windows power-saving policy (default: false)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_power_hardware_telemetry",
+        description: "Queries deep Windows hardware power telemetry via CallNtPowerInformation. Reports per-core MHz frequencies, CPU throttling detection, battery chemistry, discharge rate, and ACPI sleep states.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
 ];
 
@@ -4659,6 +4709,47 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [System Time Adjustment & Drift Rate]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_power_schemes_list") {
+    const res = await orch.getPowerSchemesList();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Registered Power Schemes]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_power_execution_state") {
+    const systemRequired = args?.systemRequired !== false;
+    const displayRequired = args?.displayRequired === true;
+    const awayMode = args?.awayMode === true;
+    const continuous = args?.continuous !== false;
+    const restore = args?.restore === true;
+    const res = await orch.setPowerExecutionState({ systemRequired, displayRequired, awayMode, continuous, restore });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Execution State Actuator]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_power_hardware_telemetry") {
+    const res = await orch.getPowerHardwareTelemetry();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Hardware Power Telemetry & Core Frequencies]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

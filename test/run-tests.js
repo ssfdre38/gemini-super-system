@@ -2616,10 +2616,71 @@ async function run() {
     assert(typeof res.w32timeServiceStatus === "string");
   });
 
-  it("All 127 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n=======================================================");
+  console.log("   SUITE 35: Windows Power Policy, Execution State & Battery");
+  console.log("=======================================================\n");
+
+  await itAsync("super_power_schemes_list enumerates registered Windows power schemes and active policy", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getPowerSchemesList();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.activeSchemeGuid === "string");
+    assert(typeof res.activeSchemeName === "string");
+    assert(typeof res.schemeCount === "number");
+    assert(res.schemeCount > 0);
+    assert(Array.isArray(res.schemes));
+    assert(res.schemes.length > 0);
+    const active = res.schemes.find(s => s.isActive);
+    assert(active !== undefined);
+    assert(typeof active.friendlyName === "string");
+  });
+
+  await itAsync("super_power_execution_state asserts keep-awake flags and restores default power policy", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    // 1. Assert continuous system required
+    const awakeRes = await kb.setPowerExecutionState({ systemRequired: true, continuous: true });
+    assert(awakeRes !== null && typeof awakeRes === "object");
+    assert.strictEqual(awakeRes.success, true);
+    assert.strictEqual(awakeRes.state, "KEEP_AWAKE_ACTIVE");
+    assert.strictEqual(awakeRes.isSystemRequired, true);
+
+    // 2. Restore default policy
+    const restoreRes = await kb.setPowerExecutionState({ restore: true });
+    assert(restoreRes !== null && typeof restoreRes === "object");
+    assert.strictEqual(restoreRes.success, true);
+    assert.strictEqual(restoreRes.state, "DEFAULT_OS_POLICY_RESTORED");
+    assert.strictEqual(restoreRes.isSystemRequired, false);
+  });
+
+  await itAsync("super_power_hardware_telemetry queries core clock speeds, throttling, and battery chemistry", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getPowerHardwareTelemetry();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.cpu === "object");
+    assert(typeof res.cpu.logicalCoreCount === "number");
+    assert(res.cpu.logicalCoreCount > 0);
+    assert(typeof res.cpu.avgCurrentMhz === "number");
+    assert(typeof res.cpu.throttlingDetected === "boolean");
+    assert(Array.isArray(res.cpu.cores));
+    assert(typeof res.battery === "object");
+    assert(typeof res.battery.acOnLine === "boolean");
+    assert(typeof res.battery.batteryPresent === "boolean");
+    assert(typeof res.capabilities === "object");
+    assert(Array.isArray(res.capabilities.sleepStatesSupported));
+  });
+
+  it("All 130 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 127);
+    assert.strictEqual(SYSTEM_TOOLS.length, 130);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -2680,6 +2741,9 @@ async function run() {
     assert(toolNames.includes("super_time_zone_info"));
     assert(toolNames.includes("super_time_chronometry"));
     assert(toolNames.includes("super_time_adjustment"));
+    assert(toolNames.includes("super_power_schemes_list"));
+    assert(toolNames.includes("super_power_execution_state"));
+    assert(toolNames.includes("super_power_hardware_telemetry"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
