@@ -9388,6 +9388,371 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows Print Spooler Subsystem (winspool.drv / winspool.h)
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct PRINTER_INFO_2_WIN32 {
+            public string pServerName;
+            public string pPrinterName;
+            public string pShareName;
+            public string pPortName;
+            public string pDriverName;
+            public string pComment;
+            public string pLocation;
+            public IntPtr pDevMode;
+            public string pSepFile;
+            public string pPrintProcessor;
+            public string pDatatype;
+            public string pParameters;
+            public IntPtr pSecurityDescriptor;
+            public uint Attributes;
+            public uint Priority;
+            public uint DefaultPriority;
+            public uint StartTime;
+            public uint UntilTime;
+            public uint Status;
+            public uint cJobs;
+            public uint AveragePPM;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct SPOOLER_SYSTEMTIME {
+            public ushort wYear;
+            public ushort wMonth;
+            public ushort wDayOfWeek;
+            public ushort wDay;
+            public ushort wHour;
+            public ushort wMinute;
+            public ushort wSecond;
+            public ushort wMilliseconds;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct JOB_INFO_1_WIN32 {
+            public uint JobId;
+            public string pPrinterName;
+            public string pMachineName;
+            public string pUserName;
+            public string pDocument;
+            public string pDatatype;
+            public string pStatus;
+            public uint Status;
+            public uint Priority;
+            public uint Position;
+            public uint TotalPages;
+            public uint PagesPrinted;
+            public SPOOLER_SYSTEMTIME Submitted;
+        }
+
+        [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool EnumPrintersW(
+            uint Flags,
+            string Name,
+            uint Level,
+            IntPtr pPrinterEnum,
+            uint cbBuf,
+            out uint pcbNeeded,
+            out uint pcReturned);
+
+        [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetDefaultPrinterW(
+            StringBuilder pszBuffer,
+            ref uint pcchBuffer);
+
+        [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool SetDefaultPrinterW(
+            string pszPrinter);
+
+        [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool OpenPrinterW(
+            string pPrinterName,
+            out IntPtr phPrinter,
+            IntPtr pDefault);
+
+        [DllImport("winspool.drv", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool ClosePrinter(
+            IntPtr hPrinter);
+
+        [DllImport("winspool.drv", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool EnumJobsW(
+            IntPtr hPrinter,
+            uint FirstJob,
+            uint NoJobs,
+            uint Level,
+            IntPtr pJob,
+            uint cbBuf,
+            out uint pcbNeeded,
+            out uint pcReturned);
+
+        static List<string> DecodePrinterAttributes(uint attrs) {
+            var list = new List<string>();
+            if ((attrs & 0x00000001) != 0) list.Add("PRINTER_ATTRIBUTE_QUEUED");
+            if ((attrs & 0x00000002) != 0) list.Add("PRINTER_ATTRIBUTE_DIRECT");
+            if ((attrs & 0x00000004) != 0) list.Add("PRINTER_ATTRIBUTE_DEFAULT");
+            if ((attrs & 0x00000008) != 0) list.Add("PRINTER_ATTRIBUTE_SHARED");
+            if ((attrs & 0x00000010) != 0) list.Add("PRINTER_ATTRIBUTE_NETWORK");
+            if ((attrs & 0x00000020) != 0) list.Add("PRINTER_ATTRIBUTE_HIDDEN");
+            if ((attrs & 0x00000040) != 0) list.Add("PRINTER_ATTRIBUTE_LOCAL");
+            if ((attrs & 0x00000080) != 0) list.Add("PRINTER_ATTRIBUTE_ENABLE_DEVQ");
+            if ((attrs & 0x00000100) != 0) list.Add("PRINTER_ATTRIBUTE_KEEPPRINTEDJOBS");
+            if ((attrs & 0x00000200) != 0) list.Add("PRINTER_ATTRIBUTE_DO_COMPLETE_FIRST");
+            if ((attrs & 0x00000400) != 0) list.Add("PRINTER_ATTRIBUTE_WORK_OFFLINE");
+            if ((attrs & 0x00000800) != 0) list.Add("PRINTER_ATTRIBUTE_ENABLE_BIDI");
+            if ((attrs & 0x00001000) != 0) list.Add("PRINTER_ATTRIBUTE_RAW_ONLY");
+            if ((attrs & 0x00002000) != 0) list.Add("PRINTER_ATTRIBUTE_PUBLISHED");
+            if ((attrs & 0x00004000) != 0) list.Add("PRINTER_ATTRIBUTE_FAX");
+            if ((attrs & 0x00008000) != 0) list.Add("PRINTER_ATTRIBUTE_TS");
+            return list;
+        }
+
+        static List<string> DecodePrinterStatus(uint status) {
+            var list = new List<string>();
+            if (status == 0) { list.Add("PRINTER_STATUS_READY"); return list; }
+            if ((status & 0x00000001) != 0) list.Add("PRINTER_STATUS_PAUSED");
+            if ((status & 0x00000002) != 0) list.Add("PRINTER_STATUS_ERROR");
+            if ((status & 0x00000004) != 0) list.Add("PRINTER_STATUS_PENDING_DELETION");
+            if ((status & 0x00000008) != 0) list.Add("PRINTER_STATUS_PAPER_JAM");
+            if ((status & 0x00000010) != 0) list.Add("PRINTER_STATUS_PAPER_OUT");
+            if ((status & 0x00000020) != 0) list.Add("PRINTER_STATUS_MANUAL_FEED");
+            if ((status & 0x00000040) != 0) list.Add("PRINTER_STATUS_PAPER_PROBLEM");
+            if ((status & 0x00000080) != 0) list.Add("PRINTER_STATUS_OFFLINE");
+            if ((status & 0x00000100) != 0) list.Add("PRINTER_STATUS_IO_ACTIVE");
+            if ((status & 0x00000200) != 0) list.Add("PRINTER_STATUS_BUSY");
+            if ((status & 0x00000400) != 0) list.Add("PRINTER_STATUS_PRINTING");
+            if ((status & 0x00000800) != 0) list.Add("PRINTER_STATUS_OUTPUT_BIN_FULL");
+            if ((status & 0x00001000) != 0) list.Add("PRINTER_STATUS_NOT_AVAILABLE");
+            if ((status & 0x00002000) != 0) list.Add("PRINTER_STATUS_WAITING");
+            if ((status & 0x00004000) != 0) list.Add("PRINTER_STATUS_PROCESSING");
+            if ((status & 0x00008000) != 0) list.Add("PRINTER_STATUS_INITIALIZING");
+            if ((status & 0x00010000) != 0) list.Add("PRINTER_STATUS_WARMING_UP");
+            if ((status & 0x00020000) != 0) list.Add("PRINTER_STATUS_TONER_LOW");
+            if ((status & 0x00040000) != 0) list.Add("PRINTER_STATUS_NO_TONER");
+            if ((status & 0x00080000) != 0) list.Add("PRINTER_STATUS_PAGE_PUNT");
+            if ((status & 0x00100000) != 0) list.Add("PRINTER_STATUS_USER_INTERVENTION");
+            if ((status & 0x00200000) != 0) list.Add("PRINTER_STATUS_OUT_OF_MEMORY");
+            if ((status & 0x00400000) != 0) list.Add("PRINTER_STATUS_DOOR_OPEN");
+            if ((status & 0x00800000) != 0) list.Add("PRINTER_STATUS_SERVER_UNKNOWN");
+            if ((status & 0x01000000) != 0) list.Add("PRINTER_STATUS_POWER_SAVE");
+            return list;
+        }
+
+        static List<string> DecodeJobStatus(uint status) {
+            var list = new List<string>();
+            if (status == 0) { list.Add("JOB_STATUS_READY"); return list; }
+            if ((status & 0x00000001) != 0) list.Add("JOB_STATUS_PAUSED");
+            if ((status & 0x00000002) != 0) list.Add("JOB_STATUS_ERROR");
+            if ((status & 0x00000004) != 0) list.Add("JOB_STATUS_DELETING");
+            if ((status & 0x00000008) != 0) list.Add("JOB_STATUS_SPOOLING");
+            if ((status & 0x00000010) != 0) list.Add("JOB_STATUS_PRINTING");
+            if ((status & 0x00000020) != 0) list.Add("JOB_STATUS_OFFLINE");
+            if ((status & 0x00000040) != 0) list.Add("JOB_STATUS_PAPEROUT");
+            if ((status & 0x00000080) != 0) list.Add("JOB_STATUS_PRINTED");
+            if ((status & 0x00000100) != 0) list.Add("JOB_STATUS_DELETED");
+            if ((status & 0x00000200) != 0) list.Add("JOB_STATUS_BLOCKED_DEVQ");
+            if ((status & 0x00000400) != 0) list.Add("JOB_STATUS_USER_INTERVENTION");
+            if ((status & 0x00000800) != 0) list.Add("JOB_STATUS_RESTART");
+            if ((status & 0x00001000) != 0) list.Add("JOB_STATUS_COMPLETE");
+            if ((status & 0x00002000) != 0) list.Add("JOB_STATUS_RETAINED");
+            return list;
+        }
+
+        static string QueryDefaultPrinterName() {
+            var sb = new StringBuilder(260);
+            uint size = (uint)sb.Capacity;
+            if (GetDefaultPrinterW(sb, ref size)) {
+                return sb.ToString();
+            }
+            return "";
+        }
+
+        static void SpoolerPrintersCmd() {
+            try {
+                string defaultPrinter = QueryDefaultPrinterName();
+                uint flags = 0x00000002 | 0x00000004; // PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS
+                uint cbNeeded = 0;
+                uint cReturned = 0;
+                EnumPrintersW(flags, null, 2, IntPtr.Zero, 0, out cbNeeded, out cReturned);
+
+                var printers = new List<string>();
+                if (cbNeeded > 0) {
+                    IntPtr pBuf = Marshal.AllocHGlobal((int)cbNeeded);
+                    try {
+                        if (EnumPrintersW(flags, null, 2, pBuf, cbNeeded, out cbNeeded, out cReturned)) {
+                            int structSize = Marshal.SizeOf(typeof(PRINTER_INFO_2_WIN32));
+                            for (int i = 0; i < cReturned; i++) {
+                                IntPtr pItem = new IntPtr(pBuf.ToInt64() + i * structSize);
+                                PRINTER_INFO_2_WIN32 pi = (PRINTER_INFO_2_WIN32)Marshal.PtrToStructure(pItem, typeof(PRINTER_INFO_2_WIN32));
+
+                                bool isDefault = string.Equals(pi.pPrinterName, defaultPrinter, StringComparison.OrdinalIgnoreCase);
+                                var attrList = DecodePrinterAttributes(pi.Attributes);
+                                var statusList = DecodePrinterStatus(pi.Status);
+
+                                var sbItem = new StringBuilder();
+                                sbItem.Append("{");
+                                sbItem.AppendFormat("\"printerName\": \"{0}\", ", EscapeJson(pi.pPrinterName ?? ""));
+                                sbItem.AppendFormat("\"driverName\": \"{0}\", ", EscapeJson(pi.pDriverName ?? ""));
+                                sbItem.AppendFormat("\"portName\": \"{0}\", ", EscapeJson(pi.pPortName ?? ""));
+                                sbItem.AppendFormat("\"shareName\": \"{0}\", ", EscapeJson(pi.pShareName ?? ""));
+                                sbItem.AppendFormat("\"serverName\": \"{0}\", ", EscapeJson(pi.pServerName ?? ""));
+                                sbItem.AppendFormat("\"comment\": \"{0}\", ", EscapeJson(pi.pComment ?? ""));
+                                sbItem.AppendFormat("\"location\": \"{0}\", ", EscapeJson(pi.pLocation ?? ""));
+                                sbItem.AppendFormat("\"printProcessor\": \"{0}\", ", EscapeJson(pi.pPrintProcessor ?? ""));
+                                sbItem.AppendFormat("\"datatype\": \"{0}\", ", EscapeJson(pi.pDatatype ?? ""));
+                                sbItem.AppendFormat("\"isDefault\": {0}, ", isDefault ? "true" : "false");
+                                sbItem.AppendFormat("\"cJobs\": {0}, ", pi.cJobs);
+                                sbItem.AppendFormat("\"attributes\": {0}, ", pi.Attributes);
+                                sbItem.AppendFormat("\"status\": {0}, ", pi.Status);
+
+                                sbItem.Append("\"decodedAttributes\": [");
+                                for (int a = 0; a < attrList.Count; a++) {
+                                    if (a > 0) sbItem.Append(", ");
+                                    sbItem.AppendFormat("\"{0}\"", attrList[a]);
+                                }
+                                sbItem.Append("], ");
+
+                                sbItem.Append("\"decodedStatus\": [");
+                                for (int s = 0; s < statusList.Count; s++) {
+                                    if (s > 0) sbItem.Append(", ");
+                                    sbItem.AppendFormat("\"{0}\"", statusList[s]);
+                                }
+                                sbItem.Append("]}");
+
+                                printers.Add(sbItem.ToString());
+                            }
+                        }
+                    } finally {
+                        Marshal.FreeHGlobal(pBuf);
+                    }
+                }
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.AppendFormat("\"defaultPrinter\": \"{0}\", ", EscapeJson(defaultPrinter));
+                sbOut.AppendFormat("\"count\": {0}, ", printers.Count);
+                sbOut.Append("\"printers\": [");
+                for (int i = 0; i < printers.Count; i++) {
+                    if (i > 0) sbOut.Append(", ");
+                    sbOut.Append(printers[i]);
+                }
+                sbOut.Append("]}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void SpoolerJobsCmd(string printerName) {
+            try {
+                if (string.IsNullOrEmpty(printerName)) {
+                    printerName = QueryDefaultPrinterName();
+                }
+                if (string.IsNullOrEmpty(printerName)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"No printer specified and no default printer found\"}");
+                    return;
+                }
+
+                IntPtr hPrinter = IntPtr.Zero;
+                if (!OpenPrinterW(printerName, out hPrinter, IntPtr.Zero)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to open printer '{0}' with code {1}\"}}", EscapeJson(printerName), Marshal.GetLastWin32Error()));
+                    return;
+                }
+
+                try {
+                    uint cbNeeded = 0;
+                    uint cReturned = 0;
+                    EnumJobsW(hPrinter, 0, 100, 1, IntPtr.Zero, 0, out cbNeeded, out cReturned);
+
+                    var jobs = new List<string>();
+                    if (cbNeeded > 0) {
+                        IntPtr pBuf = Marshal.AllocHGlobal((int)cbNeeded);
+                        try {
+                            if (EnumJobsW(hPrinter, 0, 100, 1, pBuf, cbNeeded, out cbNeeded, out cReturned)) {
+                                int structSize = Marshal.SizeOf(typeof(JOB_INFO_1_WIN32));
+                                for (int i = 0; i < cReturned; i++) {
+                                    IntPtr pItem = new IntPtr(pBuf.ToInt64() + i * structSize);
+                                    JOB_INFO_1_WIN32 ji = (JOB_INFO_1_WIN32)Marshal.PtrToStructure(pItem, typeof(JOB_INFO_1_WIN32));
+
+                                    var statusList = DecodeJobStatus(ji.Status);
+                                    string timeStr = string.Format("{0:D4}-{1:D2}-{2:D2}T{3:D2}:{4:D2}:{5:D2}Z",
+                                        ji.Submitted.wYear, ji.Submitted.wMonth, ji.Submitted.wDay,
+                                        ji.Submitted.wHour, ji.Submitted.wMinute, ji.Submitted.wSecond);
+
+                                    var sbJob = new StringBuilder();
+                                    sbJob.Append("{");
+                                    sbJob.AppendFormat("\"jobId\": {0}, ", ji.JobId);
+                                    sbJob.AppendFormat("\"document\": \"{0}\", ", EscapeJson(ji.pDocument ?? ""));
+                                    sbJob.AppendFormat("\"userName\": \"{0}\", ", EscapeJson(ji.pUserName ?? ""));
+                                    sbJob.AppendFormat("\"printerName\": \"{0}\", ", EscapeJson(ji.pPrinterName ?? ""));
+                                    sbJob.AppendFormat("\"datatype\": \"{0}\", ", EscapeJson(ji.pDatatype ?? ""));
+                                    sbJob.AppendFormat("\"totalPages\": {0}, ", ji.TotalPages);
+                                    sbJob.AppendFormat("\"pagesPrinted\": {0}, ", ji.PagesPrinted);
+                                    sbJob.AppendFormat("\"priority\": {0}, ", ji.Priority);
+                                    sbJob.AppendFormat("\"position\": {0}, ", ji.Position);
+                                    sbJob.AppendFormat("\"submitted\": \"{0}\", ", timeStr);
+                                    sbJob.AppendFormat("\"status\": {0}, ", ji.Status);
+
+                                    sbJob.Append("\"decodedStatus\": [");
+                                    for (int s = 0; s < statusList.Count; s++) {
+                                        if (s > 0) sbJob.Append(", ");
+                                        sbJob.AppendFormat("\"{0}\"", statusList[s]);
+                                    }
+                                    sbJob.Append("]}");
+
+                                    jobs.Add(sbJob.ToString());
+                                }
+                            }
+                        } finally {
+                            Marshal.FreeHGlobal(pBuf);
+                        }
+                    }
+
+                    var sbOut = new StringBuilder();
+                    sbOut.Append("{");
+                    sbOut.Append("\"success\": true, ");
+                    sbOut.AppendFormat("\"printerName\": \"{0}\", ", EscapeJson(printerName));
+                    sbOut.AppendFormat("\"jobCount\": {0}, ", jobs.Count);
+                    sbOut.Append("\"jobs\": [");
+                    for (int i = 0; i < jobs.Count; i++) {
+                        if (i > 0) sbOut.Append(", ");
+                        sbOut.Append(jobs[i]);
+                    }
+                    sbOut.Append("]}");
+                    Console.WriteLine(sbOut.ToString());
+                } finally {
+                    ClosePrinter(hPrinter);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void SpoolerDefaultPrinterCmd(string newDefault) {
+            try {
+                if (!string.IsNullOrEmpty(newDefault)) {
+                    if (SetDefaultPrinterW(newDefault)) {
+                        Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"set\", \"defaultPrinter\": \"{0}\"}}", EscapeJson(newDefault)));
+                    } else {
+                        int err = Marshal.GetLastWin32Error();
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"SetDefaultPrinterW failed with code {0}\"}}", err));
+                    }
+                } else {
+                    string def = QueryDefaultPrinterName();
+                    Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"get\", \"defaultPrinter\": \"{0}\"}}", EscapeJson(def)));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -11692,6 +12057,7 @@ namespace GeminiSuperDesktop {
 
                 try {
                     using (var searcher = new ManagementObjectSearcher(@"root\cimv2", "SELECT Name, HighPrecisionTemperature, PercentPassiveLimit, ThrottleReasons FROM Win32_PerfFormattedData_Counters_ThermalZoneInformation")) {
+                        searcher.Options.Timeout = new TimeSpan(0, 0, 3);
                         foreach (ManagementObject mo in searcher.Get()) {
                             string name = mo["Name"] != null ? mo["Name"].ToString() : "Zone";
                             ulong hpTemp = mo["HighPrecisionTemperature"] != null ? Convert.ToUInt64(mo["HighPrecisionTemperature"]) : 0;
@@ -12502,6 +12868,14 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "fs_drives" || cmd == "fs-drives") {
                 string filter = args.Length >= 2 ? args[1] : null;
                 FsDrivesCmd(filter);
+            } else if (cmd == "spooler_printers" || cmd == "spooler-printers" || cmd == "printers") {
+                SpoolerPrintersCmd();
+            } else if (cmd == "spooler_jobs" || cmd == "spooler-jobs" || cmd == "print_jobs") {
+                string printerName = args.Length >= 2 ? args[1] : null;
+                SpoolerJobsCmd(printerName);
+            } else if (cmd == "spooler_default_printer" || cmd == "spooler-default-printer" || cmd == "default_printer") {
+                string newDefault = args.Length >= 2 ? args[1] : null;
+                SpoolerDefaultPrinterCmd(newDefault);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

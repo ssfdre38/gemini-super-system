@@ -75,6 +75,7 @@
   - [57. Windows Domain Name System Subsystem](#57--windows-domain-name-system-dns-subsystem-windnsh--dnsapidll)
   - [58. Windows Data Protection API Subsystem](#58-️-windows-data-protection-api-dpapi-subsystem-dpapih--crypt32dll)
   - [59. Windows File System Volume & Storage Mount Management Subsystem](#59--windows-file-system-volume--storage-mount-management-subsystem-fileapih--winioctlh--kernel32dll)
+  - [60. Windows Print Spooler Subsystem](#60--windows-print-spooler-subsystem-winspooldrv--winspoolh)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -807,6 +808,17 @@ Directly enumerates, inspects, and manages physical and logical storage volumes,
 - **Drive Letter Bitmask & Type Classification (`super_fs_drives`)**: Interrogates all 26 drive letters (`A:\` through `Z:\`) via `GetLogicalDrives` bitmask and classifies drive device types via `GetDriveTypeW` (`DRIVE_FIXED`, `DRIVE_REMOVABLE`, `DRIVE_REMOTE`, `DRIVE_CDROM`, `DRIVE_RAMDISK`), resolving filesystem format, volume label, serial number, volume GUID, and free/total storage capacities.
 - **157 Tools Milestone**: Reaches **157 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **44 comprehensive test suites (142/142 tests passing)** and **40 environment health checks**.
 - **Native MCP Tools**: `super_fs_volumes`, `super_fs_volume_mount_points`, `super_fs_drives`.
+
+---
+
+## 60. 🖨️ Windows Print Spooler Subsystem (`winspool.drv` / `winspool.h`)
+
+Directly queries, manages, and interacts with the Windows Print Spooler architecture, local/network printers, print jobs, and default printer assignments via native `winspool.drv` P/Invoke:
+- **Comprehensive Printer Discovery & Attribute Decoding (`super_spooler_printers`)**: Invokes native `EnumPrintersW` (`PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS`, level 2) and `GetDefaultPrinterW`. Discovers installed physical, network, and virtual printers (e.g. `Microsoft Print to PDF`, `OneNote (Desktop)`, network laser/thermal printers). Extracts printer names, share names, port names, driver names, comments, locations, status flags, and bitmask printer attributes (`QUEUED`, `DIRECT`, `DEFAULT`, `SHARED`, `NETWORK`, `HIDDEN`, `LOCAL`, `ENABLE_DEVQ`, `KEEPPRINTEDJOBS`, `DO_COMPLETE_FIRST`, `WORK_OFFLINE`, `ENABLE_BIDI`, `RAW_ONLY`, `PUBLISHED`).
+- **Active Print Job Telemetry & Queue Inspection (`super_spooler_jobs`)**: Invokes native `OpenPrinterW`, `EnumJobsW` (level 2), and `ClosePrinter`. Interrogates the active print queue for any specified printer (or system default if omitted). Retrieves job IDs, document titles, data types, submitted timestamps, page counts, total bytes, bytes printed, job status flags (`PAUSED`, `ERROR`, `DELETING`, `SPOOLING`, `PRINTING`, `OFFLINE`, `PAPEROUT`, `PRINTED`, `DELETED`, `BLOCKED_DEVQ`, `USER_INTERVENTION`, `RESTART`), and priority levels.
+- **Default Printer Configuration & System Routing (`super_spooler_default_printer`)**: Queries or dynamically switches the system's default printer using native `GetDefaultPrinterW` and `SetDefaultPrinterW`. Enables autonomous agents to inspect the current output destination or route printing workflows to specific physical or virtual output targets without user intervention or registry tampering.
+- **160 Tools Milestone**: Reaches **160 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **45 comprehensive test suites (144/144 tests passing)** and **41 environment health checks**.
+- **Native MCP Tools**: `super_spooler_printers`, `super_spooler_jobs`, `super_spooler_default_printer`.
 
 ---
 

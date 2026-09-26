@@ -3253,10 +3253,57 @@ async function run() {
     assert(typeof cDrive.freeBytes === "number" && cDrive.freeBytes > 0);
   });
 
-  it("All 157 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n=======================================================");
+  console.log("   SUITE 45: Windows Print Spooler Subsystem (winspool.drv / winspool.h)");
+  console.log("=======================================================");
+
+  await itAsync("super_spooler_printers enumerates installed printers, ports, drivers, and attributes", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getPrinters();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getPrinters failed: " + JSON.stringify(res));
+    assert(typeof res.count === "number" && res.count >= 1);
+    assert(Array.isArray(res.printers) && res.printers.length >= 1);
+
+    const p0 = res.printers[0];
+    assert(typeof p0.printerName === "string" && p0.printerName.length > 0);
+    assert(typeof p0.driverName === "string");
+    assert(typeof p0.portName === "string");
+    assert(typeof p0.isDefault === "boolean");
+    assert(typeof p0.cJobs === "number");
+    assert(Array.isArray(p0.decodedAttributes));
+    assert(Array.isArray(p0.decodedStatus));
+  });
+
+  await itAsync("super_spooler_jobs queries active print jobs for default printer", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getPrintJobs();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getPrintJobs failed: " + JSON.stringify(res));
+    assert(typeof res.printerName === "string" && res.printerName.length > 0);
+    assert(typeof res.jobCount === "number");
+    assert(Array.isArray(res.jobs));
+  });
+
+  await itAsync("super_spooler_default_printer queries current default printer", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.manageDefaultPrinter();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "manageDefaultPrinter failed: " + JSON.stringify(res));
+    assert.strictEqual(res.action, "get");
+    assert(typeof res.defaultPrinter === "string" && res.defaultPrinter.length > 0);
+  });
+
+  it("All 160 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 157);
+    assert.strictEqual(SYSTEM_TOOLS.length, 160);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3347,6 +3394,9 @@ async function run() {
     assert(toolNames.includes("super_fs_volumes"));
     assert(toolNames.includes("super_fs_volume_mount_points"));
     assert(toolNames.includes("super_fs_drives"));
+    assert(toolNames.includes("super_spooler_printers"));
+    assert(toolNames.includes("super_spooler_jobs"));
+    assert(toolNames.includes("super_spooler_default_printer"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

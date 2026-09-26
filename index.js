@@ -3186,6 +3186,40 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_spooler_printers",
+        description: "Enumerates all installed printers (local, network, virtual) via native Win32 EnumPrintersW (Level 2) and GetDefaultPrinterW from winspool.drv. Returns printer names, driver names, ports, share names, server names, print processors, active queued job counts, default printer status, and decoded attribute/status flags.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_spooler_jobs",
+        description: "Queries active print jobs queued on a specific printer (or the default printer) via native Win32 OpenPrinterW and EnumJobsW from winspool.drv. Returns job IDs, document titles, submitting usernames, page counts, pages printed, priorities, byte sizes, and decoded job statuses.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            printerName: {
+              type: "string",
+              description: "Printer name to inspect jobs for (e.g. 'Microsoft Print to PDF'). If omitted, checks default printer."
+            }
+          }
+        }
+      },
+      {
+        name: "super_spooler_default_printer",
+        description: "Inspects or updates the current Windows default printer via native Win32 GetDefaultPrinterW and SetDefaultPrinterW from winspool.drv without opening the Windows Settings or Control Panel UI.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            printerName: {
+              type: "string",
+              description: "Optional new printer name to set as default. If omitted, returns current default printer."
+            }
+          }
+        }
       }
 ];
 
@@ -5664,6 +5698,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `💽 [Windows Logical Drives (GetLogicalDrives / GetDriveTypeW)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_spooler_printers") {
+    const res = await orch.getPrinters();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🖨️ [Windows Print Spooler Printers (EnumPrintersW / winspool.drv)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_spooler_jobs") {
+    const printerName = args?.printerName || null;
+    const res = await orch.getPrintJobs(printerName);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📄 [Windows Print Spooler Queued Jobs (EnumJobsW)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_spooler_default_printer") {
+    const res = await orch.manageDefaultPrinter(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎯 [Windows Default Printer (GetDefaultPrinterW / SetDefaultPrinterW)]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
