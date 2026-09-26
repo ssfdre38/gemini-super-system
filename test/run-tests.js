@@ -3609,10 +3609,91 @@ async function run() {
     assert(typeof emptyRes.error === "string" && emptyRes.error.length > 0);
   });
 
-  it("All 175 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n\x1b[1m[Suite 51: Windows Antimalware Scan Interface (AMSI) Subsystem]\x1b[0m");
+
+  await itAsync("super_amsi_status inspects AMSI subsystem, DLL availability, and registered antivirus providers", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getAmsiStatus();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getAmsiStatus failed: " + JSON.stringify(res));
+    assert(typeof res.amsiAvailable === "boolean");
+    assert(typeof res.engineInitialized === "boolean");
+    assert(typeof res.activeProvidersCount === "number");
+    assert(Array.isArray(res.providers));
+    assert(Array.isArray(res.capabilities) && res.capabilities.includes("string_scan"));
+
+    if (res.providers.length > 0) {
+      const p0 = res.providers[0];
+      assert(typeof p0.guid === "string" && p0.guid.startsWith("{"));
+      assert(typeof p0.name === "string");
+      assert(typeof p0.inprocServer === "string");
+    }
+  });
+
+  await itAsync("super_amsi_scan_string analyzes scripts and detects malware vs clean payloads", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    const cleanRes = await kb.scanAmsiString({
+      content: "Write-Output 'Clean test script payload for Gemini verification'",
+      contentName: "clean_test.ps1"
+    });
+
+    assert(cleanRes !== null && typeof cleanRes === "object");
+    assert.strictEqual(cleanRes.success, true, "scanAmsiString clean failed: " + JSON.stringify(cleanRes));
+    assert.strictEqual(cleanRes.isMalware, false);
+    assert.strictEqual(cleanRes.isBlocked, false);
+    assert.strictEqual(cleanRes.riskLevel, "CLEAN");
+    assert(cleanRes.resultCode === 0 || cleanRes.resultCode === 1);
+    assert(typeof cleanRes.scanTimeMs === "number");
+
+    // Standard harmless EICAR antivirus test string
+    const eicar = "X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+    const malwareRes = await kb.scanAmsiString({
+      content: eicar,
+      contentName: "eicar_test.com"
+    });
+
+    assert(malwareRes !== null && typeof malwareRes === "object");
+    assert.strictEqual(malwareRes.success, true, "scanAmsiString EICAR failed: " + JSON.stringify(malwareRes));
+    assert.strictEqual(malwareRes.resultCode, 32768);
+    assert.strictEqual(malwareRes.isMalware, true);
+    assert.strictEqual(malwareRes.riskLevel, "MALICIOUS");
+  });
+
+  await itAsync("super_amsi_scan_buffer validates raw buffer, base64 payload, and file scanning", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    const base64Data = Buffer.from("console.log('Valid harmless payload');").toString("base64");
+    const bufRes = await kb.scanAmsiBuffer({
+      buffer: base64Data,
+      encoding: "base64",
+      contentName: "test_inline.js"
+    });
+
+    assert(bufRes !== null && typeof bufRes === "object");
+    assert.strictEqual(bufRes.success, true, "scanAmsiBuffer failed: " + JSON.stringify(bufRes));
+    assert.strictEqual(bufRes.isMalware, false);
+    assert.strictEqual(bufRes.riskLevel, "CLEAN");
+    assert(typeof bufRes.bufferSizeBytes === "number" && bufRes.bufferSizeBytes > 0);
+
+    const packageJsonPath = path.join(__dirname, "../package.json");
+    const fileRes = await kb.scanAmsiBuffer({ filePath: packageJsonPath });
+
+    assert(fileRes !== null && typeof fileRes === "object");
+    assert.strictEqual(fileRes.success, true, "scanAmsiBuffer file failed: " + JSON.stringify(fileRes));
+    assert.strictEqual(fileRes.isMalware, false);
+    assert.strictEqual(fileRes.riskLevel, "CLEAN");
+    assert(typeof fileRes.bufferSizeBytes === "number" && fileRes.bufferSizeBytes > 0);
+  });
+
+  it("All 178 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 175);
+    assert.strictEqual(SYSTEM_TOOLS.length, 178);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3721,6 +3802,9 @@ async function run() {
     assert(toolNames.includes("super_wsl_distributions"));
     assert(toolNames.includes("super_wsl_execute"));
     assert(toolNames.includes("super_wsl_status"));
+    assert(toolNames.includes("super_amsi_status"));
+    assert(toolNames.includes("super_amsi_scan_string"));
+    assert(toolNames.includes("super_amsi_scan_buffer"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

@@ -81,6 +81,7 @@
   - [63. Windows Display Devices, Monitor Topology & Graphics Modes](#63--windows-display-devices-monitor-topology--graphics-modes-wingdih--winuserh)
   - [64. Windows Virtual Storage & Virtual Hard Disk (VHD/VHDX) Subsystem](#64--windows-virtual-storage--virtual-hard-disk-vhdvhdx-subsystem-virtdiskh--virtdiskdll)
   - [65. Windows Subsystem for Linux (WSL) Management & Linux Process Execution Subsystem](#65--windows-subsystem-for-linux-wsl-management--linux-process-execution-subsystem-wslapih--wslapidll)
+  - [66. Windows Antimalware Scan Interface (AMSI) Subsystem](#66-️-windows-antimalware-scan-interface-amsi-subsystem-amsih--amsidll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -877,8 +878,18 @@ Directly manages installed Windows Subsystem for Linux (WSL) micro-VM distributi
 - **Distribution Discovery & Configuration Inspection (`super_wsl_distributions`)**: Discovers all registered WSL distributions across the host using native `WslIsDistributionRegistered` and `WslGetDistributionConfiguration` alongside `HKCU\SOFTWARE\Microsoft\Windows\CurrentVersion\Lxss` registry reflection. Extracts unique distribution GUIDs, default distribution designation, WSL architectural version (WSL1 translation layer vs WSL2 lightweight Hyper-V micro-VM), default Linux UID, registration state, security flags (`enableInterop`, `appendNtPath`, `enableDriveMounting`), installation base paths, virtual hard disk image (`ext4.vhdx`) locations, and OS flavor versions.
 - **Direct Native Linux Command Execution (`super_wsl_execute`)**: Launches and executes Linux processes inside any registered distribution via native Win32 `WslLaunch` without spawning `wsl.exe` or requiring an interactive console. Connects native Win32 anonymous pipes to stdout and stderr, draining output streams asynchronously with non-blocking `PeekNamedPipe` and `ReadFile` loops. Captures standard output, standard error, execution duration, and Linux process exit codes with automated timeout enforcement.
 - **WSL Subsystem Health & Hypervisor Status (`super_wsl_status`)**: Assesses overall WSL subsystem health, native `wslapi.dll` and `wsl.exe` system availability, active/default distribution name, total distribution counts, Linux kernel release version, and underlying virtualization platform architecture (`Hyper-V / Virtual Machine Platform`).
-- **175 Tools Milestone**: Reaches **175 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **50 comprehensive test suites (159/159 tests passing 100%)** and **46 environment health checks**.
 - **Native MCP Tools**: `super_wsl_distributions`, `super_wsl_execute`, `super_wsl_status`.
+
+---
+
+## 66. 🛡️ Windows Antimalware Scan Interface (AMSI) Subsystem (`amsi.h` / `amsi.dll`)
+
+Directly interfaces with the Windows Antimalware Scan Interface (AMSI) to provide real-time malware analysis, script content evaluation, and in-memory buffer inspection backed by active antivirus/EDR providers (e.g. Windows Defender `MpOav.dll`) via native `amsi.dll` P/Invoke:
+- **AMSI Subsystem Status & Registered Antivirus Providers (`super_amsi_status`)**: Evaluates the health and operational availability of the Windows Antimalware Scan Interface. Verifies `amsi.dll` presence, initializes an isolated diagnostic scan context via `AmsiInitialize` and `AmsiOpenSession`, and reflects registered antimalware providers from `HKLM\SOFTWARE\Microsoft\AMSI\Providers` (extracting provider CLSIDs, friendly names, InprocServer32 DLL paths, and COM threading models).
+- **In-Memory Script & String Threat Scanning (`super_amsi_scan_string`)**: Performs real-time scanning of arbitrary scripts (PowerShell, VBScript, JavaScript, Python), shell commands, downloaded text payloads, or LLM-generated code before disk persistence or runtime execution via `AmsiScanString`. Returns exact Win32 result codes (`AMSI_RESULT_CLEAN`, `AMSI_RESULT_NOT_DETECTED`, `AMSI_RESULT_BLOCKED_BY_ADMIN`, `AMSI_RESULT_DETECTED`), boolean malware flags, risk classifications (`CLEAN`, `SUSPICIOUS`, `MALICIOUS`, `ADMIN_BLOCKED`), and execution latency metrics.
+- **Binary Buffer & File Protection (`super_amsi_scan_buffer`)**: Scans arbitrary binary buffers (Base64, Hex, UTF-8) or local files on disk using `AmsiScanBuffer`. Enables zero-disk-write binary analysis for autonomous agent downloads and prevents payload execution if flagged by installed security products.
+- **178 Tools Milestone**: Reaches **178 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **51 comprehensive test suites (162/162 tests passing 100%)** and **47 environment health checks**.
+- **Native MCP Tools**: `super_amsi_status`, `super_amsi_scan_string`, `super_amsi_scan_buffer`.
 
 ---
 

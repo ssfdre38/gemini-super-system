@@ -11360,6 +11360,294 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Phase 32: Windows Antimalware Scan Interface (AMSI) Subsystem (amsi.h / amsi.dll)
+
+        public const int AMSI_RESULT_CLEAN = 0;
+        public const int AMSI_RESULT_NOT_DETECTED = 1;
+        public const int AMSI_RESULT_BLOCKED_BY_ADMIN_START = 0x4000;
+        public const int AMSI_RESULT_BLOCKED_BY_ADMIN_END = 0x4FFF;
+        public const int AMSI_RESULT_DETECTED = 32768;
+
+        [DllImport("amsi.dll", EntryPoint = "AmsiInitialize", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode)]
+        public static extern int AmsiInitialize(
+            [MarshalAs(UnmanagedType.LPWStr)] string appName,
+            out IntPtr amsiContext);
+
+        [DllImport("amsi.dll", EntryPoint = "AmsiUninitialize", CallingConvention = CallingConvention.StdCall)]
+        public static extern void AmsiUninitialize(IntPtr amsiContext);
+
+        [DllImport("amsi.dll", EntryPoint = "AmsiOpenSession", CallingConvention = CallingConvention.StdCall)]
+        public static extern int AmsiOpenSession(
+            IntPtr amsiContext,
+            out IntPtr amsiSession);
+
+        [DllImport("amsi.dll", EntryPoint = "AmsiCloseSession", CallingConvention = CallingConvention.StdCall)]
+        public static extern void AmsiCloseSession(
+            IntPtr amsiContext,
+            IntPtr amsiSession);
+
+        [DllImport("amsi.dll", EntryPoint = "AmsiScanString", CallingConvention = CallingConvention.StdCall, CharSet = CharSet.Unicode)]
+        public static extern int AmsiScanString(
+            IntPtr amsiContext,
+            [MarshalAs(UnmanagedType.LPWStr)] string @string,
+            [MarshalAs(UnmanagedType.LPWStr)] string contentName,
+            IntPtr amsiSession,
+            out int result);
+
+        [DllImport("amsi.dll", EntryPoint = "AmsiScanBuffer", CallingConvention = CallingConvention.StdCall)]
+        public static extern int AmsiScanBuffer(
+            IntPtr amsiContext,
+            byte[] buffer,
+            uint length,
+            [MarshalAs(UnmanagedType.LPWStr)] string contentName,
+            IntPtr amsiSession,
+            out int result);
+
+        static string GetAmsiResultName(int res) {
+            if (res == 0) return "CLEAN";
+            if (res == 1) return "NOT_DETECTED";
+            if (res >= 0x4000 && res <= 0x4FFF) return "BLOCKED_BY_ADMIN";
+            if (res >= 32768) return "DETECTED";
+            return "UNKNOWN_" + res;
+        }
+
+        static string GetAmsiRiskLevel(int res) {
+            if (res >= 32768) return "MALICIOUS";
+            if (res >= 0x4000 && res <= 0x4FFF) return "ADMIN_BLOCKED";
+            if (res == 0 || res == 1) return "CLEAN";
+            return "SUSPICIOUS";
+        }
+
+        public class AmsiProviderInfo {
+            public string Guid = "";
+            public string Name = "";
+            public string InprocServer = "";
+            public string ThreadingModel = "";
+        }
+
+        static List<AmsiProviderInfo> GetRegisteredAmsiProviders() {
+            var list = new List<AmsiProviderInfo>();
+            try {
+                using (var hklm = Microsoft.Win32.RegistryKey.OpenBaseKey(Microsoft.Win32.RegistryHive.LocalMachine, Microsoft.Win32.RegistryView.Registry64)) {
+                    using (var provKey = hklm.OpenSubKey(@"SOFTWARE\Microsoft\AMSI\Providers")) {
+                        if (provKey != null) {
+                            foreach (string sub in provKey.GetSubKeyNames()) {
+                                var info = new AmsiProviderInfo { Guid = sub };
+                                try {
+                                    using (var clsidKey = hklm.OpenSubKey(@"SOFTWARE\Classes\CLSID\" + sub)) {
+                                        if (clsidKey != null) {
+                                            info.Name = (clsidKey.GetValue(null) ?? "").ToString();
+                                            using (var inproc = clsidKey.OpenSubKey("InprocServer32")) {
+                                                if (inproc != null) {
+                                                    info.InprocServer = (inproc.GetValue(null) ?? "").ToString();
+                                                    info.ThreadingModel = (inproc.GetValue("ThreadingModel") ?? "").ToString();
+                                                }
+                                            }
+                                        }
+                                    }
+                                } catch {}
+                                list.Add(info);
+                            }
+                        }
+                    }
+                }
+            } catch {}
+            return list;
+        }
+
+        static void AmsiStatusCmd() {
+            try {
+                string amsiPath = Path.Combine(Environment.SystemDirectory, "amsi.dll");
+                bool amsiAvailable = File.Exists(amsiPath);
+                bool engineInitialized = false;
+                int initHr = -1;
+
+                if (amsiAvailable) {
+                    IntPtr ctx = IntPtr.Zero;
+                    try {
+                        initHr = AmsiInitialize("GeminiSuperDiagnostics", out ctx);
+                        if (initHr == 0 && ctx != IntPtr.Zero) {
+                            engineInitialized = true;
+                            AmsiUninitialize(ctx);
+                        }
+                    } catch (Exception ex) {
+                        initHr = Marshal.GetHRForException(ex);
+                    }
+                }
+
+                var providers = GetRegisteredAmsiProviders();
+
+                var sb = new StringBuilder();
+                sb.Append("{");
+                sb.Append("\"success\": true, ");
+                sb.AppendFormat("\"amsiAvailable\": {0}, ", amsiAvailable ? "true" : "false");
+                sb.AppendFormat("\"amsiDllPath\": \"{0}\", ", EscapeJson(amsiPath));
+                sb.AppendFormat("\"engineInitialized\": {0}, ", engineInitialized ? "true" : "false");
+                sb.AppendFormat("\"initHResult\": {0}, ", initHr);
+                sb.AppendFormat("\"activeProvidersCount\": {0}, ", providers.Count);
+                sb.Append("\"providers\": [");
+                for (int i = 0; i < providers.Count; i++) {
+                    var p = providers[i];
+                    if (i > 0) sb.Append(", ");
+                    sb.AppendFormat("{{\"guid\": \"{0}\", \"name\": \"{1}\", \"inprocServer\": \"{2}\", \"threadingModel\": \"{3}\"}}",
+                        EscapeJson(p.Guid), EscapeJson(p.Name), EscapeJson(p.InprocServer), EscapeJson(p.ThreadingModel));
+                }
+                sb.Append("], ");
+                sb.Append("\"capabilities\": [\"buffer_scan\", \"string_scan\", \"session_isolation\", \"uac_request_eval\"]");
+                sb.Append("}");
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void AmsiScanStringCmd(string content, string contentName, string appName) {
+            try {
+                if (content == null) content = "";
+                if (string.IsNullOrEmpty(appName)) appName = "GeminiSuperSystem";
+                if (string.IsNullOrEmpty(contentName)) contentName = "unnamed_content";
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                IntPtr ctx = IntPtr.Zero;
+                int hrInit = AmsiInitialize(appName, out ctx);
+                if (hrInit != 0 || ctx == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"AmsiInitialize failed with HRESULT 0x{0:X8}\"}}", hrInit));
+                    return;
+                }
+
+                try {
+                    IntPtr session = IntPtr.Zero;
+                    AmsiOpenSession(ctx, out session);
+
+                    try {
+                        int resCode = 0;
+                        int hrScan = AmsiScanString(ctx, content, contentName, session, out resCode);
+                        sw.Stop();
+
+                        if (hrScan != 0) {
+                            Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"AmsiScanString failed with HRESULT 0x{0:X8}\"}}", hrScan));
+                            return;
+                        }
+
+                        string resName = GetAmsiResultName(resCode);
+                        string risk = GetAmsiRiskLevel(resCode);
+                        bool isMalware = (resCode >= 32768);
+                        bool isBlocked = (resCode >= 0x4000 && resCode <= 0x4FFF);
+
+                        var sb = new StringBuilder();
+                        sb.Append("{");
+                        sb.Append("\"success\": true, ");
+                        sb.AppendFormat("\"resultCode\": {0}, ", resCode);
+                        sb.AppendFormat("\"resultName\": \"{0}\", ", EscapeJson(resName));
+                        sb.AppendFormat("\"isMalware\": {0}, ", isMalware ? "true" : "false");
+                        sb.AppendFormat("\"isBlocked\": {0}, ", isBlocked ? "true" : "false");
+                        sb.AppendFormat("\"riskLevel\": \"{0}\", ", EscapeJson(risk));
+                        sb.AppendFormat("\"contentLength\": {0}, ", content.Length);
+                        sb.AppendFormat("\"contentName\": \"{0}\", ", EscapeJson(contentName));
+                        sb.AppendFormat("\"appName\": \"{0}\", ", EscapeJson(appName));
+                        sb.AppendFormat("\"scanTimeMs\": {0}", sw.ElapsedMilliseconds);
+                        sb.Append("}");
+                        Console.WriteLine(sb.ToString());
+                    } finally {
+                        if (session != IntPtr.Zero) AmsiCloseSession(ctx, session);
+                    }
+                } finally {
+                    AmsiUninitialize(ctx);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void AmsiScanBufferCmd(string bufferPayload, string encoding, string filePath, string contentName, string appName) {
+            try {
+                if (string.IsNullOrEmpty(appName)) appName = "GeminiSuperSystem";
+                if (string.IsNullOrEmpty(contentName)) {
+                    contentName = !string.IsNullOrEmpty(filePath) ? Path.GetFileName(filePath) : "unnamed_buffer";
+                }
+
+                byte[] data = null;
+                if (!string.IsNullOrEmpty(filePath)) {
+                    if (!File.Exists(filePath)) {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"File not found: {0}\"}}", EscapeJson(filePath)));
+                        return;
+                    }
+                    data = File.ReadAllBytes(filePath);
+                } else if (!string.IsNullOrEmpty(bufferPayload)) {
+                    string enc = (encoding ?? "base64").ToLowerInvariant();
+                    if (enc == "hex") {
+                        int len = bufferPayload.Length;
+                        data = new byte[len / 2];
+                        for (int i = 0; i < len; i += 2) {
+                            data[i / 2] = Convert.ToByte(bufferPayload.Substring(i, 2), 16);
+                        }
+                    } else if (enc == "utf8" || enc == "text") {
+                        data = Encoding.UTF8.GetBytes(bufferPayload);
+                    } else {
+                        try {
+                            data = Convert.FromBase64String(bufferPayload);
+                        } catch {
+                            data = Encoding.UTF8.GetBytes(bufferPayload);
+                        }
+                    }
+                } else {
+                    data = new byte[0];
+                }
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                IntPtr ctx = IntPtr.Zero;
+                int hrInit = AmsiInitialize(appName, out ctx);
+                if (hrInit != 0 || ctx == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"AmsiInitialize failed with HRESULT 0x{0:X8}\"}}", hrInit));
+                    return;
+                }
+
+                try {
+                    IntPtr session = IntPtr.Zero;
+                    AmsiOpenSession(ctx, out session);
+
+                    try {
+                        int resCode = 0;
+                        int hrScan = AmsiScanBuffer(ctx, data, (uint)data.Length, contentName, session, out resCode);
+                        sw.Stop();
+
+                        if (hrScan != 0) {
+                            Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"AmsiScanBuffer failed with HRESULT 0x{0:X8}\"}}", hrScan));
+                            return;
+                        }
+
+                        string resName = GetAmsiResultName(resCode);
+                        string risk = GetAmsiRiskLevel(resCode);
+                        bool isMalware = (resCode >= 32768);
+                        bool isBlocked = (resCode >= 0x4000 && resCode <= 0x4FFF);
+
+                        var sb = new StringBuilder();
+                        sb.Append("{");
+                        sb.Append("\"success\": true, ");
+                        sb.AppendFormat("\"resultCode\": {0}, ", resCode);
+                        sb.AppendFormat("\"resultName\": \"{0}\", ", EscapeJson(resName));
+                        sb.AppendFormat("\"isMalware\": {0}, ", isMalware ? "true" : "false");
+                        sb.AppendFormat("\"isBlocked\": {0}, ", isBlocked ? "true" : "false");
+                        sb.AppendFormat("\"riskLevel\": \"{0}\", ", EscapeJson(risk));
+                        sb.AppendFormat("\"bufferSizeBytes\": {0}, ", data.Length);
+                        sb.AppendFormat("\"contentName\": \"{0}\", ", EscapeJson(contentName));
+                        sb.AppendFormat("\"appName\": \"{0}\", ", EscapeJson(appName));
+                        sb.AppendFormat("\"scanTimeMs\": {0}", sw.ElapsedMilliseconds);
+                        sb.Append("}");
+                        Console.WriteLine(sb.ToString());
+                    } finally {
+                        if (session != IntPtr.Zero) AmsiCloseSession(ctx, session);
+                    }
+                } finally {
+                    AmsiUninitialize(ctx);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -14540,6 +14828,20 @@ namespace GeminiSuperDesktop {
                 WslExecuteCmd(command, distro, useCurrentDir, timeoutMs);
             } else if (cmd == "wsl_status" || cmd == "wsl-status") {
                 WslStatusCmd();
+            } else if (cmd == "amsi_status" || cmd == "amsi-status" || cmd == "antimalware_status") {
+                AmsiStatusCmd();
+            } else if (cmd == "amsi_scan_string" || cmd == "amsi-scan-string" || cmd == "scan_string") {
+                string content = args.Length >= 2 ? args[1] : "";
+                string contentName = args.Length >= 3 ? args[2] : "unnamed_content";
+                string appName = args.Length >= 4 ? args[3] : "GeminiSuperSystem";
+                AmsiScanStringCmd(content, contentName, appName);
+            } else if (cmd == "amsi_scan_buffer" || cmd == "amsi-scan-buffer" || cmd == "scan_buffer") {
+                string bufferPayload = args.Length >= 2 ? args[1] : "";
+                string encoding = args.Length >= 3 ? args[2] : "base64";
+                string filePath = args.Length >= 4 ? args[3] : "";
+                string contentName = args.Length >= 5 ? args[4] : "";
+                string appName = args.Length >= 6 ? args[5] : "GeminiSuperSystem";
+                AmsiScanBufferCmd(bufferPayload, encoding, filePath, contentName, appName);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

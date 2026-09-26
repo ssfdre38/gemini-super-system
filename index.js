@@ -3443,6 +3443,65 @@ const SYSTEM_TOOLS = [
           type: "object",
           properties: {}
         }
+      },
+      {
+        name: "super_amsi_status",
+        description: "Evaluates operational status of the Windows Antimalware Scan Interface (AMSI) subsystem via native amsi.dll (AmsiInitialize, AmsiOpenSession). Returns active antivirus/EDR provider registrations (e.g. Windows Defender MpOav.dll), CLSIDs, DLL binary paths, COM threading models, and engine capabilities (buffer scan, string scan, session isolation, UAC evaluation).",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_amsi_scan_string",
+        description: "Scans arbitrary text strings, scripts (PowerShell, VBScript, JavaScript, Python), shell commands, or LLM-generated code directly through the native Windows Antimalware Scan Interface (AMSI) and active antivirus engine (e.g. Windows Defender). Evaluates risk levels (CLEAN, NOT_DETECTED, BLOCKED_BY_ADMIN, DETECTED/MALICIOUS) before runtime execution or disk persistence.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            content: {
+              type: "string",
+              description: "The text content or script payload to scan."
+            },
+            contentName: {
+              type: "string",
+              description: "Optional virtual content identifier or filename (e.g. 'inline_script.ps1', 'agent_prompt.txt')."
+            },
+            appName: {
+              type: "string",
+              description: "Optional calling application identifier for AMSI telemetry and event logs (defaults to 'GeminiSuperSystem')."
+            }
+          },
+          required: ["content"]
+        }
+      },
+      {
+        name: "super_amsi_scan_buffer",
+        description: "Scans raw binary buffers, base64/hex payloads, or local files on disk using native Win32 AmsiScanBuffer through the Windows Antimalware Scan Interface (AMSI) and active antivirus/EDR protection. Evaluates threat signatures, returns exact AMSI result codes, malware flags, and risk assessments.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            buffer: {
+              type: "string",
+              description: "Base64, hex, or UTF-8 encoded binary data to scan (used if filePath is not provided)."
+            },
+            encoding: {
+              type: "string",
+              description: "Encoding of the provided buffer ('base64', 'hex', 'utf8'). Defaults to 'base64'."
+            },
+            filePath: {
+              type: "string",
+              description: "Optional absolute path to a file on disk to read and scan directly into memory."
+            },
+            contentName: {
+              type: "string",
+              description: "Optional virtual filename or buffer identifier for AMSI logging."
+            },
+            appName: {
+              type: "string",
+              description: "Optional calling application identifier (defaults to 'GeminiSuperSystem')."
+            }
+          }
+        }
       }
 ];
 
@@ -6138,6 +6197,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🩺 [WSL Subsystem Status & Platform Architecture]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_amsi_status") {
+    const res = await orch.getAmsiStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [AMSI Subsystem Status & Registered Antivirus Providers]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_amsi_scan_string") {
+    const res = await orch.scanAmsiString(args || {});
+    const icon = res.isMalware ? "🚨" : res.isBlocked ? "⛔" : "✅";
+    return {
+      content: [
+        {
+          type: "text",
+          text: `${icon} [AMSI String Scan Result - ${res.riskLevel || "ANALYSIS"}]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_amsi_scan_buffer") {
+    const res = await orch.scanAmsiBuffer(args || {});
+    const icon = res.isMalware ? "🚨" : res.isBlocked ? "⛔" : "✅";
+    return {
+      content: [
+        {
+          type: "text",
+          text: `${icon} [AMSI Buffer/File Scan Result - ${res.riskLevel || "ANALYSIS"}]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
