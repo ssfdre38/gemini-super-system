@@ -5848,6 +5848,291 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows System Event Notification Service & Network Perception Subsystem (sensapi.h / netlistmgr.h)
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct SENS_QOCINFO {
+            public uint dwSize;
+            public uint dwFlags;
+            public uint dwInSpeed;
+            public uint dwOutSpeed;
+        }
+
+        const uint SENS_NETWORK_ALIVE_LAN = 0x00000001;
+        const uint SENS_NETWORK_ALIVE_WAN = 0x00000002;
+        const uint SENS_NETWORK_ALIVE_AOL = 0x00000004;
+        const uint SENS_NETWORK_ALIVE_INTERNET = 0x00000008;
+
+        const uint SENS_QOCINFO_PATH_IS_GATEWAY = 0x00000001;
+
+        [DllImport("sensapi.dll", SetLastError = true)]
+        static extern bool IsNetworkAlive(out uint pdwFlags);
+
+        [DllImport("sensapi.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool IsDestinationReachableW(string lpszDestination, ref SENS_QOCINFO lpQOCInfo);
+
+        static void SensNetworkAliveCmd() {
+            try {
+                uint flags = 0;
+                bool alive = false;
+                int err = 0;
+                try {
+                    alive = IsNetworkAlive(out flags);
+                    if (!alive) err = Marshal.GetLastWin32Error();
+                } catch {
+                    alive = NetworkInterface.GetIsNetworkAvailable();
+                    flags = alive ? SENS_NETWORK_ALIVE_LAN : 0;
+                }
+
+                bool lan = (flags & SENS_NETWORK_ALIVE_LAN) != 0;
+                bool wan = (flags & SENS_NETWORK_ALIVE_WAN) != 0;
+                bool aol = (flags & SENS_NETWORK_ALIVE_AOL) != 0;
+                bool internet = (flags & SENS_NETWORK_ALIVE_INTERNET) != 0;
+
+                bool netAvailable = NetworkInterface.GetIsNetworkAvailable();
+                if (!alive && netAvailable) {
+                    alive = true;
+                    lan = true;
+                }
+
+                var types = new List<string>();
+                if (lan) types.Add("\"LAN\"");
+                if (wan) types.Add("\"WAN\"");
+                if (aol) types.Add("\"AOL\"");
+                if (internet) types.Add("\"INTERNET\"");
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"isAlive\": {0}, \"rawFlags\": {1}, \"lanConnected\": {2}, \"wanConnected\": {3}, \"aolConnected\": {4}, \"internetReachable\": {5}, \"connectionTypes\": [{6}], \"networkAvailable\": {7}, \"errorCode\": {8}}}",
+                    alive ? "true" : "false",
+                    flags,
+                    lan ? "true" : "false",
+                    wan ? "true" : "false",
+                    aol ? "true" : "false",
+                    internet ? "true" : "false",
+                    string.Join(", ", types.ToArray()),
+                    netAvailable ? "true" : "false",
+                    err
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void SensDestinationReachableCmd(string destination, int timeoutMs) {
+            try {
+                if (string.IsNullOrEmpty(destination)) {
+                    destination = "8.8.8.8";
+                }
+                if (timeoutMs <= 0) timeoutMs = 3000;
+
+                SENS_QOCINFO qoc = new SENS_QOCINFO();
+                qoc.dwSize = (uint)Marshal.SizeOf(typeof(SENS_QOCINFO));
+
+                bool sensReachable = false;
+                int sensErr = 0;
+                try {
+                    sensReachable = IsDestinationReachableW(destination, ref qoc);
+                    if (!sensReachable) sensErr = Marshal.GetLastWin32Error();
+                } catch {
+                    sensErr = Marshal.GetLastWin32Error();
+                }
+
+                bool pingSuccess = false;
+                long latencyMs = -1;
+                string ipStr = "";
+                string pingStatus = "Unknown";
+                try {
+                    using (var ping = new Ping()) {
+                        var reply = ping.Send(destination, timeoutMs);
+                        if (reply != null) {
+                            pingStatus = reply.Status.ToString();
+                            if (reply.Status == IPStatus.Success) {
+                                pingSuccess = true;
+                                latencyMs = reply.RoundtripTime;
+                                if (reply.Address != null) ipStr = reply.Address.ToString();
+                            }
+                        }
+                    }
+                } catch (Exception px) {
+                    pingStatus = px.InnerException != null ? px.InnerException.Message : px.Message;
+                }
+
+                bool reachable = sensReachable || pingSuccess;
+                bool isGateway = (qoc.dwFlags & SENS_QOCINFO_PATH_IS_GATEWAY) != 0;
+                double inKbps = qoc.dwInSpeed / 1000.0;
+                double outKbps = qoc.dwOutSpeed / 1000.0;
+                double inMbps = qoc.dwInSpeed / 1000000.0;
+                double outMbps = qoc.dwOutSpeed / 1000000.0;
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"destination\": \"{0}\", \"reachable\": {1}, \"sensReachable\": {2}, \"pingReachable\": {3}, \"latencyMs\": {4}, \"ipAddress\": \"{5}\", \"status\": \"{6}\", \"inSpeedBps\": {7}, \"outSpeedBps\": {8}, \"inSpeedKbps\": {9:F2}, \"outSpeedKbps\": {10:F2}, \"inSpeedMbps\": {11:F2}, \"outSpeedMbps\": {12:F2}, \"isGateway\": {13}, \"qocFlags\": {14}, \"sensErrorCode\": {15}}}",
+                    EscapeJson(destination),
+                    reachable ? "true" : "false",
+                    sensReachable ? "true" : "false",
+                    pingSuccess ? "true" : "false",
+                    latencyMs,
+                    EscapeJson(ipStr),
+                    EscapeJson(pingStatus),
+                    qoc.dwInSpeed,
+                    qoc.dwOutSpeed,
+                    inKbps,
+                    outKbps,
+                    inMbps,
+                    outMbps,
+                    isGateway ? "true" : "false",
+                    qoc.dwFlags,
+                    sensErr
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"destination\": \"{0}\", \"error\": \"{1}\"}}", EscapeJson(destination ?? ""), EscapeJson(ex.Message)));
+            }
+        }
+
+        static void SensNetworkConnectivityCmd(bool includeProfiles, bool includeAdapters) {
+            try {
+                bool isConnected = false;
+                bool isInternet = false;
+                int rawConnectivity = 0;
+                string ipv4Conn = "disconnected";
+                string ipv6Conn = "disconnected";
+                var profilesList = new List<string>();
+
+                try {
+                    Type nlmType = Type.GetTypeFromCLSID(new Guid("DCB00C01-570F-4A9B-8D69-199FDBA5723B"));
+                    if (nlmType != null) {
+                        object nlm = Activator.CreateInstance(nlmType);
+                        isConnected = (bool)nlmType.InvokeMember("IsConnected", System.Reflection.BindingFlags.GetProperty, null, nlm, null);
+                        isInternet = (bool)nlmType.InvokeMember("IsConnectedToInternet", System.Reflection.BindingFlags.GetProperty, null, nlm, null);
+                        rawConnectivity = (int)nlmType.InvokeMember("GetConnectivity", System.Reflection.BindingFlags.InvokeMethod, null, nlm, null);
+
+                        if ((rawConnectivity & 0x40) != 0) ipv4Conn = "internet";
+                        else if ((rawConnectivity & 0x20) != 0) ipv4Conn = "local";
+                        else if ((rawConnectivity & 0x10) != 0) ipv4Conn = "subnet";
+
+                        if ((rawConnectivity & 0x400) != 0) ipv6Conn = "internet";
+                        else if ((rawConnectivity & 0x200) != 0) ipv6Conn = "local";
+                        else if ((rawConnectivity & 0x100) != 0) ipv6Conn = "subnet";
+
+                        if (includeProfiles) {
+                            try {
+                                System.Collections.IEnumerable networks = (System.Collections.IEnumerable)nlmType.InvokeMember("GetNetworks", System.Reflection.BindingFlags.InvokeMethod, null, nlm, new object[] { 1 });
+                                foreach (object net in networks) {
+                                    Type netType = net.GetType();
+                                    string pName = (string)netType.InvokeMember("GetName", System.Reflection.BindingFlags.InvokeMethod, null, net, null);
+                                    string pDesc = (string)netType.InvokeMember("GetDescription", System.Reflection.BindingFlags.InvokeMethod, null, net, null);
+                                    int pCat = (int)netType.InvokeMember("GetCategory", System.Reflection.BindingFlags.InvokeMethod, null, net, null);
+                                    int pDom = (int)netType.InvokeMember("GetDomainType", System.Reflection.BindingFlags.InvokeMethod, null, net, null);
+                                    bool pConn = (bool)netType.InvokeMember("IsConnected", System.Reflection.BindingFlags.GetProperty, null, net, null);
+                                    bool pNet = (bool)netType.InvokeMember("IsConnectedToInternet", System.Reflection.BindingFlags.GetProperty, null, net, null);
+
+                                    string catStr = pCat == 1 ? "Private" : (pCat == 2 ? "DomainAuthenticated" : "Public");
+                                    string domStr = pDom == 1 ? "Domain" : (pDom == 2 ? "DomainAuthenticated" : "NonDomain");
+
+                                    profilesList.Add(string.Format(
+                                        "{{\"name\": \"{0}\", \"description\": \"{1}\", \"category\": \"{2}\", \"domainType\": \"{3}\", \"isConnected\": {4}, \"isConnectedToInternet\": {5}}}",
+                                        EscapeJson(pName ?? ""),
+                                        EscapeJson(pDesc ?? ""),
+                                        catStr,
+                                        domStr,
+                                        pConn ? "true" : "false",
+                                        pNet ? "true" : "false"
+                                    ));
+                                }
+                            } catch {}
+                        }
+                    }
+                } catch {
+                    isConnected = NetworkInterface.GetIsNetworkAvailable();
+                    isInternet = isConnected;
+                }
+
+                var adapterList = new List<string>();
+                if (includeAdapters) {
+                    try {
+                        foreach (var nic in NetworkInterface.GetAllNetworkInterfaces()) {
+                            if (nic.OperationalStatus != OperationalStatus.Up &&
+                                nic.NetworkInterfaceType == NetworkInterfaceType.Loopback) continue;
+
+                            var ipProps = nic.GetIPProperties();
+                            var ipv4List = new List<string>();
+                            var gatewayList = new List<string>();
+                            var dnsList = new List<string>();
+
+                            if (ipProps != null) {
+                                foreach (var uni in ipProps.UnicastAddresses) {
+                                    if (uni.Address != null && uni.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork) {
+                                        ipv4List.Add("\"" + uni.Address.ToString() + "\"");
+                                    }
+                                }
+                                foreach (var gw in ipProps.GatewayAddresses) {
+                                    if (gw.Address != null) gatewayList.Add("\"" + gw.Address.ToString() + "\"");
+                                }
+                                foreach (var dns in ipProps.DnsAddresses) {
+                                    if (dns != null) dnsList.Add("\"" + dns.ToString() + "\"");
+                                }
+                            }
+
+                            adapterList.Add(string.Format(
+                                "{{\"id\": \"{0}\", \"name\": \"{1}\", \"description\": \"{2}\", \"type\": \"{3}\", \"status\": \"{4}\", \"speedBps\": {5}, \"speedMbps\": {6:F1}, \"mac\": \"{7}\", \"ipv4\": [{8}], \"gateways\": [{9}], \"dns\": [{10}]}}",
+                                EscapeJson(nic.Id ?? ""),
+                                EscapeJson(nic.Name ?? ""),
+                                EscapeJson(nic.Description ?? ""),
+                                nic.NetworkInterfaceType.ToString(),
+                                nic.OperationalStatus.ToString(),
+                                nic.Speed,
+                                nic.Speed / 1000000.0,
+                                EscapeJson(nic.GetPhysicalAddress().ToString()),
+                                string.Join(", ", ipv4List.ToArray()),
+                                string.Join(", ", gatewayList.ToArray()),
+                                string.Join(", ", dnsList.ToArray())
+                            ));
+                        }
+                    } catch {}
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"isConnected\": {0}, \"isConnectedToInternet\": {1}, \"rawConnectivity\": {2}, \"connectivity\": {{\"ipv4\": \"{3}\", \"ipv6\": \"{4}\"}}, \"profiles\": [{5}], \"adapters\": [{6}]}}",
+                    isConnected ? "true" : "false",
+                    isInternet ? "true" : "false",
+                    rawConnectivity,
+                    ipv4Conn,
+                    ipv6Conn,
+                    string.Join(", ", profilesList.ToArray()),
+                    string.Join(", ", adapterList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
+        const uint CF_UNICODETEXT = 13;
+        const uint GMEM_MOVEABLE = 0x0002;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool OpenClipboard(IntPtr hWndNewOwner);
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool CloseClipboard();
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool EmptyClipboard();
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern IntPtr SetClipboardData(uint uFormat, IntPtr hMem);
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern IntPtr GetClipboardData(uint uFormat);
+        [DllImport("user32.dll", SetLastError = true)]
+        static extern bool IsClipboardFormatAvailable(uint format);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern IntPtr GlobalAlloc(uint uFlags, UIntPtr dwBytes);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern IntPtr GlobalLock(IntPtr hMem);
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GlobalUnlock(IntPtr hMem);
+
+        [DllImport("ole32.dll")]
+        static extern int OleFlushClipboard();
+
         static void ClipboardGetCmd() {
             try {
                 string text = "";
@@ -5855,14 +6140,43 @@ namespace GeminiSuperDesktop {
                 bool hasImage = false;
                 bool hasFiles = false;
 
-                RunSta(() => {
-                    hasText = Clipboard.ContainsText();
-                    hasImage = Clipboard.ContainsImage();
-                    hasFiles = Clipboard.ContainsFileDropList();
-                    if (hasText) {
-                        text = Clipboard.GetText();
+                for (int attempt = 0; attempt < 5; attempt++) {
+                    if (OpenClipboard(IntPtr.Zero)) {
+                        try {
+                            if (IsClipboardFormatAvailable(CF_UNICODETEXT)) {
+                                IntPtr hData = GetClipboardData(CF_UNICODETEXT);
+                                if (hData != IntPtr.Zero) {
+                                    IntPtr p = GlobalLock(hData);
+                                    if (p != IntPtr.Zero) {
+                                        text = Marshal.PtrToStringUni(p) ?? "";
+                                        GlobalUnlock(hData);
+                                        hasText = !string.IsNullOrEmpty(text);
+                                    }
+                                }
+                            }
+                        } finally {
+                            CloseClipboard();
+                        }
+                        break;
                     }
-                });
+                    Thread.Sleep(50);
+                }
+
+                if (!hasText) {
+                    RunSta(() => {
+                        hasText = Clipboard.ContainsText();
+                        hasImage = Clipboard.ContainsImage();
+                        hasFiles = Clipboard.ContainsFileDropList();
+                        if (hasText) {
+                            text = Clipboard.GetText();
+                        }
+                    });
+                } else {
+                    RunSta(() => {
+                        hasImage = Clipboard.ContainsImage();
+                        hasFiles = Clipboard.ContainsFileDropList();
+                    });
+                }
 
                 Console.WriteLine(string.Format("{{\"success\": true, \"hasText\": {0}, \"hasImage\": {1}, \"hasFiles\": {2}, \"charCount\": {3}, \"text\": \"{4}\"}}",
                     hasText ? "true" : "false", hasImage ? "true" : "false", hasFiles ? "true" : "false",
@@ -5872,25 +6186,35 @@ namespace GeminiSuperDesktop {
             }
         }
 
-        [DllImport("ole32.dll")]
-        static extern int OleFlushClipboard();
-
         static void ClipboardSetCmd(string text) {
             Exception lastEx = null;
+            if (text == null) text = "";
             for (int attempt = 0; attempt < 5; attempt++) {
                 try {
-                    RunSta(() => {
-                        Clipboard.Clear();
-                        Clipboard.SetDataObject(text, true, 10, 100);
-                        Application.DoEvents();
-                        try { OleFlushClipboard(); } catch {}
-                    });
-                    Console.WriteLine(string.Format("{{\"success\": true, \"charCount\": {0}}}", text.Length));
-                    return;
+                    if (OpenClipboard(IntPtr.Zero)) {
+                        try {
+                            EmptyClipboard();
+                            byte[] bytes = Encoding.Unicode.GetBytes(text + "\0");
+                            IntPtr hGlobal = GlobalAlloc(GMEM_MOVEABLE, (UIntPtr)bytes.Length);
+                            if (hGlobal != IntPtr.Zero) {
+                                IntPtr pTarget = GlobalLock(hGlobal);
+                                if (pTarget != IntPtr.Zero) {
+                                    Marshal.Copy(bytes, 0, pTarget, bytes.Length);
+                                    GlobalUnlock(hGlobal);
+                                    SetClipboardData(CF_UNICODETEXT, hGlobal);
+                                }
+                            }
+                        } finally {
+                            CloseClipboard();
+                        }
+
+                        Console.WriteLine(string.Format("{{\"success\": true, \"charCount\": {0}}}", text.Length));
+                        return;
+                    }
                 } catch (Exception ex) {
                     lastEx = ex;
-                    Thread.Sleep(80);
                 }
+                Thread.Sleep(80);
             }
             Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(lastEx != null ? lastEx.Message : "Clipboard set failed")));
         }
@@ -5950,10 +6274,19 @@ namespace GeminiSuperDesktop {
 
         static void ClipboardClearCmd() {
             try {
-                RunSta(() => {
-                    Clipboard.Clear();
-                    try { OleFlushClipboard(); } catch {}
-                });
+                if (OpenClipboard(IntPtr.Zero)) {
+                    try {
+                        EmptyClipboard();
+                    } finally {
+                        CloseClipboard();
+                    }
+                }
+                try {
+                    RunSta(() => {
+                        Clipboard.Clear();
+                        try { OleFlushClipboard(); } catch {}
+                    });
+                } catch {}
                 Console.WriteLine("{\"success\": true}");
             } catch (Exception ex) {
                 Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
@@ -8708,6 +9041,16 @@ namespace GeminiSuperDesktop {
                 string search = args.Length >= 3 ? args[2] : "";
                 int limit = args.Length >= 4 ? int.Parse(args[3]) : 150;
                 ToolHelpProcessTreeCmd(rootPid, search, limit);
+            } else if (cmd == "sens_alive" || cmd == "network_alive" || cmd == "sens_network_alive") {
+                SensNetworkAliveCmd();
+            } else if (cmd == "sens_reachable" || cmd == "destination_reachable" || cmd == "sens_destination_reachable") {
+                string dest = args.Length >= 2 ? args[1] : "8.8.8.8";
+                int timeoutMs = args.Length >= 3 ? int.Parse(args[2]) : 3000;
+                SensDestinationReachableCmd(dest, timeoutMs);
+            } else if (cmd == "sens_connectivity" || cmd == "network_connectivity" || cmd == "sens_network_connectivity") {
+                bool includeProfiles = args.Length >= 2 ? (args[1].ToLowerInvariant() != "false" && args[1] != "0") : true;
+                bool includeAdapters = args.Length >= 3 ? (args[2].ToLowerInvariant() != "false" && args[2] != "0") : true;
+                SensNetworkConnectivityCmd(includeProfiles, includeAdapters);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

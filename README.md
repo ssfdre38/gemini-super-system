@@ -63,6 +63,7 @@
   - [45. Windows Authenticode & Cryptographic Trust Verification Subsystem](#45--windows-authenticode--cryptographic-trust-verification-subsystem-wintrusth--softpubh--wintrustdll)
   - [46. Windows Multi-Provider Router & Network Drive Management Subsystem](#46--windows-multi-provider-router--network-drive-management-subsystem-winnetwkh--mprdll)
   - [47. Windows ToolHelp32 Snapshot Subsystem](#47--windows-toolhelp32-snapshot-subsystem-tlhelp32h--kernel32dll)
+  - [48. Windows SENS & Network Perception Subsystem](#48--windows-system-event-notification-service-sens--network-perception-subsystem-sensapih--netlistmgrh--sensapidll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -663,6 +664,17 @@ Directly takes unmanaged point-in-time snapshots of process modules, threads, an
 - **Full Process Lineage & Ancestry Tree (`super_toolhelp_process_tree`)**: Invokes `CreateToolhelp32Snapshot` (`TH32CS_SNAPPROCESS`) and `Process32FirstW/NextW` to take an atomic system process snapshot and assemble a structured recursive ancestry tree (`System` -> `smss.exe` -> `csrss.exe` / `winlogon.exe` -> `dwm.exe`). Reports PIDs, parent PIDs, thread counts, base priority classes, and executable names, anchored from root or searched by process name.
 - **Milestone Expansion**: **121 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
 - **Native MCP Tools**: `super_toolhelp_modules`, `super_toolhelp_threads`, `super_toolhelp_process_tree`.
+
+---
+
+## 48. 🌐 Windows System Event Notification Service (SENS) & Network Perception Subsystem (`sensapi.h` / `netlistmgr.h` / `sensapi.dll`)
+
+Directly senses physical network media, destination reachability, and network profile topology across Microsoft's Win32 System Event Notification Service and COM Network List Manager (NLM) without external CLIs or heavyweight network stacks:
+- **Instant Connection Media & Presence Detection (`super_sens_network_alive`)**: Directly calls native Win32 `IsNetworkAlive` from `sensapi.dll` with fallback to `NetworkInterface.GetIsNetworkAvailable()`. Instantly determines if local area network (LAN), wide area network (WAN), internet, or proxy connections are alive, returning bitmask flags (`NETWORK_ALIVE_LAN`, `NETWORK_ALIVE_WAN`, `NETWORK_ALIVE_INTERNET`) and human-readable active connection media.
+- **Destination Ping & Bandwidth Perception (`super_sens_destination_reachable`)**: Invokes `IsDestinationReachableW` from `sensapi.dll` and correlates with native ICMP echo ping to evaluate target destination availability. Populates `QOCINFO` metrics including link speed in bps/Kbps/Mbps, round-trip latency in milliseconds, and gateway routing flags (`QOCINFO_PATH_IS_GATEWAY`).
+- **Network List Manager Profile & Adapter Enumeration (`super_sens_network_connectivity`)**: Queries the Windows Network List Manager COM interface (`INetworkListManager`, CLSID `DCB00C01-570F-4A9B-8D69-199FDBA5723B`). Retrieves comprehensive network connectivity state (IPv4/IPv6 internet, local, or none), active network profile names (e.g. NetBird, Tailscale, Wi-Fi, Ethernet), network categories (Public, Private, Domain), and physical/virtual network adapters with IP addresses, MACs, gateways, and DNS servers.
+- **Milestone Expansion**: **124 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **33 comprehensive test suites (110/110 tests passing)** and **29 environment health checks**.
+- **Native MCP Tools**: `super_sens_network_alive`, `super_sens_destination_reachable`, `super_sens_network_connectivity`.
 
 ---
 

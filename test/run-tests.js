@@ -2483,10 +2483,71 @@ async function run() {
     assert(Array.isArray(root.children));
   });
 
-  it("All 121 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 33: Windows System Event Notification Service & Network Perception Subsystem (sensapi.h / netlistmgr.h)
+  console.log("\x1b[1m[Suite 33: Windows SENS & Network Perception Subsystem]\x1b[0m");
+
+  await itAsync("super_sens_network_alive queries network connection media and presence flags via sensapi.dll", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getSensNetworkAlive();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.isAlive === "boolean");
+    assert(typeof res.rawFlags === "number");
+    assert(typeof res.lanConnected === "boolean");
+    assert(typeof res.wanConnected === "boolean");
+    assert(typeof res.aolConnected === "boolean");
+    assert(typeof res.internetReachable === "boolean");
+    assert(Array.isArray(res.connectionTypes));
+    assert(typeof res.networkAvailable === "boolean");
+  });
+
+  await itAsync("super_sens_destination_reachable evaluates destination ping latency and QOCINFO bandwidth metrics", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getSensDestinationReachable({ destination: "127.0.0.1", timeoutMs: 2000 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.destination, "127.0.0.1");
+    assert(typeof res.reachable === "boolean");
+    assert(typeof res.latencyMs === "number");
+    assert(typeof res.inSpeedBps === "number");
+    assert(typeof res.outSpeedBps === "number");
+    assert(typeof res.inSpeedKbps === "number");
+    assert(typeof res.outSpeedKbps === "number");
+    assert(typeof res.isGateway === "boolean");
+  });
+
+  await itAsync("super_sens_network_connectivity inspects Network List Manager (NLM) profiles and network adapters", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getSensNetworkConnectivity({ includeProfiles: true, includeAdapters: true });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.isConnected === "boolean");
+    assert(typeof res.isConnectedToInternet === "boolean");
+    assert(typeof res.rawConnectivity === "number");
+    assert(typeof res.connectivity === "object");
+    assert(typeof res.connectivity.ipv4 === "string");
+    assert(typeof res.connectivity.ipv6 === "string");
+    assert(Array.isArray(res.profiles));
+    assert(Array.isArray(res.adapters));
+    if (res.adapters.length > 0) {
+      const nic = res.adapters[0];
+      assert(typeof nic.name === "string");
+      assert(typeof nic.type === "string");
+      assert(typeof nic.status === "string");
+      assert(Array.isArray(nic.ipv4));
+    }
+  });
+
+  it("All 124 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 121);
+    assert.strictEqual(SYSTEM_TOOLS.length, 124);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -2541,6 +2602,9 @@ async function run() {
     assert(toolNames.includes("super_toolhelp_modules"));
     assert(toolNames.includes("super_toolhelp_threads"));
     assert(toolNames.includes("super_toolhelp_process_tree"));
+    assert(toolNames.includes("super_sens_network_alive"));
+    assert(toolNames.includes("super_sens_destination_reachable"));
+    assert(toolNames.includes("super_sens_network_connectivity"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

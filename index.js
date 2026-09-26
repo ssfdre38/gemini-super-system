@@ -2481,6 +2481,52 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_sens_network_alive",
+        description: "Queries Windows System Event Notification Service (SENS) network perception via sensapi.dll (IsNetworkAlive). Identifies active connection media (LAN, WAN/dialup, AOL, Internet) and connection flags.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_sens_destination_reachable",
+        description: "Tests destination reachability, roundtrip ping latency, and Quality of Connection (QOCINFO) metrics via sensapi.dll (IsDestinationReachable) and ICMP echo. Measures downstream/upstream connection speeds, gateway flags, and latency.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            destination: {
+              type: "string",
+              default: "8.8.8.8",
+              description: "Target IP address or hostname, e.g. '8.8.8.8', 'google.com', '1.1.1.1', or local gateway."
+            },
+            timeoutMs: {
+              type: "number",
+              default: 3000,
+              description: "Connection timeout in milliseconds (default: 3000)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_sens_network_connectivity",
+        description: "Queries deep Windows Network List Manager (NLM / INetworkListManager COM) profiles and network adapter configurations. Reports SSID network names, profile categories (Public, Private, Domain), IPv4/IPv6 Internet connectivity states, and physical/virtual NIC details.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            includeProfiles: {
+              type: "boolean",
+              default: true,
+              description: "Include NLM network profile names, categories, and internet states (default: true)."
+            },
+            includeAdapters: {
+              type: "boolean",
+              default: true,
+              description: "Include physical/virtual network adapters, MACs, IPv4 addresses, and gateways (default: true)."
+            }
+          }
+        }
       }
 ];
 
@@ -4496,6 +4542,46 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [ToolHelp Process Tree (rootPid: ${rootPid})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_sens_network_alive") {
+    const res = await orch.getSensNetworkAlive();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [SENS Network Alive Perception]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_sens_destination_reachable") {
+    const destination = args?.destination || "8.8.8.8";
+    const timeoutMs = args?.timeoutMs || 3000;
+    const res = await orch.getSensDestinationReachable({ destination, timeoutMs });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [SENS Destination Reachable ("${destination}")]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_sens_network_connectivity") {
+    const includeProfiles = args?.includeProfiles !== false;
+    const includeAdapters = args?.includeAdapters !== false;
+    const res = await orch.getSensNetworkConnectivity({ includeProfiles, includeAdapters });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [SENS Network Connectivity & NLM Profiles]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
