@@ -2987,10 +2987,81 @@ async function run() {
     assert(res.mappedFiles.length > 0, "Should discover mapped modules/files for host process");
   });
 
-  it("All 145 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n=======================================================");
+  console.log("   SUITE 41: Windows Credential Management Subsystem (wincred.h)");
+  console.log("=======================================================\n");
+
+  await itAsync("super_cred_enumerate discovers stored generic credentials, domains, and tokens", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const bridge = getKernelBridge();
+    const res = await bridge.getCredentialList({ limit: 20 });
+
+    assert(res, "Result should exist");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.credentialCount === "number", "credentialCount should be a number");
+    assert(Array.isArray(res.credentials), "Credentials should be an array");
+    assert(res.credentials.length >= 0, "Credentials length should be >= 0");
+    if (res.credentials.length > 0) {
+      const sample = res.credentials[0];
+      assert(sample.targetName, "Credential should have targetName");
+      assert(typeof sample.type === "string", "Credential should have type string");
+      assert(typeof sample.typeId === "number", "Credential should have typeId number");
+      assert(typeof sample.persist === "string", "Credential should have persist string");
+      assert(typeof sample.persistId === "number", "Credential should have persistId number");
+    }
+  });
+
+  await itAsync("super_cred_manage and super_cred_read write, read, and delete credentials securely", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const bridge = getKernelBridge();
+    const testTarget = "GeminiSuperSuite41Test";
+    const testUser = "GeminiSuiteUser";
+    const testSecret = "SuperSecureToken41!";
+
+    // 1. Write session credential
+    const writeRes = await bridge.manageCredential({
+      action: "write",
+      targetName: testTarget,
+      userName: testUser,
+      secret: testSecret,
+      comment: "Suite 41 Verification Token",
+      type: 1, // Generic
+      persist: 1 // Session (in-memory / non-persisting across reboots)
+    });
+
+    assert(writeRes, "Write result should exist");
+    assert.strictEqual(writeRes.success, true);
+    assert.strictEqual(writeRes.targetName, testTarget);
+
+    // 2. Read back credential metadata and secret
+    const readRes = await bridge.getCredential({
+      targetName: testTarget,
+      type: 1,
+      includeSecret: true
+    });
+
+    assert(readRes, "Read result should exist");
+    assert.strictEqual(readRes.success, true);
+    assert.strictEqual(readRes.targetName, testTarget);
+    assert.strictEqual(readRes.userName, testUser);
+    assert.strictEqual(readRes.secret, testSecret);
+
+    // 3. Delete credential
+    const delRes = await bridge.manageCredential({
+      action: "delete",
+      targetName: testTarget,
+      type: 1
+    });
+
+    assert(delRes, "Delete result should exist");
+    assert.strictEqual(delRes.success, true);
+    assert.strictEqual(delRes.deleted, true);
+  });
+
+  it("All 148 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 145);
+    assert.strictEqual(SYSTEM_TOOLS.length, 148);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3069,6 +3140,9 @@ async function run() {
     assert(toolNames.includes("super_psapi_performance"));
     assert(toolNames.includes("super_psapi_device_drivers"));
     assert(toolNames.includes("super_psapi_process_memory"));
+    assert(toolNames.includes("super_cred_enumerate"));
+    assert(toolNames.includes("super_cred_read"));
+    assert(toolNames.includes("super_cred_manage"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

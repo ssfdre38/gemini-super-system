@@ -71,6 +71,7 @@
   - [53. Windows Console Subsystem, Screen Buffer & Terminal Mode Actuator](#53--windows-console-subsystem-screen-buffer--terminal-mode-actuator-winconh--consoleapih)
   - [54. Windows Terminal Services & Remote Desktop Subsystem](#54-️-windows-terminal-services--remote-desktop-subsystem-wtsapi32h--wtsapi32dll)
   - [55. Windows Process Status, Kernel Driver Table & Performance Subsystem](#55--windows-process-status-kernel-driver-table--performance-subsystem-psapih--psapidll)
+  - [56. Windows Credential Management Subsystem](#56--windows-credential-management-subsystem-wincredh--advapi32dll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -759,6 +760,17 @@ Directly queries system-wide operating system performance metrics, enumerates ke
 - **Process Memory Counters & Memory-Mapped File Audit (`super_psapi_process_memory`)**: Calls `GetProcessMemoryInfo` (`PROCESS_MEMORY_COUNTERS_EX`) and walks process virtual address spaces via `VirtualQueryEx` coupled with `GetMappedFileNameW`. Extracts working set, peak working set, private bytes, paged and non-paged pool quotas, page fault counts, and resolves the exact filesystem and NT device paths of all memory-mapped files, section objects, and loaded DLL modules.
 - **145 Tools Milestone**: Reaches **145 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **40 comprehensive test suites (132/132 tests passing)** and **36 environment health checks**.
 - **Native MCP Tools**: `super_psapi_performance`, `super_psapi_device_drivers`, `super_psapi_process_memory`.
+
+---
+
+## 56. 🔐 Windows Credential Management Subsystem (`wincred.h` / `advapi32.dll`)
+
+Directly enumerates, reads, and manages encrypted secrets, API tokens, generic credentials, and domain authentications stored in the Windows Credential Manager / Locker via native `advapi32.dll` P/Invoke:
+- **Windows Credential Inventory & Discovery (`super_cred_enumerate`)**: Directly invokes native `CredEnumerateW` from `advapi32.dll`. Discovers all credentials registered in the Windows Credential Manager (Generic, Domain Password, Domain Certificate), returning target identifiers (e.g. `git:https://github.com`, `MicrosoftAccount:user=...`), associated usernames, persistence levels (`Session`, `LocalMachine`, `Enterprise`), secret blob sizes in bytes, and last write modification timestamps. Supports prefix filtering and result limits.
+- **Secure Credential Retrieval & Decryption (`super_cred_read`)**: Invokes native `CredReadW` to query a specific credential record by target name. Safely returns credential metadata and can optionally decrypt and return the secret password, token, or key payload (supporting UTF-16 and UTF-8 multi-byte decoding) for zero-prompt sovereign agent authentication against external services.
+- **Sovereign Credential Persistence & Mutation (`super_cred_manage`)**: Calls native `CredWriteW` and `CredDeleteW` to write, update, or remove credentials in the Windows Credential Manager. Allows sovereign AI agents to persist API keys, tokens, and certificates securely in the native OS vault with configurable persistence scopes (Session-only in-memory or LocalMachine surviving OS reboots) without plaintext configuration files.
+- **148 Tools Milestone**: Reaches **148 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **41 comprehensive test suites (135/135 tests passing)** and **37 environment health checks**.
+- **Native MCP Tools**: `super_cred_enumerate`, `super_cred_read`, `super_cred_manage`.
 
 ---
 

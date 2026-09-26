@@ -2927,6 +2927,93 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_cred_enumerate",
+        description: "Enumerates credentials stored in the Windows Credential Manager / Locker via CredEnumerateW (wincred.h / advapi32.dll). Discovers generic credentials, domain passwords, and certificates with target names, usernames, credential types, persistence levels, blob sizes, and modification timestamps.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              description: "Optional target name prefix filter (e.g. 'git:', 'MicrosoftAccount:')."
+            },
+            limit: {
+              type: "number",
+              default: 50,
+              description: "Maximum number of credentials to return (default: 50, max: 200)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_cred_read",
+        description: "Reads a specific credential and its metadata from Windows Credential Manager via CredReadW (wincred.h / advapi32.dll). Can optionally decrypt and return the secret token/password for secure agent authentication.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            targetName: {
+              type: "string",
+              description: "The unique target identifier of the credential (e.g. 'git:https://github.com')."
+            },
+            type: {
+              type: "number",
+              default: 1,
+              description: "Credential type (1 = Generic, 2 = DomainPassword, default: 1)."
+            },
+            includeSecret: {
+              type: "boolean",
+              default: false,
+              description: "Whether to decrypt and return the secret password/token blob (default: false)."
+            }
+          },
+          required: ["targetName"]
+        }
+      },
+      {
+        name: "super_cred_manage",
+        description: "Securely writes, updates, or deletes credentials in Windows Credential Manager via CredWriteW and CredDeleteW (wincred.h / advapi32.dll). Allows sovereign agents to persist and manage API keys, tokens, and credentials in the native OS vault.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["write", "delete"],
+              default: "write",
+              description: "Action to perform: 'write' to create/update, or 'delete' to remove."
+            },
+            targetName: {
+              type: "string",
+              description: "Target credential identifier (e.g. 'gemini:api_token')."
+            },
+            userName: {
+              type: "string",
+              default: "",
+              description: "Username or account identity associated with the credential."
+            },
+            secret: {
+              type: "string",
+              default: "",
+              description: "Secret token, password, or key to store (for 'write' action)."
+            },
+            comment: {
+              type: "string",
+              default: "Gemini Super System Credential",
+              description: "Metadata description or comment."
+            },
+            type: {
+              type: "number",
+              default: 1,
+              description: "Credential type (1 = Generic, 2 = DomainPassword, default: 1)."
+            },
+            persist: {
+              type: "number",
+              default: 2,
+              description: "Persistence: 1 = Session, 2 = LocalMachine (survives reboot), 3 = Enterprise (roams)."
+            }
+          },
+          required: ["targetName"]
+        }
       }
 ];
 
@@ -5259,6 +5346,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🧠 [Process Memory Counters & Mapped Files (PSAPI)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_cred_enumerate") {
+    const res = await orch.getCredentialList(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔐 [Windows Credential Manager / Locker Inventory]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_cred_read") {
+    const res = await orch.getCredential(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔑 [Windows Credential Record (CredReadW)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_cred_manage") {
+    const res = await orch.manageCredential(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔒 [Windows Credential Manager Mutation (CredWriteW / CredDeleteW)]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

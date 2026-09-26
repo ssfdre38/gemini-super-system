@@ -8148,6 +8148,284 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Phase 22: Windows Credential Management Subsystem (Windows.Win32.Security.Credentials / wincred.h / advapi32.dll)
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct CREDENTIALW {
+            public uint Flags;
+            public uint Type;
+            public IntPtr TargetName;
+            public IntPtr Comment;
+            public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
+            public uint CredentialBlobSize;
+            public IntPtr CredentialBlob;
+            public uint Persist;
+            public uint AttributeCount;
+            public IntPtr Attributes;
+            public IntPtr TargetAlias;
+            public IntPtr UserName;
+        }
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool CredEnumerateW(
+            string filter,
+            int flags,
+            out int count,
+            out IntPtr pCredentials);
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool CredReadW(
+            string targetName,
+            uint type,
+            int flags,
+            out IntPtr pCredential);
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool CredWriteW(
+            [In] ref CREDENTIALW userCredential,
+            uint flags);
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool CredDeleteW(
+            string targetName,
+            uint type,
+            int flags);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        static extern void CredFree(IntPtr buffer);
+
+        static string FormatCredType(uint type) {
+            switch (type) {
+                case 1: return "Generic";
+                case 2: return "DomainPassword";
+                case 3: return "DomainCertificate";
+                case 4: return "DomainVisiblePassword";
+                case 5: return "GenericCertificate";
+                case 6: return "DomainExtended";
+                default: return "Type_" + type;
+            }
+        }
+
+        static string FormatCredPersist(uint persist) {
+            switch (persist) {
+                case 1: return "Session";
+                case 2: return "LocalMachine";
+                case 3: return "Enterprise";
+                default: return "Persist_" + persist;
+            }
+        }
+
+        static void CredEnumerateCmd(string filter, int limit) {
+            try {
+                int count = 0;
+                IntPtr pCredentials = IntPtr.Zero;
+                string filterArg = string.IsNullOrEmpty(filter) ? null : filter;
+
+                if (!CredEnumerateW(filterArg, 0, out count, out pCredentials)) {
+                    int err = Marshal.GetLastWin32Error();
+                    if (err == 1168 /* ERROR_NOT_FOUND */) {
+                        Console.WriteLine("{\"success\": true, \"credentialCount\": 0, \"returnedCount\": 0, \"credentials\": []}");
+                        return;
+                    }
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"CredEnumerate failed with error {0}\"}}", err));
+                    return;
+                }
+
+                try {
+                    int maxEntries = limit <= 0 ? 50 : Math.Min(limit, 200);
+                    var credList = new List<string>();
+
+                    for (int i = 0; i < count; i++) {
+                        IntPtr pCred = Marshal.ReadIntPtr(pCredentials, i * IntPtr.Size);
+                        if (pCred == IntPtr.Zero) continue;
+
+                        CREDENTIALW cred = (CREDENTIALW)Marshal.PtrToStructure(pCred, typeof(CREDENTIALW));
+                        string targetName = Marshal.PtrToStringUni(cred.TargetName) ?? "";
+                        string comment = Marshal.PtrToStringUni(cred.Comment) ?? "";
+                        string userName = Marshal.PtrToStringUni(cred.UserName) ?? "";
+                        string targetAlias = Marshal.PtrToStringUni(cred.TargetAlias) ?? "";
+
+                        long fileTime = ((long)cred.LastWritten.dwHighDateTime << 32) | (uint)cred.LastWritten.dwLowDateTime;
+                        string isoDate = "";
+                        try {
+                            isoDate = DateTime.FromFileTimeUtc(fileTime).ToString("o");
+                        } catch {
+                            isoDate = "Unknown";
+                        }
+
+                        if (credList.Count < maxEntries) {
+                            credList.Add(string.Format(
+                                "{{\"targetName\": \"{0}\", \"userName\": \"{1}\", \"type\": \"{2}\", \"typeId\": {3}, \"persist\": \"{4}\", \"persistId\": {5}, \"blobSizeBytes\": {6}, \"comment\": \"{7}\", \"targetAlias\": \"{8}\", \"lastWritten\": \"{9}\"}}",
+                                EscapeJson(targetName),
+                                EscapeJson(userName),
+                                EscapeJson(FormatCredType(cred.Type)),
+                                cred.Type,
+                                EscapeJson(FormatCredPersist(cred.Persist)),
+                                cred.Persist,
+                                cred.CredentialBlobSize,
+                                EscapeJson(comment),
+                                EscapeJson(targetAlias),
+                                EscapeJson(isoDate)
+                            ));
+                        }
+                    }
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"credentialCount\": {0}, \"returnedCount\": {1}, \"credentials\": [{2}]}}",
+                        count, credList.Count, string.Join(", ", credList.ToArray())
+                    ));
+                } finally {
+                    CredFree(pCredentials);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void CredReadCmd(string targetName, uint type, bool includeSecret) {
+            try {
+                if (string.IsNullOrEmpty(targetName)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"TargetName is required\"}");
+                    return;
+                }
+
+                uint credType = type <= 0 ? 1 /* CRED_TYPE_GENERIC */ : type;
+                IntPtr pCredential = IntPtr.Zero;
+
+                if (!CredReadW(targetName, credType, 0, out pCredential)) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"targetName\": \"{0}\", \"error\": \"CredRead failed with error {1}\"}}", EscapeJson(targetName), err));
+                    return;
+                }
+
+                try {
+                    CREDENTIALW cred = (CREDENTIALW)Marshal.PtrToStructure(pCredential, typeof(CREDENTIALW));
+                    string target = Marshal.PtrToStringUni(cred.TargetName) ?? targetName;
+                    string userName = Marshal.PtrToStringUni(cred.UserName) ?? "";
+                    string comment = Marshal.PtrToStringUni(cred.Comment) ?? "";
+                    string targetAlias = Marshal.PtrToStringUni(cred.TargetAlias) ?? "";
+
+                    long fileTime = ((long)cred.LastWritten.dwHighDateTime << 32) | (uint)cred.LastWritten.dwLowDateTime;
+                    string isoDate = "";
+                    try {
+                        isoDate = DateTime.FromFileTimeUtc(fileTime).ToString("o");
+                    } catch {
+                        isoDate = "Unknown";
+                    }
+
+                    string secretText = "";
+                    if (includeSecret && cred.CredentialBlobSize > 0 && cred.CredentialBlob != IntPtr.Zero) {
+                        byte[] blob = new byte[cred.CredentialBlobSize];
+                        Marshal.Copy(cred.CredentialBlob, blob, 0, (int)cred.CredentialBlobSize);
+                        string decoded = Encoding.Unicode.GetString(blob).TrimEnd('\0');
+                        bool hasInvalidChar = false;
+                        foreach (char c in decoded) {
+                            if (char.IsControl(c) && c != '\r' && c != '\n' && c != '\t') {
+                                hasInvalidChar = true;
+                                break;
+                            }
+                        }
+                        if (hasInvalidChar) {
+                            decoded = Encoding.UTF8.GetString(blob).TrimEnd('\0');
+                        }
+                        secretText = decoded;
+                    }
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"targetName\": \"{0}\", \"userName\": \"{1}\", \"type\": \"{2}\", \"typeId\": {3}, \"persist\": \"{4}\", \"persistId\": {5}, \"blobSizeBytes\": {6}, \"comment\": \"{7}\", \"targetAlias\": \"{8}\", \"lastWritten\": \"{9}\", \"hasSecret\": {10}, \"secret\": \"{11}\"}}",
+                        EscapeJson(target),
+                        EscapeJson(userName),
+                        EscapeJson(FormatCredType(cred.Type)),
+                        cred.Type,
+                        EscapeJson(FormatCredPersist(cred.Persist)),
+                        cred.Persist,
+                        cred.CredentialBlobSize,
+                        EscapeJson(comment),
+                        EscapeJson(targetAlias),
+                        EscapeJson(isoDate),
+                        cred.CredentialBlobSize > 0 ? "true" : "false",
+                        includeSecret ? EscapeJson(secretText) : ""
+                    ));
+                } finally {
+                    CredFree(pCredential);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void CredManageCmd(string action, string targetName, string userName, string secret, string comment, uint type, uint persist) {
+            try {
+                if (string.IsNullOrEmpty(targetName)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"TargetName is required\"}");
+                    return;
+                }
+
+                string act = (action ?? "write").Trim().ToLowerInvariant();
+                uint credType = type <= 0 ? 1 /* CRED_TYPE_GENERIC */ : type;
+
+                if (act == "delete" || act == "remove") {
+                    if (!CredDeleteW(targetName, credType, 0)) {
+                        int err = Marshal.GetLastWin32Error();
+                        Console.WriteLine(string.Format("{{\"success\": false, \"action\": \"delete\", \"targetName\": \"{0}\", \"error\": \"CredDelete failed with error {1}\"}}", EscapeJson(targetName), err));
+                        return;
+                    }
+                    Console.WriteLine(string.Format("{{\"success\": true, \"action\": \"delete\", \"targetName\": \"{0}\", \"deleted\": true}}", EscapeJson(targetName)));
+                    return;
+                }
+
+                // Write/Update credential
+                uint persistVal = persist <= 0 ? 2 /* CRED_PERSIST_LOCAL_MACHINE */ : persist;
+                string sec = secret ?? "";
+                byte[] blob = Encoding.Unicode.GetBytes(sec);
+                IntPtr pBlob = Marshal.AllocHGlobal(blob.Length);
+                Marshal.Copy(blob, 0, pBlob, blob.Length);
+
+                IntPtr pTarget = Marshal.StringToHGlobalUni(targetName);
+                IntPtr pUser = Marshal.StringToHGlobalUni(userName ?? "");
+                IntPtr pComment = Marshal.StringToHGlobalUni(comment ?? "Gemini Super System Credential");
+
+                try {
+                    CREDENTIALW cred = new CREDENTIALW();
+                    cred.Flags = 0;
+                    cred.Type = credType;
+                    cred.TargetName = pTarget;
+                    cred.Comment = pComment;
+                    cred.CredentialBlobSize = (uint)blob.Length;
+                    cred.CredentialBlob = pBlob;
+                    cred.Persist = persistVal;
+                    cred.AttributeCount = 0;
+                    cred.Attributes = IntPtr.Zero;
+                    cred.TargetAlias = IntPtr.Zero;
+                    cred.UserName = pUser;
+
+                    if (!CredWriteW(ref cred, 0)) {
+                        int err = Marshal.GetLastWin32Error();
+                        Console.WriteLine(string.Format("{{\"success\": false, \"action\": \"write\", \"targetName\": \"{0}\", \"error\": \"CredWrite failed with error {1}\"}}", EscapeJson(targetName), err));
+                        return;
+                    }
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"action\": \"write\", \"targetName\": \"{0}\", \"userName\": \"{1}\", \"type\": \"{2}\", \"persist\": \"{3}\", \"blobSizeBytes\": {4}}}",
+                        EscapeJson(targetName),
+                        EscapeJson(userName ?? ""),
+                        EscapeJson(FormatCredType(credType)),
+                        EscapeJson(FormatCredPersist(persistVal)),
+                        blob.Length
+                    ));
+                } finally {
+                    Marshal.FreeHGlobal(pBlob);
+                    Marshal.FreeHGlobal(pTarget);
+                    Marshal.FreeHGlobal(pUser);
+                    Marshal.FreeHGlobal(pComment);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -11203,6 +11481,28 @@ namespace GeminiSuperDesktop {
                 if (args.Length >= 2 && !string.IsNullOrEmpty(args[1])) int.TryParse(args[1], out pid);
                 bool includeMapped = args.Length >= 3 ? (args[2].ToLowerInvariant() != "false" && args[2] != "0") : true;
                 PsapiProcessMemoryCmd(pid, includeMapped);
+            } else if (cmd == "cred_enumerate" || cmd == "credentials_list" || cmd == "cred_list") {
+                string filter = args.Length >= 2 ? args[1] : null;
+                int limit = 50;
+                if (args.Length >= 3 && !string.IsNullOrEmpty(args[2])) int.TryParse(args[2], out limit);
+                CredEnumerateCmd(filter, limit);
+            } else if (cmd == "cred_read" || cmd == "credential_read" || cmd == "cred_get") {
+                string targetName = args.Length >= 2 ? args[1] : "";
+                uint credType = 1;
+                if (args.Length >= 3 && !string.IsNullOrEmpty(args[2])) uint.TryParse(args[2], out credType);
+                bool includeSecret = args.Length >= 4 ? (args[3].ToLowerInvariant() == "true" || args[3] == "1") : false;
+                CredReadCmd(targetName, credType, includeSecret);
+            } else if (cmd == "cred_manage" || cmd == "credential_manage" || cmd == "cred_set") {
+                string action = args.Length >= 2 ? args[1] : "write";
+                string targetName = args.Length >= 3 ? args[2] : "";
+                string userName = args.Length >= 4 ? args[3] : "";
+                string secret = args.Length >= 5 ? args[4] : "";
+                string comment = args.Length >= 6 ? args[5] : "";
+                uint credType = 1;
+                if (args.Length >= 7 && !string.IsNullOrEmpty(args[6])) uint.TryParse(args[6], out credType);
+                uint persist = 2;
+                if (args.Length >= 8 && !string.IsNullOrEmpty(args[7])) uint.TryParse(args[7], out persist);
+                CredManageCmd(action, targetName, userName, secret, comment, credType, persist);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
