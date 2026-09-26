@@ -4215,10 +4215,82 @@ async function run() {
     assert(typeof res.outboundBandwidthKbps === "number");
   });
 
-  it("All 200 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 59: Windows Power, Shutdown & System Initiation Subsystem (initiateshutdown.h / reason.h / advapi32.dll)
+  console.log("\n\x1b[1m[Suite 59: Windows Power, Shutdown & System Initiation Subsystem]\x1b[0m");
+
+  await itAsync("getShutdownReasons decodes Win32 reason codes and enumerates presets", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getShutdownReasons({ reasonCode: "0x80040001" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getShutdownReasons failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.query === "object");
+    assert.strictEqual(res.query.rawCode, "0x80040001");
+    assert.strictEqual(res.query.majorName, "Application");
+    assert.strictEqual(res.query.minorName, "Maintenance");
+    assert.strictEqual(res.query.isPlanned, true);
+    assert(Array.isArray(res.commonPresets));
+    assert(res.commonPresets.length >= 4);
+  });
+
+  await itAsync("getShutdownPrivileges inspects token privileges, elevation, and pending reboot state", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getShutdownPrivileges();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getShutdownPrivileges failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.elevation === "object");
+    assert(typeof res.elevation.isAdministrator === "boolean");
+    assert(typeof res.elevation.hasShutdownPrivilege === "boolean");
+    assert(typeof res.rebootPending === "object");
+    assert(typeof res.rebootPending.isRebootPending === "boolean");
+    assert(typeof res.shutdownState === "object");
+    assert(typeof res.shutdownState.isShutdownInProgress === "boolean");
+  });
+
+  await itAsync("initiateShutdown validates parameters and executes safe dry-run by default", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.initiateShutdown({
+      gracePeriodSeconds: 45,
+      flags: "restart,force",
+      reason: "0x80040001",
+      message: "Automated test dry-run"
+    });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "initiateShutdown failed: " + JSON.stringify(res));
+    assert.strictEqual(res.dryRun, true);
+    assert.strictEqual(res.validated, true);
+    assert.strictEqual(res.gracePeriodSeconds, 45);
+    assert(Array.isArray(res.flags));
+    assert(res.flags.includes("RESTART"));
+    assert(res.flags.includes("FORCE_OTHERS"));
+    assert.strictEqual(res.reasonHex, "0x80040001");
+    assert.strictEqual(res.wouldInitiate, true);
+  });
+
+  await itAsync("abortShutdown queries and safely probes active shutdown countdown state", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.abortShutdown({});
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "abortShutdown failed: " + JSON.stringify(res));
+    assert(typeof res.aborted === "boolean");
+    assert(typeof res.wasShutdownInProgress === "boolean");
+    assert(typeof res.resultCode === "number");
+    assert(typeof res.message === "string");
+  });
+
+  it("All 204 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 200);
+    assert.strictEqual(SYSTEM_TOOLS.length, 204);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -4352,6 +4424,10 @@ async function run() {
     assert(toolNames.includes("super_wcm_connection_cost"));
     assert(toolNames.includes("super_wcm_dataplan_status"));
     assert(toolNames.includes("super_wcm_global_policies"));
+    assert(toolNames.includes("super_shutdown_reasons"));
+    assert(toolNames.includes("super_shutdown_privileges"));
+    assert(toolNames.includes("super_shutdown_initiate"));
+    assert(toolNames.includes("super_shutdown_abort"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

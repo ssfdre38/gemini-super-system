@@ -89,6 +89,7 @@
   - [71. Windows WebAuthn & Platform Authenticator Subsystem](#71--windows-webauthn--platform-authenticator-subsystem-webauthnh--webauthndll)
   - [72. Windows Native RFC 6455 WebSocket Engine Subsystem](#72--windows-native-rfc-6455-websocket-engine-subsystem-websocketh--websocketdll)
   - [73. Windows Connection Manager Subsystem](#73--windows-connection-manager-subsystem-wcmapih--wcmapidll)
+  - [74. Windows Power, Shutdown & System Initiation Subsystem](#74--windows-power-shutdown--system-initiation-subsystem-initiateshutdownh--reasonh--advapi32dll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -975,6 +976,18 @@ Directly interfaces with the Windows Connection Manager (WCM) API via native Win
 - **Global Connection Manager Policies (`super_wcm_global_policies`)**: Queries machine-wide connection management policies via `WcmQueryProperty`: `minimizeConnections` (prevents multiple concurrent Wi-Fi/cellular connections), `domainPrecedence` (prioritizes domain-joined network connections), `roamingRestriction` (suppresses background transfers while roaming), and `powerManagement` (disables radios while on battery/standby).
 - **200 Tools Milestone**: Reaches **200 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **58 comprehensive test suites (183/183 tests passing 100%)** and **54 environment health checks**.
 - **Native MCP Tools**: `super_wcm_profile_list`, `super_wcm_connection_cost`, `super_wcm_dataplan_status`, `super_wcm_global_policies`.
+
+---
+
+## 74. 🛑 Windows Power, Shutdown & System Initiation Subsystem (`initiateshutdown.h` / `reason.h` / `advapi32.dll`)
+
+Directly interfaces with the Windows Power & Shutdown Initiation APIs via native Win32 `advapi32.dll` P/Invoke:
+- **Canonical Win32 Reason Decoding & Presets (`super_shutdown_reasons`)**: Parses standard Win32 `reason.h` major and minor reason codes, compound reason masks, and planned maintenance flags (`SHTDN_REASON_FLAG_PLANNED`). Translates raw hex codes into structured major categories (`Application`, `System`, `OperatingSystem`, `Hardware`, `Software`, `Power`) and minor subreasons (`Maintenance`, `Installation`, `Upgrade`, `Reconfiguration`, `SecurityFix`, `Unresponsive/Hung`).
+- **Shutdown Privilege & Pending Reboot Inspection (`super_shutdown_privileges`)**: Queries process token privileges (`SeShutdownPrivilege`, `SeRemoteShutdownPrivilege`) and administrator elevation status via `OpenProcessToken` and `AdjustTokenPrivileges`. Inspects component reboot flags across Component Based Servicing (`RebootPending`), Windows Update (`RebootRequired`), and Session Manager (`PendingFileRenameOperations`). Probes whether a shutdown countdown is actively in flight via `AbortSystemShutdownW`.
+- **System Shutdown & Restart Initiation (`super_shutdown_initiate`)**: Formats, validates, dry-runs, or actuates planned system shutdown and restart sequences via `InitiateShutdownW`. Configures grace period countdowns, broadcast messages to logged-on interactive users, restart behavior (`restart`, `poweroff`, `force`, `hybrid`, `restartapps`, `installupdates`), and compound reason codes. Defaults to non-destructive dry-run validation mode for agent safety.
+- **Active Shutdown Countdown Abort (`super_shutdown_abort`)**: Automatically enables token shutdown privileges and halts an in-flight system shutdown countdown with active grace period via `AbortSystemShutdownW` on the local machine or remote nodes.
+- **204 Tools Milestone**: Reaches **204 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **59 comprehensive test suites (187/187 tests passing 100%)** and **55 environment health checks**.
+- **Native MCP Tools**: `super_shutdown_reasons`, `super_shutdown_privileges`, `super_shutdown_initiate`, `super_shutdown_abort`.
 
 ---
 

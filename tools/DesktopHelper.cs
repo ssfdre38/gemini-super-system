@@ -18,6 +18,7 @@ using Microsoft.Win32;
 using System.IO.Pipes;
 using System.IO.MemoryMappedFiles;
 using System.Security.Cryptography.X509Certificates;
+using System.Security.Principal;
 
 namespace GeminiSuperDesktop {
     [StructLayout(LayoutKind.Sequential)]
@@ -14154,6 +14155,400 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 74: Windows Power, Shutdown & System Initiation Subsystem (initiateshutdown.h / reason.h / advapi32.dll)
+
+        // Shutdown Major Reasons
+        const uint SHTDN_REASON_MAJOR_OTHER            = 0x00000000;
+        const uint SHTDN_REASON_MAJOR_HARDWARE         = 0x00010000;
+        const uint SHTDN_REASON_MAJOR_OPERATINGSYSTEM  = 0x00020000;
+        const uint SHTDN_REASON_MAJOR_SOFTWARE         = 0x00030000;
+        const uint SHTDN_REASON_MAJOR_APPLICATION      = 0x00040000;
+        const uint SHTDN_REASON_MAJOR_SYSTEM           = 0x00050000;
+        const uint SHTDN_REASON_MAJOR_POWER            = 0x00060000;
+        const uint SHTDN_REASON_MAJOR_LEGACY_API       = 0x00070000;
+
+        // Shutdown Minor Reasons
+        const uint SHTDN_REASON_MINOR_OTHER            = 0x00000000;
+        const uint SHTDN_REASON_MINOR_MAINTENANCE      = 0x00000001;
+        const uint SHTDN_REASON_MINOR_INSTALLATION     = 0x00000002;
+        const uint SHTDN_REASON_MINOR_UPGRADE          = 0x00000003;
+        const uint SHTDN_REASON_MINOR_RECONFIG         = 0x00000004;
+        const uint SHTDN_REASON_MINOR_HUNG             = 0x00000005;
+        const uint SHTDN_REASON_MINOR_UNSTABLE         = 0x00000006;
+        const uint SHTDN_REASON_MINOR_DISK             = 0x00000007;
+        const uint SHTDN_REASON_MINOR_PROCESSOR        = 0x00000008;
+        const uint SHTDN_REASON_MINOR_NETWORKCARD      = 0x00000009;
+        const uint SHTDN_REASON_MINOR_POWER_SUPPLY     = 0x0000000A;
+        const uint SHTDN_REASON_MINOR_CORDUNPLUGGED    = 0x0000000B;
+        const uint SHTDN_REASON_MINOR_ENVIRONMENT      = 0x0000000C;
+        const uint SHTDN_REASON_MINOR_HARDWARE_DRIVER  = 0x0000000D;
+        const uint SHTDN_REASON_MINOR_OTHERDRIVER      = 0x0000000E;
+        const uint SHTDN_REASON_MINOR_BLUESCREEN       = 0x0000000F;
+        const uint SHTDN_REASON_MINOR_SERVICEPACK      = 0x00000010;
+        const uint SHTDN_REASON_MINOR_HOTFIX           = 0x00000011;
+        const uint SHTDN_REASON_MINOR_SECURITYFIX      = 0x00000012;
+        const uint SHTDN_REASON_MINOR_SECURITY         = 0x00000013;
+        const uint SHTDN_REASON_MINOR_NETWORK_CONNECTIVITY = 0x00000014;
+        const uint SHTDN_REASON_MINOR_WMI              = 0x00000015;
+        const uint SHTDN_REASON_MINOR_SERVICEPACK_UNINSTALL = 0x00000016;
+        const uint SHTDN_REASON_MINOR_HOTFIX_UNINSTALL = 0x00000017;
+        const uint SHTDN_REASON_MINOR_SECURITYFIX_UNINSTALL = 0x00000018;
+        const uint SHTDN_REASON_MINOR_MMC              = 0x00000019;
+        const uint SHTDN_REASON_MINOR_SYSTEMRESTORE    = 0x0000001A;
+        const uint SHTDN_REASON_MINOR_TERMSRV          = 0x00000020;
+
+        // Reason Flags
+        const uint SHTDN_REASON_FLAG_USER_DEFINED      = 0x40000000;
+        const uint SHTDN_REASON_FLAG_PLANNED           = 0x80000000;
+
+        // Shutdown Flags for InitiateShutdown
+        const uint SHUTDOWN_FORCE_OTHERS               = 0x00000001;
+        const uint SHUTDOWN_FORCE_SELF                 = 0x00000002;
+        const uint SHUTDOWN_RESTART                    = 0x00000004;
+        const uint SHUTDOWN_POWEROFF                   = 0x00000008;
+        const uint SHUTDOWN_NOREBOOT                   = 0x00000010;
+        const uint SHUTDOWN_GRACE_OVERRIDE             = 0x00000020;
+        const uint SHUTDOWN_INSTALL_UPDATES            = 0x00000040;
+        const uint SHUTDOWN_RESTARTAPPS                = 0x00000080;
+        const uint SHUTDOWN_SKIP_SVC_PRESHUTDOWN       = 0x00000100;
+        const uint SHUTDOWN_HYBRID                     = 0x00000200;
+        const uint SHUTDOWN_RESTART_BOOTOPTIONS        = 0x00000400;
+        const uint SHUTDOWN_SOFT_REBOOT                = 0x00000800;
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct SHUTDOWN_LUID {
+            public uint LowPart;
+            public int HighPart;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct SHUTDOWN_LUID_AND_ATTRIBUTES {
+            public SHUTDOWN_LUID Luid;
+            public uint Attributes;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct SHUTDOWN_TOKEN_PRIVILEGES {
+            public uint PrivilegeCount;
+            public SHUTDOWN_LUID_AND_ATTRIBUTES Privileges;
+        }
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool LookupPrivilegeValue(string lpSystemName, string lpName, out SHUTDOWN_LUID lpLuid);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        static extern bool AdjustTokenPrivileges(
+            IntPtr TokenHandle,
+            bool DisableAllPrivileges,
+            ref SHUTDOWN_TOKEN_PRIVILEGES NewState,
+            uint BufferLength,
+            IntPtr PreviousState,
+            IntPtr ReturnLength
+        );
+
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint InitiateShutdown(
+            string lpMachineName,
+            string lpMessage,
+            uint dwGracePeriod,
+            uint dwShutdownFlags,
+            uint dwReason
+        );
+
+        [DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool AbortSystemShutdown(string lpMachineName);
+
+        static bool EnableShutdownPrivilege() {
+            try {
+                IntPtr hToken = IntPtr.Zero;
+                if (OpenProcessToken(Process.GetCurrentProcess().Handle, 0x0020 | 0x0008, out hToken)) {
+                    try {
+                        SHUTDOWN_LUID luid;
+                        if (LookupPrivilegeValue(null, "SeShutdownPrivilege", out luid)) {
+                            var tp = new SHUTDOWN_TOKEN_PRIVILEGES();
+                            tp.PrivilegeCount = 1;
+                            tp.Privileges.Luid = luid;
+                            tp.Privileges.Attributes = 0x00000002; // SE_PRIVILEGE_ENABLED
+                            AdjustTokenPrivileges(hToken, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero);
+                            return Marshal.GetLastWin32Error() == 0;
+                        }
+                    } finally {
+                        CloseHandle(hToken);
+                    }
+                }
+            } catch {}
+            return false;
+        }
+
+        static Tuple<string, string> DecodeShutdownReason(uint code) {
+            uint major = code & 0x00FF0000;
+            uint minor = code & 0x0000FFFF;
+
+            string majorName = "Other";
+            if (major == SHTDN_REASON_MAJOR_HARDWARE) majorName = "Hardware";
+            else if (major == SHTDN_REASON_MAJOR_OPERATINGSYSTEM) majorName = "OperatingSystem";
+            else if (major == SHTDN_REASON_MAJOR_SOFTWARE) majorName = "Software";
+            else if (major == SHTDN_REASON_MAJOR_APPLICATION) majorName = "Application";
+            else if (major == SHTDN_REASON_MAJOR_SYSTEM) majorName = "System";
+            else if (major == SHTDN_REASON_MAJOR_POWER) majorName = "Power";
+            else if (major == SHTDN_REASON_MAJOR_LEGACY_API) majorName = "LegacyApi";
+
+            string minorName = "Other";
+            if (minor == SHTDN_REASON_MINOR_MAINTENANCE) minorName = "Maintenance";
+            else if (minor == SHTDN_REASON_MINOR_INSTALLATION) minorName = "Installation";
+            else if (minor == SHTDN_REASON_MINOR_UPGRADE) minorName = "Upgrade";
+            else if (minor == SHTDN_REASON_MINOR_RECONFIG) minorName = "Reconfig";
+            else if (minor == SHTDN_REASON_MINOR_HUNG) minorName = "Hung";
+            else if (minor == SHTDN_REASON_MINOR_UNSTABLE) minorName = "Unstable";
+            else if (minor == SHTDN_REASON_MINOR_DISK) minorName = "Disk";
+            else if (minor == SHTDN_REASON_MINOR_PROCESSOR) minorName = "Processor";
+            else if (minor == SHTDN_REASON_MINOR_NETWORKCARD) minorName = "NetworkCard";
+            else if (minor == SHTDN_REASON_MINOR_POWER_SUPPLY) minorName = "PowerSupply";
+            else if (minor == SHTDN_REASON_MINOR_CORDUNPLUGGED) minorName = "CordUnplugged";
+            else if (minor == SHTDN_REASON_MINOR_ENVIRONMENT) minorName = "Environment";
+            else if (minor == SHTDN_REASON_MINOR_HARDWARE_DRIVER) minorName = "HardwareDriver";
+            else if (minor == SHTDN_REASON_MINOR_OTHERDRIVER) minorName = "OtherDriver";
+            else if (minor == SHTDN_REASON_MINOR_BLUESCREEN) minorName = "Bluescreen";
+            else if (minor == SHTDN_REASON_MINOR_SERVICEPACK) minorName = "ServicePack";
+            else if (minor == SHTDN_REASON_MINOR_HOTFIX) minorName = "Hotfix";
+            else if (minor == SHTDN_REASON_MINOR_SECURITYFIX) minorName = "SecurityFix";
+            else if (minor == SHTDN_REASON_MINOR_SECURITY) minorName = "Security";
+            else if (minor == SHTDN_REASON_MINOR_NETWORK_CONNECTIVITY) minorName = "NetworkConnectivity";
+            else if (minor == SHTDN_REASON_MINOR_WMI) minorName = "Wmi";
+            else if (minor == SHTDN_REASON_MINOR_MMC) minorName = "Mmc";
+            else if (minor == SHTDN_REASON_MINOR_SYSTEMRESTORE) minorName = "SystemRestore";
+            else if (minor == SHTDN_REASON_MINOR_TERMSRV) minorName = "TerminalServices";
+
+            return Tuple.Create(majorName, minorName);
+        }
+
+        static void ShutdownReasonsCmd(string queryCodeStr) {
+            try {
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true");
+
+                if (!string.IsNullOrEmpty(queryCodeStr)) {
+                    uint code = 0;
+                    if (queryCodeStr.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) {
+                        uint.TryParse(queryCodeStr.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out code);
+                    } else {
+                        uint.TryParse(queryCodeStr, out code);
+                    }
+
+                    var decoded = DecodeShutdownReason(code);
+                    bool planned = (code & SHTDN_REASON_FLAG_PLANNED) != 0;
+                    bool userDef = (code & SHTDN_REASON_FLAG_USER_DEFINED) != 0;
+                    uint majorCode = code & 0x00FF0000;
+                    uint minorCode = code & 0x0000FFFF;
+
+                    string formatted = string.Format("{0}: {1}{2}",
+                        decoded.Item1, decoded.Item2, planned ? " (Planned)" : "");
+
+                    sb.Append(string.Format(", \"query\": {{\"rawCode\": \"0x{0:X8}\", \"majorCode\": \"0x{1:X8}\", \"majorName\": \"{2}\", \"minorCode\": \"0x{3:X8}\", \"minorName\": \"{4}\", \"isPlanned\": {5}, \"isUserDefined\": {6}, \"formatted\": \"{7}\"}}",
+                        code, majorCode, decoded.Item1, minorCode, decoded.Item2, planned ? "true" : "false", userDef ? "true" : "false", EscapeJson(formatted)));
+                }
+
+                sb.Append(", \"commonPresets\": [");
+                sb.Append("{\"name\": \"Application: Maintenance (Planned)\", \"code\": \"0x80040001\", \"description\": \"Planned maintenance window application restart/shutdown\"}, ");
+                sb.Append("{\"name\": \"Application: Installation (Planned)\", \"code\": \"0x80040002\", \"description\": \"Planned software installation completion\"}, ");
+                sb.Append("{\"name\": \"Operating System: Upgrade (Planned)\", \"code\": \"0x80020003\", \"description\": \"Planned OS upgrade or kernel patch installation\"}, ");
+                sb.Append("{\"name\": \"Operating System: Security Fix (Planned)\", \"code\": \"0x80020012\", \"description\": \"Planned critical security patch deployment\"}, ");
+                sb.Append("{\"name\": \"Operating System: Reconfiguration (Planned)\", \"code\": \"0x80020004\", \"description\": \"Planned hardware or system configuration change\"}, ");
+                sb.Append("{\"name\": \"System: Unresponsive / Hung (Unplanned)\", \"code\": \"0x00050005\", \"description\": \"Unplanned recovery from frozen system/service\"}");
+                sb.Append("]");
+
+                sb.Append("}");
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void ShutdownPrivilegesCmd() {
+            try {
+                bool isElevated = false;
+                using (var id = WindowsIdentity.GetCurrent()) {
+                    var p = new WindowsPrincipal(id);
+                    isElevated = p.IsInRole(WindowsBuiltInRole.Administrator);
+                }
+
+                bool hasShutdownPriv = false;
+                bool canEnableShutdownPriv = false;
+                bool hasRemotePriv = false;
+
+                IntPtr hToken = IntPtr.Zero;
+                if (OpenProcessToken(Process.GetCurrentProcess().Handle, 0x0020 | 0x0008, out hToken)) {
+                    try {
+                        SHUTDOWN_LUID luid;
+                        if (LookupPrivilegeValue(null, "SeShutdownPrivilege", out luid)) {
+                            hasShutdownPriv = true;
+                            var tp = new SHUTDOWN_TOKEN_PRIVILEGES();
+                            tp.PrivilegeCount = 1;
+                            tp.Privileges.Luid = luid;
+                            tp.Privileges.Attributes = 0x00000002;
+                            if (AdjustTokenPrivileges(hToken, false, ref tp, 0, IntPtr.Zero, IntPtr.Zero)) {
+                                int err = Marshal.GetLastWin32Error();
+                                canEnableShutdownPriv = (err == 0);
+                            }
+                        }
+
+                        SHUTDOWN_LUID rLuid;
+                        if (LookupPrivilegeValue(null, "SeRemoteShutdownPrivilege", out rLuid)) {
+                            hasRemotePriv = true;
+                        }
+                    } finally {
+                        CloseHandle(hToken);
+                    }
+                }
+
+                bool cbsPending = false;
+                try {
+                    using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending")) {
+                        if (key != null) cbsPending = true;
+                    }
+                } catch {}
+
+                bool wuPending = false;
+                try {
+                    using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\Auto Update\RebootRequired")) {
+                        if (key != null) wuPending = true;
+                    }
+                } catch {}
+
+                bool renamePending = false;
+                try {
+                    using (var key = Registry.LocalMachine.OpenSubKey(@"SYSTEM\CurrentControlSet\Control\Session Manager")) {
+                        if (key != null && key.GetValue("PendingFileRenameOperations") != null) renamePending = true;
+                    }
+                } catch {}
+
+                bool isRebootPending = cbsPending || wuPending || renamePending;
+
+                // Test active shutdown state
+                bool abortOk = AbortSystemShutdown(null);
+                int abortErr = Marshal.GetLastWin32Error();
+                bool isShutdownInProgress = abortOk || (abortErr != 1116); // 1116 = ERROR_SHUTDOWN_NOT_IN_PROGRESS
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"apiAvailable\": true, \"elevation\": {{\"isAdministrator\": {0}, \"hasShutdownPrivilege\": {1}, \"canEnableShutdownPrivilege\": {2}, \"hasRemoteShutdownPrivilege\": {3}}}, \"rebootPending\": {{\"isRebootPending\": {4}, \"componentBasedServicing\": {5}, \"windowsUpdate\": {6}, \"pendingFileRenameOperations\": {7}}}, \"shutdownState\": {{\"isShutdownInProgress\": {8}, \"probeStatusCode\": {9}, \"probeStatusMessage\": \"{10}\"}}}}",
+                    isElevated ? "true" : "false",
+                    hasShutdownPriv ? "true" : "false",
+                    canEnableShutdownPriv ? "true" : "false",
+                    hasRemotePriv ? "true" : "false",
+                    isRebootPending ? "true" : "false",
+                    cbsPending ? "true" : "false",
+                    wuPending ? "true" : "false",
+                    renamePending ? "true" : "false",
+                    isShutdownInProgress ? "true" : "false",
+                    abortErr,
+                    abortErr == 1116 ? "No shutdown in progress" : (abortOk ? "Shutdown in progress (aborted during probe)" : "Probe completed")
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void ShutdownInitiateCmd(string graceSecStr, string flagsStr, string reasonHexStr, string message, bool dryRun) {
+            try {
+                uint gracePeriod = 30;
+                if (!string.IsNullOrEmpty(graceSecStr)) uint.TryParse(graceSecStr, out gracePeriod);
+
+                uint flags = SHUTDOWN_RESTART | SHUTDOWN_RESTARTAPPS;
+                if (!string.IsNullOrEmpty(flagsStr)) {
+                    if (flagsStr.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) {
+                        uint.TryParse(flagsStr.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out flags);
+                    } else if (uint.TryParse(flagsStr, out flags)) {
+                        // parsed as integer
+                    } else {
+                        // parsed as comma-separated names
+                        uint parsedFlags = 0;
+                        string[] parts = flagsStr.Split(new char[] { ',', '|', ';' }, StringSplitOptions.RemoveEmptyEntries);
+                        foreach (var part in parts) {
+                            string p = part.Trim().ToLowerInvariant();
+                            if (p == "restart") parsedFlags |= SHUTDOWN_RESTART;
+                            else if (p == "poweroff") parsedFlags |= SHUTDOWN_POWEROFF;
+                            else if (p == "force" || p == "forceothers") parsedFlags |= SHUTDOWN_FORCE_OTHERS;
+                            else if (p == "forceself") parsedFlags |= SHUTDOWN_FORCE_SELF;
+                            else if (p == "noreboot") parsedFlags |= SHUTDOWN_NOREBOOT;
+                            else if (p == "hybrid") parsedFlags |= SHUTDOWN_HYBRID;
+                            else if (p == "restartapps") parsedFlags |= SHUTDOWN_RESTARTAPPS;
+                            else if (p == "installupdates") parsedFlags |= SHUTDOWN_INSTALL_UPDATES;
+                            else if (p == "graceoverride") parsedFlags |= SHUTDOWN_GRACE_OVERRIDE;
+                        }
+                        if (parsedFlags != 0) flags = parsedFlags;
+                    }
+                }
+
+                uint reason = SHTDN_REASON_MAJOR_APPLICATION | SHTDN_REASON_MINOR_MAINTENANCE | SHTDN_REASON_FLAG_PLANNED;
+                if (!string.IsNullOrEmpty(reasonHexStr)) {
+                    if (reasonHexStr.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) {
+                        uint.TryParse(reasonHexStr.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out reason);
+                    } else {
+                        uint.TryParse(reasonHexStr, out reason);
+                    }
+                }
+
+                string msg = string.IsNullOrEmpty(message) ? "System maintenance initiated by Gemini Super System" : message;
+                var reasonDecoded = DecodeShutdownReason(reason);
+                bool privEnabled = EnableShutdownPrivilege();
+
+                var flagList = new List<string>();
+                if ((flags & SHUTDOWN_RESTART) != 0) flagList.Add("RESTART");
+                if ((flags & SHUTDOWN_POWEROFF) != 0) flagList.Add("POWEROFF");
+                if ((flags & SHUTDOWN_FORCE_OTHERS) != 0) flagList.Add("FORCE_OTHERS");
+                if ((flags & SHUTDOWN_FORCE_SELF) != 0) flagList.Add("FORCE_SELF");
+                if ((flags & SHUTDOWN_NOREBOOT) != 0) flagList.Add("NOREBOOT");
+                if ((flags & SHUTDOWN_HYBRID) != 0) flagList.Add("HYBRID");
+                if ((flags & SHUTDOWN_RESTARTAPPS) != 0) flagList.Add("RESTARTAPPS");
+                if ((flags & SHUTDOWN_INSTALL_UPDATES) != 0) flagList.Add("INSTALL_UPDATES");
+
+                var sb = new StringBuilder();
+                if (dryRun) {
+                    sb.Append("{\"success\": true, \"apiAvailable\": true, \"dryRun\": true, \"validated\": true, ");
+                    sb.Append(string.Format("\"gracePeriodSeconds\": {0}, \"flagsHex\": \"0x{1:X8}\", \"flags\": [\"{2}\"], ",
+                        gracePeriod, flags, string.Join("\", \"", flagList.ToArray())));
+                    sb.Append(string.Format("\"reasonHex\": \"0x{0:X8}\", \"reason\": {{\"major\": \"{1}\", \"minor\": \"{2}\", \"isPlanned\": {3}}}, ",
+                        reason, reasonDecoded.Item1, reasonDecoded.Item2, (reason & SHTDN_REASON_FLAG_PLANNED) != 0 ? "true" : "false"));
+                    sb.Append(string.Format("\"broadcastMessage\": \"{0}\", \"privilegeEnabled\": {1}, \"wouldInitiate\": true}}",
+                        EscapeJson(msg), privEnabled ? "true" : "false"));
+                } else {
+                    uint ret = InitiateShutdown(null, msg, gracePeriod, flags, reason);
+                    sb.Append(string.Format("{{\"success\": {0}, \"apiAvailable\": true, \"dryRun\": false, \"resultCode\": \"0x{1:X8}\", \"win32Error\": {2}, \"gracePeriodSeconds\": {3}, \"broadcastMessage\": \"{4}\"}}",
+                        ret == 0 ? "true" : "false", ret, ret, gracePeriod, EscapeJson(msg)));
+                }
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void ShutdownAbortCmd(string machineName) {
+            try {
+                EnableShutdownPrivilege();
+                string mach = string.IsNullOrEmpty(machineName) ? null : machineName;
+                bool ok = AbortSystemShutdown(mach);
+                int err = Marshal.GetLastWin32Error();
+
+                bool noShutdown = (!ok && err == 1116);
+                bool success = ok || noShutdown;
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": {0}, \"apiAvailable\": true, \"aborted\": {1}, \"wasShutdownInProgress\": {2}, \"machine\": \"{3}\", \"resultCode\": {4}, \"message\": \"{5}\"}}",
+                    success ? "true" : "false",
+                    ok ? "true" : "false",
+                    ok ? "true" : "false",
+                    EscapeJson(machineName ?? "localhost"),
+                    ok ? 0 : err,
+                    ok ? "Shutdown countdown successfully aborted" : (noShutdown ? "No system shutdown was in progress" : string.Format("Abort failed with Win32 error {0}", err))
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -17445,6 +17840,21 @@ namespace GeminiSuperDesktop {
                 WcmDataplanStatusCmd(prof, guid);
             } else if (cmd == "wcm_global_policies" || cmd == "wcm-global-policies") {
                 WcmGlobalPoliciesCmd();
+            } else if (cmd == "shutdown_reasons" || cmd == "shutdown-reasons") {
+                string query = args.Length >= 2 ? args[1] : "";
+                ShutdownReasonsCmd(query);
+            } else if (cmd == "shutdown_privileges" || cmd == "shutdown-privileges") {
+                ShutdownPrivilegesCmd();
+            } else if (cmd == "shutdown_initiate" || cmd == "shutdown-initiate") {
+                string grace = args.Length >= 2 ? args[1] : "30";
+                string flags = args.Length >= 3 ? args[2] : "";
+                string reason = args.Length >= 4 ? args[3] : "";
+                string msg = args.Length >= 5 ? args[4] : "";
+                bool dryRun = args.Length < 6 || (args[5].ToLowerInvariant() != "live" && args[5].ToLowerInvariant() != "false");
+                ShutdownInitiateCmd(grace, flags, reason, msg, dryRun);
+            } else if (cmd == "shutdown_abort" || cmd == "shutdown-abort") {
+                string mach = args.Length >= 2 ? args[1] : "";
+                ShutdownAbortCmd(mach);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

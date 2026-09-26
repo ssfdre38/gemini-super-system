@@ -3927,6 +3927,69 @@ const SYSTEM_TOOLS = [
           type: "object",
           properties: {}
         }
+      },
+      {
+        name: "super_shutdown_reasons",
+        description: "Inspects canonical Win32 shutdown major/minor reason codes (reason.h), compound reason masks, planned maintenance presets, and decodes arbitrary shutdown reason codes via advapi32.dll.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            reasonCode: {
+              type: "string",
+              description: "Optional hex string (e.g. '0x80040001') or integer reason code to decode. Omit to list standard categories and presets."
+            }
+          }
+        }
+      },
+      {
+        name: "super_shutdown_privileges",
+        description: "Inspects system and token shutdown privileges (SeShutdownPrivilege, SeRemoteShutdownPrivilege), administrator elevation, pending reboot indicators (CBS, Windows Update, PendingFileRename), and active shutdown state via advapi32.dll.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_shutdown_initiate",
+        description: "Formats, validates, dry-runs, or initiates a planned system shutdown/restart via InitiateShutdownW with grace period, flags (restart, poweroff, force, hybrid, restartapps), message, and decoded reason code. Safe dry-run mode by default.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            gracePeriodSeconds: {
+              type: "number",
+              description: "Grace period countdown in seconds before shutdown (default: 30)."
+            },
+            flags: {
+              type: "string",
+              description: "Shutdown flags (e.g. 'restart,restartapps', 'restart,force', or bitmask hex). Defaults to 'restart,restartapps'."
+            },
+            reason: {
+              type: "string",
+              description: "Win32 reason code (e.g. '0x80040001' for Planned Maintenance). Defaults to '0x80040001'."
+            },
+            message: {
+              type: "string",
+              description: "Broadcast message displayed to logged-on users."
+            },
+            live: {
+              type: "boolean",
+              description: "Must be explicitly set to true to execute live shutdown/restart. Defaults to false (dry-run validation)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_shutdown_abort",
+        description: "Aborts an in-flight initiated system shutdown with active grace countdown via AbortSystemShutdownW on the local or specified remote machine.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            machineName: {
+              type: "string",
+              description: "Optional remote machine name. Omit or empty for local machine."
+            }
+          }
+        }
       }
 ];
 
@@ -6924,6 +6987,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🛡️ [Windows Connection Manager Global Policies]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_shutdown_reasons") {
+    const res = await orch.getShutdownReasons(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📋 [Win32 Shutdown Reason Codes & Presets]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_shutdown_privileges") {
+    const res = await orch.getShutdownPrivileges();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔐 [Windows Shutdown Privileges & Pending Reboot State]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_shutdown_initiate") {
+    const res = await orch.initiateShutdown(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows InitiateShutdown Execution & Dry-Run Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_shutdown_abort") {
+    const res = await orch.abortShutdown(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛑 [Windows AbortSystemShutdown Execution]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
