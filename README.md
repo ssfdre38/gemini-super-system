@@ -85,6 +85,7 @@
   - [67. Windows Background Intelligent Transfer Service (BITS) Subsystem](#67--windows-background-intelligent-transfer-service-bits-subsystem-bitsh--qmgrdll)
   - [68. Windows Bluetooth & BLE Hardware Subsystem](#68--windows-bluetooth--ble-hardware-subsystem-bluetoothapish--bthpropscpl)
   - [69. Windows Error Reporting & Crash Forensics Subsystem](#69--windows-error-reporting--crash-forensics-subsystem-werapih--werdll--errorreph)
+  - [70. Windows Cabinet Compression & Extraction Subsystem](#70--windows-cabinet-compression--extraction-subsystem-fcih--fdih--cabinetdll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -926,6 +927,17 @@ Directly accesses the Windows Error Reporting (WER) and crash forensics subsyste
 - **Application Error Reporting Exclusion Management (`super_wer_exclusions`)**: Inspects and controls the Windows Error Reporting excluded application registry lists (`WerAddExcludedApplication`, `WerRemoveExcludedApplication`, `HKCU\Software\Microsoft\Windows\Windows Error Reporting\ExcludedApplications`, `HKLM\Software\Microsoft\Windows\Windows Error Reporting\ExcludedApplications`). Prevents unwanted WER crash dialogues or diagnostic reporting popups during automated headless or development workflows.
 - **187 Tools Milestone**: Reaches **187 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **54 comprehensive test suites (170/170 tests passing 100%)** and **50 environment health checks**.
 - **Native MCP Tools**: `super_wer_reports`, `super_wer_create_report`, `super_wer_exclusions`.
+
+---
+
+## 70. 🗜️ Windows Cabinet Compression & Extraction Subsystem (`fci.h` / `fdi.h` / `cabinet.dll`)
+
+Directly interfaces with the Microsoft Cabinet archive, compression, and extraction subsystem via native Win32 `MSCF` binary stream processing, `makecab.exe` directive generation, and `expand.exe` / `extrac32.exe` / `fdi.h` execution:
+- **Zero-Dependency Binary Cabinet Inspection (`super_cab_inspect`)**: Parses native Microsoft Cabinet (`MSCF`) headers, extracting cabinet file byte size, major/minor format version, folder block counts, file counts, cabinet set IDs, cabinet index sequence numbers, multi-part chaining flags (`hasPrevCabinet`, `hasNextCabinet`, `hasReserve`), and iterates all `CFFILE` records to decode uncompressed file sizes, uncompressed offsets, DOS dates/times (formatted to ISO-8601), and file attributes (`READONLY`, `HIDDEN`, `SYSTEM`, `ARCHIVE`, `EXEC`) alongside compression efficiency ratios.
+- **Sovereign Cabinet Archive Creation (`super_cab_create`)**: Packages arbitrary collections of files or directory trees into Microsoft-compliant `.cab` archives. Dynamically compiles MakeCAB Directive Files (`.ddf`), configuring compression algorithms (`MSZIP` Deflate, `LZX:15`..`LZX:21`, or uncompressed `NONE`), and verifies archive output integrity.
+- **Path-Preserving Cabinet Extraction (`super_cab_extract`)**: Extracts individual files, pattern-filtered files, or entire archives into target directories with full directory recursion, filename preservation, and uncompressed payload verification via native Windows expansion utilities.
+- **190 Tools Milestone**: Reaches **190 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **55 comprehensive test suites (173/173 tests passing 100%)** and **51 environment health checks**.
+- **Native MCP Tools**: `super_cab_inspect`, `super_cab_create`, `super_cab_extract`.
 
 ---
 

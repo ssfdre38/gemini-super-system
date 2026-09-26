@@ -3902,10 +3902,136 @@ async function run() {
     assert(Array.isArray(res.machineExclusions));
   });
 
-  it("All 187 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 55: Windows Cabinet Compression & Extraction Subsystem (fci.h / fdi.h / cabinet.dll)
+  console.log("\n\x1b[1m[Suite 55: Windows Cabinet Compression & Extraction Subsystem (fci.h / fdi.h / cabinet.dll)]\x1b[0m");
+
+  await itAsync("createCabinet creates valid MSCF cabinet archive with MSZIP compression", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const os = require("os");
+    const tmpDir = path.join(os.tmpdir(), "gemini_cab_test_" + Date.now());
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    const f1 = path.join(tmpDir, "manifest.json");
+    const f2 = path.join(tmpDir, "payload.txt");
+    fs.writeFileSync(f1, JSON.stringify({ system: "GeminiSuper", version: "2.4.0", timestamp: Date.now() }), "utf8");
+    fs.writeFileSync(f2, "Cabinet archive verification string with repetition ".repeat(10), "utf8");
+
+    const targetCab = path.join(tmpDir, "test_archive.cab");
+    try {
+      const res = await kb.createCabinet({
+        cabinetPath: targetCab,
+        files: [f1, f2],
+        compressionType: "MSZIP"
+      });
+
+      assert(res !== null && typeof res === "object");
+      assert.strictEqual(res.success, true, "createCabinet failed: " + JSON.stringify(res));
+      assert.strictEqual(res.fileCount, 2);
+      assert(typeof res.compressedSizeBytes === "number" && res.compressedSizeBytes > 0);
+      assert(typeof res.uncompressedSizeBytes === "number" && res.uncompressedSizeBytes > 0);
+      assert(typeof res.compressionRatioPercent === "number");
+      assert.strictEqual(res.compressionType, "MSZIP");
+      assert(fs.existsSync(targetCab));
+    } finally {
+      try {
+        if (fs.existsSync(tmpDir)) {
+          fs.rmSync ? fs.rmSync(tmpDir, { recursive: true, force: true }) : fs.rmdirSync(tmpDir, { recursive: true });
+        }
+      } catch {}
+    }
+  });
+
+  await itAsync("inspectCabinet parses MSCF headers, compression folders, and file entries", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const os = require("os");
+    const tmpDir = path.join(os.tmpdir(), "gemini_cab_insp_" + Date.now());
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    const f1 = path.join(tmpDir, "readme.txt");
+    fs.writeFileSync(f1, "Sample file content for cabinet inspect test", "utf8");
+
+    const targetCab = path.join(tmpDir, "inspect.cab");
+    try {
+      const createRes = await kb.createCabinet({
+        cabinetPath: targetCab,
+        files: [f1],
+        compressionType: "MSZIP"
+      });
+      assert(createRes.success);
+
+      const insp = await kb.inspectCabinet({ cabinetPath: targetCab });
+      assert(insp !== null && typeof insp === "object");
+      assert.strictEqual(insp.success, true, "inspectCabinet failed: " + JSON.stringify(insp));
+      assert.strictEqual(insp.signature, "MSCF");
+      assert.strictEqual(insp.fileCount, 1);
+      assert.strictEqual(insp.folderCount, 1);
+      assert(typeof insp.fileSize === "number" && insp.fileSize > 0);
+      assert(typeof insp.totalUncompressedBytes === "number" && insp.totalUncompressedBytes > 0);
+      assert(Array.isArray(insp.files) && insp.files.length === 1);
+      assert.strictEqual(insp.files[0].name, "readme.txt");
+      assert(typeof insp.files[0].uncompressedBytes === "number");
+      assert(Array.isArray(insp.files[0].attributes));
+    } finally {
+      try {
+        if (fs.existsSync(tmpDir)) {
+          fs.rmSync ? fs.rmSync(tmpDir, { recursive: true, force: true }) : fs.rmdirSync(tmpDir, { recursive: true });
+        }
+      } catch {}
+    }
+  });
+
+  await itAsync("extractCabinet expands files to destination preserving filenames and sizes", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const os = require("os");
+    const tmpDir = path.join(os.tmpdir(), "gemini_cab_extr_" + Date.now());
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    const f1 = path.join(tmpDir, "data.bin");
+    const originalContent = "Binary data payload for extraction test 1234567890";
+    fs.writeFileSync(f1, originalContent, "utf8");
+
+    const targetCab = path.join(tmpDir, "package.cab");
+    const extractDir = path.join(tmpDir, "extracted");
+    try {
+      const createRes = await kb.createCabinet({
+        cabinetPath: targetCab,
+        files: [f1],
+        compressionType: "MSZIP"
+      });
+      assert(createRes.success);
+
+      const extRes = await kb.extractCabinet({
+        cabinetPath: targetCab,
+        destinationPath: extractDir,
+        filter: "*"
+      });
+
+      assert(extRes !== null && typeof extRes === "object");
+      assert.strictEqual(extRes.success, true, "extractCabinet failed: " + JSON.stringify(extRes));
+      assert.strictEqual(extRes.filesExtracted, 1);
+      assert(extRes.totalBytesExtracted > 0);
+      assert(Array.isArray(extRes.files) && extRes.files.length === 1);
+      assert.strictEqual(extRes.files[0].name, "data.bin");
+
+      const extractedFile = path.join(extractDir, "data.bin");
+      assert(fs.existsSync(extractedFile));
+      assert.strictEqual(fs.readFileSync(extractedFile, "utf8"), originalContent);
+    } finally {
+      try {
+        if (fs.existsSync(tmpDir)) {
+          fs.rmSync ? fs.rmSync(tmpDir, { recursive: true, force: true }) : fs.rmdirSync(tmpDir, { recursive: true });
+        }
+      } catch {}
+    }
+  });
+
+  it("All 190 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 187);
+    assert.strictEqual(SYSTEM_TOOLS.length, 190);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -4026,6 +4152,9 @@ async function run() {
     assert(toolNames.includes("super_wer_reports"));
     assert(toolNames.includes("super_wer_create_report"));
     assert(toolNames.includes("super_wer_exclusions"));
+    assert(toolNames.includes("super_cab_inspect"));
+    assert(toolNames.includes("super_cab_create"));
+    assert(toolNames.includes("super_cab_extract"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

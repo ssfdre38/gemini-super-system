@@ -3752,6 +3752,66 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_cab_inspect",
+        description: "Inspects a Microsoft Cabinet (.cab) archive file using a native Win32 MSCF binary parser, extracting headers, compression folders, file manifest, uncompressed sizes, DOS timestamps, and file attributes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            cabinetPath: {
+              type: "string",
+              description: "Full or relative path to the target .cab cabinet file on disk."
+            }
+          },
+          required: ["cabinetPath"]
+        }
+      },
+      {
+        name: "super_cab_create",
+        description: "Creates and packages files or directories into a Microsoft Cabinet (.cab) archive using native makecab directives with MSZIP, LZX, or uncompressed storage.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            cabinetPath: {
+              type: "string",
+              description: "Destination path for the generated .cab archive file."
+            },
+            files: {
+              description: "Source files to pack: a single file path, directory path, array of file paths, or comma-separated list."
+            },
+            compressionType: {
+              type: "string",
+              enum: ["MSZIP", "LZX", "LZX:21", "LZX:15", "NONE"],
+              default: "MSZIP",
+              description: "Compression algorithm: 'MSZIP' (standard Deflate), 'LZX' / 'LZX:21' (high ratio), or 'NONE' (uncompressed)."
+            }
+          },
+          required: ["cabinetPath", "files"]
+        }
+      },
+      {
+        name: "super_cab_extract",
+        description: "Extracts files from a Microsoft Cabinet (.cab) archive into a destination directory using native expand/extrac32 with filename preservation and wildcard filtering.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            cabinetPath: {
+              type: "string",
+              description: "Path to the input .cab cabinet file to extract."
+            },
+            destinationPath: {
+              type: "string",
+              description: "Target directory path where extracted files will be written (created if not exists)."
+            },
+            filter: {
+              type: "string",
+              default: "*",
+              description: "Wildcard file filter or filename to extract (e.g. '*' for all, or '*.txt')."
+            }
+          },
+          required: ["cabinetPath"]
+        }
       }
 ];
 
@@ -6593,6 +6653,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🛡️ [WER Exclusions List - Action: ${res.action || "list"}]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_cab_inspect") {
+    const res = await orch.inspectCabinet(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📦 [Cabinet Inspection - ${res.signature || "MSCF"}]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_cab_create") {
+    const res = await orch.createCabinet(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🗜️ [Cabinet Archive Created - ${res.compressionType || "MSZIP"}]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_cab_extract") {
+    const res = await orch.extractCabinet(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📂 [Cabinet Archive Extracted - ${res.filesExtracted || 0} file(s)]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

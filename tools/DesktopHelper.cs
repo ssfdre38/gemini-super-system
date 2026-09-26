@@ -12966,6 +12966,380 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Phase 36: Windows Cabinet Compression & Extraction Subsystem (fci.h / fdi.h / cabinet.dll)
+
+        // Native Cabinet MSCF File Structure & Engine
+        static void CabInspectCmd(string cabPath) {
+            try {
+                if (string.IsNullOrEmpty(cabPath) || !File.Exists(cabPath)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Cabinet file not found: {0}\"}}", EscapeJson(cabPath ?? "")));
+                    return;
+                }
+
+                FileInfo fi = new FileInfo(cabPath);
+                using (FileStream fs = new FileStream(cabPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+                using (BinaryReader br = new BinaryReader(fs)) {
+                    if (fs.Length < 36) {
+                        Console.WriteLine("{\"success\": false, \"error\": \"File is too small to be a valid cabinet file\"}");
+                        return;
+                    }
+
+                    byte[] sig = br.ReadBytes(4);
+                    string sigStr = Encoding.ASCII.GetString(sig);
+                    if (sigStr != "MSCF") {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Invalid cabinet signature '{0}', expected 'MSCF'\"}}", EscapeJson(sigStr)));
+                        return;
+                    }
+
+                    uint reserved1 = br.ReadUInt32();
+                    uint cbCabinet = br.ReadUInt32();
+                    uint reserved2 = br.ReadUInt32();
+                    uint coffFiles = br.ReadUInt32();
+                    uint reserved3 = br.ReadUInt32();
+                    byte versionMinor = br.ReadByte();
+                    byte versionMajor = br.ReadByte();
+                    ushort cFolders = br.ReadUInt16();
+                    ushort cFiles = br.ReadUInt16();
+                    ushort flags = br.ReadUInt16();
+                    ushort setID = br.ReadUInt16();
+                    ushort iCabinet = br.ReadUInt16();
+
+                    bool hasPrev = (flags & 0x0001) != 0;
+                    bool hasNext = (flags & 0x0002) != 0;
+                    bool hasReserve = (flags & 0x0004) != 0;
+
+                    ushort cbCFHeader = 0;
+                    byte cbCFFolder = 0;
+                    byte cbCFData = 0;
+
+                    if (hasReserve) {
+                        cbCFHeader = br.ReadUInt16();
+                        cbCFFolder = br.ReadByte();
+                        cbCFData = br.ReadByte();
+                        if (cbCFHeader > 0) {
+                            fs.Seek(cbCFHeader, SeekOrigin.Current);
+                        }
+                    }
+
+                    string szCabPrev = "";
+                    string szDiskPrev = "";
+                    if (hasPrev) {
+                        szCabPrev = ReadNullTerminatedAscii(br);
+                        szDiskPrev = ReadNullTerminatedAscii(br);
+                    }
+
+                    string szCabNext = "";
+                    string szDiskNext = "";
+                    if (hasNext) {
+                        szCabNext = ReadNullTerminatedAscii(br);
+                        szDiskNext = ReadNullTerminatedAscii(br);
+                    }
+
+                    if (coffFiles >= fs.Length) {
+                        Console.WriteLine("{\"success\": false, \"error\": \"Cabinet coffFiles pointer is out of bounds\"}");
+                        return;
+                    }
+
+                    fs.Seek(coffFiles, SeekOrigin.Begin);
+
+                    ulong totalUncompressed = 0;
+                    StringBuilder sbFiles = new StringBuilder();
+
+                    for (int i = 0; i < cFiles && fs.Position < fs.Length; i++) {
+                        uint cbFile = br.ReadUInt32();
+                        uint uoffFolderStart = br.ReadUInt32();
+                        ushort iFolder = br.ReadUInt16();
+                        ushort dateVal = br.ReadUInt16();
+                        ushort timeVal = br.ReadUInt16();
+                        ushort attribs = br.ReadUInt16();
+
+                        bool isUtf8 = (attribs & 0x0080) != 0;
+                        string fileName = isUtf8 ? ReadNullTerminatedUtf8(br) : ReadNullTerminatedAscii(br);
+
+                        totalUncompressed += cbFile;
+
+                        int day = dateVal & 0x1f;
+                        int month = (dateVal >> 5) & 0x0f;
+                        int year = 1980 + ((dateVal >> 9) & 0x7f);
+                        int sec = (timeVal & 0x1f) * 2;
+                        int min = (timeVal >> 5) & 0x3f;
+                        int hour = (timeVal >> 11) & 0x1f;
+                        string isoDate = string.Format("{0:D4}-{1:D2}-{2:D2} {3:D2}:{4:D2}:{5:D2}", year, month, day, hour, min, sec);
+
+                        List<string> attrList = new List<string>();
+                        if ((attribs & 0x0001) != 0) attrList.Add("READONLY");
+                        if ((attribs & 0x0002) != 0) attrList.Add("HIDDEN");
+                        if ((attribs & 0x0004) != 0) attrList.Add("SYSTEM");
+                        if ((attribs & 0x0020) != 0) attrList.Add("ARCHIVE");
+                        if ((attribs & 0x0040) != 0) attrList.Add("EXEC");
+
+                        string attrsJson = "[" + string.Join(",", attrList.ConvertAll(a => "\"" + a + "\"").ToArray()) + "]";
+
+                        if (sbFiles.Length > 0) sbFiles.Append(",");
+                        sbFiles.Append(string.Format(
+                            "{{\"index\": {0}, \"name\": \"{1}\", \"uncompressedBytes\": {2}, \"folderIndex\": {3}, \"date\": \"{4}\", \"attributes\": {5}}}",
+                            i, EscapeJson(fileName), cbFile, iFolder, EscapeJson(isoDate), attrsJson
+                        ));
+                    }
+
+                    double ratio = 0.0;
+                    if (totalUncompressed > 0) {
+                        ratio = (1.0 - (double)cbCabinet / (double)totalUncompressed) * 100.0;
+                    }
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"cabinetPath\": \"{0}\", \"signature\": \"{1}\", \"fileSize\": {2}, \"cabinetBytes\": {3}, \"version\": \"{4}.{5}\", \"folderCount\": {6}, \"fileCount\": {7}, \"totalUncompressedBytes\": {8}, \"compressionRatioPercent\": {9:F2}, \"setID\": {10}, \"cabinetIndex\": {11}, \"flags\": {{\"hasPrevCabinet\": {12}, \"hasNextCabinet\": {13}, \"hasReserve\": {14}}}, \"prevCabinet\": \"{15}\", \"nextCabinet\": \"{16}\", \"files\": [{17}]}}",
+                        EscapeJson(fi.FullName),
+                        EscapeJson(sigStr),
+                        fi.Length,
+                        cbCabinet,
+                        versionMajor, versionMinor,
+                        cFolders, cFiles,
+                        totalUncompressed,
+                        ratio,
+                        setID, iCabinet,
+                        hasPrev ? "true" : "false",
+                        hasNext ? "true" : "false",
+                        hasReserve ? "true" : "false",
+                        EscapeJson(szCabPrev),
+                        EscapeJson(szCabNext),
+                        sbFiles.ToString()
+                    ));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static string ReadNullTerminatedAscii(BinaryReader br) {
+            List<byte> bytes = new List<byte>();
+            while (br.BaseStream.Position < br.BaseStream.Length) {
+                byte b = br.ReadByte();
+                if (b == 0) break;
+                bytes.Add(b);
+            }
+            return Encoding.ASCII.GetString(bytes.ToArray());
+        }
+
+        static string ReadNullTerminatedUtf8(BinaryReader br) {
+            List<byte> bytes = new List<byte>();
+            while (br.BaseStream.Position < br.BaseStream.Length) {
+                byte b = br.ReadByte();
+                if (b == 0) break;
+                bytes.Add(b);
+            }
+            return Encoding.UTF8.GetString(bytes.ToArray());
+        }
+
+        static void CabCreateCmd(string targetCabPath, string filesInput, string compressionType) {
+            try {
+                if (string.IsNullOrEmpty(targetCabPath)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"targetCabPath is required\"}");
+                    return;
+                }
+
+                string fullCabPath = Path.GetFullPath(targetCabPath);
+                string cabDir = Path.GetDirectoryName(fullCabPath);
+                string cabName = Path.GetFileName(fullCabPath);
+                if (!string.IsNullOrEmpty(cabDir) && !Directory.Exists(cabDir)) {
+                    Directory.CreateDirectory(cabDir);
+                }
+
+                string comp = (compressionType ?? "MSZIP").Trim().ToUpperInvariant();
+                if (comp != "MSZIP" && !comp.StartsWith("LZX") && comp != "NONE") {
+                    comp = "MSZIP";
+                }
+
+                List<Tuple<string, string>> fileMappings = new List<Tuple<string, string>>();
+
+                // Check if filesInput is a directory
+                if (Directory.Exists(filesInput)) {
+                    string[] allFiles = Directory.GetFiles(filesInput, "*", SearchOption.AllDirectories);
+                    foreach (string f in allFiles) {
+                        string rel = f.Substring(filesInput.TrimEnd('\\', '/').Length).TrimStart('\\', '/');
+                        fileMappings.Add(Tuple.Create(Path.GetFullPath(f), rel));
+                    }
+                } else if (filesInput.StartsWith("[") && filesInput.EndsWith("]")) {
+                    string inner = filesInput.Substring(1, filesInput.Length - 2).Trim();
+                    if (!string.IsNullOrEmpty(inner)) {
+                        string[] parts = inner.Split(',');
+                        foreach (string p in parts) {
+                            string trimmed = p.Trim().Trim('"', '\'');
+                            if (!string.IsNullOrEmpty(trimmed) && File.Exists(trimmed)) {
+                                string full = Path.GetFullPath(trimmed);
+                                fileMappings.Add(Tuple.Create(full, Path.GetFileName(full)));
+                            }
+                        }
+                    }
+                } else if (filesInput.Contains(";") || filesInput.Contains(",")) {
+                    char[] sep = new char[] { ';', ',' };
+                    string[] parts = filesInput.Split(sep, StringSplitOptions.RemoveEmptyEntries);
+                    foreach (string p in parts) {
+                        string trimmed = p.Trim().Trim('"', '\'');
+                        if (!string.IsNullOrEmpty(trimmed) && File.Exists(trimmed)) {
+                            string full = Path.GetFullPath(trimmed);
+                            fileMappings.Add(Tuple.Create(full, Path.GetFileName(full)));
+                        }
+                    }
+                } else if (File.Exists(filesInput)) {
+                    string full = Path.GetFullPath(filesInput);
+                    fileMappings.Add(Tuple.Create(full, Path.GetFileName(full)));
+                }
+
+                if (fileMappings.Count == 0) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"No valid files found to package into cabinet\"}");
+                    return;
+                }
+
+                string tempDdf = Path.Combine(Path.GetTempPath(), "cab_ddf_" + Guid.NewGuid().ToString("N") + ".ddf");
+                StringBuilder sbDdf = new StringBuilder();
+                sbDdf.AppendLine(string.Format(".Set CabinetNameTemplate=\"{0}\"", cabName));
+                sbDdf.AppendLine(string.Format(".Set DiskDirectoryTemplate=\"{0}\"", cabDir));
+                sbDdf.AppendLine(".Set Cabinet=ON");
+                sbDdf.AppendLine(".Set Compress=ON");
+
+                if (comp.StartsWith("LZX")) {
+                    sbDdf.AppendLine(".Set CompressionType=LZX");
+                    if (comp.Contains(":")) {
+                        string mem = comp.Split(':')[1];
+                        sbDdf.AppendLine(string.Format(".Set CompressionMemory={0}", mem));
+                    }
+                } else if (comp == "NONE") {
+                    sbDdf.AppendLine(".Set Compress=OFF");
+                } else {
+                    sbDdf.AppendLine(".Set CompressionType=MSZIP");
+                }
+
+                ulong totalUncompressed = 0;
+                foreach (var map in fileMappings) {
+                    sbDdf.AppendLine(string.Format("\"{0}\" \"{1}\"", map.Item1, map.Item2));
+                    try {
+                        totalUncompressed += (ulong)new FileInfo(map.Item1).Length;
+                    } catch {}
+                }
+
+                File.WriteAllText(tempDdf, sbDdf.ToString(), Encoding.ASCII);
+
+                // Run makecab.exe
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = "makecab.exe";
+                psi.Arguments = string.Format("/F \"{0}\"", tempDdf);
+                psi.WorkingDirectory = cabDir;
+                psi.CreateNoWindow = true;
+                psi.UseShellExecute = false;
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
+
+                long elapsedMs = 0;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                string stdout = "";
+                string stderr = "";
+
+                using (Process proc = Process.Start(psi)) {
+                    stdout = proc.StandardOutput.ReadToEnd();
+                    stderr = proc.StandardError.ReadToEnd();
+                    proc.WaitForExit(30000);
+                    sw.Stop();
+                    elapsedMs = sw.ElapsedMilliseconds;
+                }
+
+                try { File.Delete(tempDdf); } catch {}
+                try { File.Delete(Path.Combine(cabDir, "setup.inf")); } catch {}
+                try { File.Delete(Path.Combine(cabDir, "setup.rpt")); } catch {}
+
+                if (!File.Exists(fullCabPath)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"makecab failed to produce cabinet\", \"stderr\": \"{0}\", \"stdout\": \"{1}\"}}", EscapeJson(stderr), EscapeJson(stdout)));
+                    return;
+                }
+
+                FileInfo outFi = new FileInfo(fullCabPath);
+                double ratio = 0.0;
+                if (totalUncompressed > 0) {
+                    ratio = (1.0 - (double)outFi.Length / (double)totalUncompressed) * 100.0;
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"cabinetPath\": \"{0}\", \"fileCount\": {1}, \"compressedSizeBytes\": {2}, \"uncompressedSizeBytes\": {3}, \"compressionRatioPercent\": {4:F2}, \"compressionType\": \"{5}\", \"elapsedMs\": {6}}}",
+                    EscapeJson(fullCabPath),
+                    fileMappings.Count,
+                    outFi.Length,
+                    totalUncompressed,
+                    ratio,
+                    EscapeJson(comp),
+                    elapsedMs
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void CabExtractCmd(string cabPath, string destDir, string fileFilter) {
+            try {
+                if (string.IsNullOrEmpty(cabPath) || !File.Exists(cabPath)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Cabinet file not found: {0}\"}}", EscapeJson(cabPath ?? "")));
+                    return;
+                }
+
+                string fullCab = Path.GetFullPath(cabPath);
+                string targetDir = string.IsNullOrEmpty(destDir) ? Path.Combine(Path.GetDirectoryName(fullCab), Path.GetFileNameWithoutExtension(fullCab) + "_extracted") : Path.GetFullPath(destDir);
+                if (!Directory.Exists(targetDir)) {
+                    Directory.CreateDirectory(targetDir);
+                }
+
+                string filter = string.IsNullOrEmpty(fileFilter) ? "*" : fileFilter.Trim();
+
+                ProcessStartInfo psi = new ProcessStartInfo();
+                psi.FileName = "expand.exe";
+                psi.Arguments = string.Format("-R \"{0}\" -F:{1} \"{2}\"", fullCab, filter, targetDir);
+                psi.CreateNoWindow = true;
+                psi.UseShellExecute = false;
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                string stdout = "";
+                string stderr = "";
+                int exitCode = 0;
+
+                using (Process proc = Process.Start(psi)) {
+                    stdout = proc.StandardOutput.ReadToEnd();
+                    stderr = proc.StandardError.ReadToEnd();
+                    proc.WaitForExit(30000);
+                    exitCode = proc.ExitCode;
+                    sw.Stop();
+                }
+
+                string[] extracted = Directory.GetFiles(targetDir, "*", SearchOption.AllDirectories);
+                ulong totalBytes = 0;
+                StringBuilder sbFiles = new StringBuilder();
+                foreach (string f in extracted) {
+                    try {
+                        FileInfo fi = new FileInfo(f);
+                        totalBytes += (ulong)fi.Length;
+                        string rel = f.Substring(targetDir.TrimEnd('\\', '/').Length).TrimStart('\\', '/');
+                        if (sbFiles.Length > 0) sbFiles.Append(",");
+                        sbFiles.Append(string.Format("{{\"name\": \"{0}\", \"sizeBytes\": {1}}}", EscapeJson(rel), fi.Length));
+                    } catch {}
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": {0}, \"cabinetPath\": \"{1}\", \"destinationPath\": \"{2}\", \"filter\": \"{3}\", \"filesExtracted\": {4}, \"totalBytesExtracted\": {5}, \"elapsedMs\": {6}, \"files\": [{7}]}}",
+                    exitCode == 0 ? "true" : "false",
+                    EscapeJson(fullCab),
+                    EscapeJson(targetDir),
+                    EscapeJson(filter),
+                    extracted.Length,
+                    totalBytes,
+                    sw.ElapsedMilliseconds,
+                    sbFiles.ToString()
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -16216,6 +16590,19 @@ namespace GeminiSuperDesktop {
                 string exeName = args.Length >= 3 ? args[2] : "";
                 bool allUsers = args.Length >= 4 && (args[3].ToLowerInvariant() == "true" || args[3] == "1");
                 WerExclusionsCmd(action, exeName, allUsers);
+            } else if (cmd == "cab_inspect" || cmd == "cab-inspect") {
+                string cabPath = args.Length >= 2 ? args[1] : "";
+                CabInspectCmd(cabPath);
+            } else if (cmd == "cab_create" || cmd == "cab-create") {
+                string targetCab = args.Length >= 2 ? args[1] : "";
+                string filesInput = args.Length >= 3 ? args[2] : "";
+                string compType = args.Length >= 4 ? args[3] : "MSZIP";
+                CabCreateCmd(targetCab, filesInput, compType);
+            } else if (cmd == "cab_extract" || cmd == "cab-extract") {
+                string cabPath = args.Length >= 2 ? args[1] : "";
+                string destDir = args.Length >= 3 ? args[2] : "";
+                string filter = args.Length >= 4 ? args[3] : "*";
+                CabExtractCmd(cabPath, destDir, filter);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
