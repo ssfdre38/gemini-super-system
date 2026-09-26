@@ -5526,6 +5526,328 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows ToolHelp32 Snapshot Subsystem (tlhelp32.h)
+
+        const uint TH32CS_SNAPHEAPLIST = 0x00000001;
+        const uint TH32CS_SNAPPROCESS  = 0x00000002;
+        const uint TH32CS_SNAPTHREAD   = 0x00000004;
+        const uint TH32CS_SNAPMODULE   = 0x00000008;
+        const uint TH32CS_SNAPMODULE32 = 0x00000010;
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct MODULEENTRY32 {
+            public uint dwSize;
+            public uint th32ModuleID;
+            public uint th32ProcessID;
+            public uint GlblcntUsage;
+            public uint ProccntUsage;
+            public IntPtr modBaseAddr;
+            public uint modBaseSize;
+            public IntPtr hModule;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+            public string szModule;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+            public string szExePath;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct THREADENTRY32 {
+            public uint dwSize;
+            public uint cntUsage;
+            public uint th32ThreadID;
+            public uint th32OwnerProcessID;
+            public int tpBasePri;
+            public int tpDeltaPri;
+            public uint dwFlags;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct PROCESSENTRY32 {
+            public uint dwSize;
+            public uint cntUsage;
+            public uint th32ProcessID;
+            public IntPtr th32DefaultHeapID;
+            public uint th32ModuleID;
+            public uint cntThreads;
+            public uint th32ParentProcessID;
+            public int pcPriClassBase;
+            public uint dwFlags;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+            public string szExeFile;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern IntPtr CreateToolhelp32Snapshot(uint dwFlags, uint th32ProcessID);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool Module32FirstW(IntPtr hSnapshot, ref MODULEENTRY32 lpme);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool Module32NextW(IntPtr hSnapshot, ref MODULEENTRY32 lpme);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool Thread32First(IntPtr hSnapshot, ref THREADENTRY32 lpte);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool Thread32Next(IntPtr hSnapshot, ref THREADENTRY32 lpte);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool Process32FirstW(IntPtr hSnapshot, ref PROCESSENTRY32 lppe);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool Process32NextW(IntPtr hSnapshot, ref PROCESSENTRY32 lppe);
+
+        static bool ResolveProcessTarget(string target, out uint pid, out string procName) {
+            pid = 0;
+            procName = "";
+            string t = (target ?? "").Trim();
+            if (string.IsNullOrEmpty(t) || t.ToLowerInvariant() == "current" || t.ToLowerInvariant() == "self") {
+                Process cur = Process.GetCurrentProcess();
+                pid = (uint)cur.Id;
+                procName = cur.ProcessName;
+                return true;
+            }
+            if (uint.TryParse(t, out pid)) {
+                try {
+                    procName = Process.GetProcessById((int)pid).ProcessName;
+                } catch {
+                    procName = "PID_" + pid;
+                }
+                return true;
+            }
+            string q = t.ToLowerInvariant();
+            if (q.EndsWith(".exe")) q = q.Substring(0, q.Length - 4);
+            foreach (Process p in Process.GetProcesses()) {
+                if (p.ProcessName.ToLowerInvariant() == q || p.ProcessName.ToLowerInvariant().Contains(q)) {
+                    pid = (uint)p.Id;
+                    procName = p.ProcessName;
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        static void ToolHelpModulesCmd(string target, string search, int limit) {
+            try {
+                if (limit <= 0) limit = 100;
+                string q = (search ?? "").Trim().ToLowerInvariant();
+
+                uint targetPid;
+                string targetName;
+                if (!ResolveProcessTarget(target, out targetPid, out targetName)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Process target not found: '{0}'\"}}", EscapeJson(target ?? "")));
+                    return;
+                }
+
+                IntPtr hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, targetPid);
+                if (hSnap == IntPtr.Zero || hSnap == new IntPtr(-1)) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"targetPid\": {0}, \"errorCode\": {1}, \"error\": \"Failed to create module snapshot: {2}\"}}",
+                        targetPid, err, EscapeJson(new System.ComponentModel.Win32Exception(err).Message)));
+                    return;
+                }
+
+                List<string> modules = new List<string>();
+                int totalCount = 0;
+                try {
+                    MODULEENTRY32 me = new MODULEENTRY32();
+                    me.dwSize = (uint)Marshal.SizeOf(typeof(MODULEENTRY32));
+
+                    if (Module32FirstW(hSnap, ref me)) {
+                        do {
+                            totalCount++;
+                            string mName = me.szModule ?? "";
+                            string mPath = me.szExePath ?? "";
+
+                            if (!string.IsNullOrEmpty(q)) {
+                                if (!mName.ToLowerInvariant().Contains(q) && !mPath.ToLowerInvariant().Contains(q)) {
+                                    continue;
+                                }
+                            }
+
+                            if (modules.Count < limit) {
+                                string baseAddrHex = "0x" + me.modBaseAddr.ToString("X");
+                                double kb = Math.Round(me.modBaseSize / 1024.0, 1);
+                                modules.Add(string.Format(
+                                    "{{\"moduleName\": \"{0}\", \"baseAddress\": \"{1}\", \"baseSize\": {2}, \"baseSizeKB\": {3}, \"exePath\": \"{4}\", \"globalUsage\": {5}, \"processUsage\": {6}}}",
+                                    EscapeJson(mName), baseAddrHex, me.modBaseSize, kb, EscapeJson(mPath), me.GlblcntUsage, me.ProccntUsage
+                                ));
+                            }
+                        } while (Module32NextW(hSnap, ref me));
+                    }
+                } finally {
+                    CloseHandle(hSnap);
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"targetPid\": {0}, \"targetProcess\": \"{1}\", \"totalModules\": {2}, \"returnedCount\": {3}, \"modules\": [{4}]}}",
+                    targetPid, EscapeJson(targetName), totalCount, modules.Count, string.Join(", ", modules.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void ToolHelpThreadsCmd(string target, int limit) {
+            try {
+                if (limit <= 0) limit = 100;
+                uint targetPid = 0;
+                string targetName = null;
+                bool filterByPid = false;
+
+                if (!string.IsNullOrEmpty(target) && target != "all" && target != "0") {
+                    if (ResolveProcessTarget(target, out targetPid, out targetName)) {
+                        filterByPid = true;
+                    }
+                }
+
+                IntPtr hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0);
+                if (hSnap == IntPtr.Zero || hSnap == new IntPtr(-1)) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"errorCode\": {0}, \"error\": \"Failed to create thread snapshot: {1}\"}}",
+                        err, EscapeJson(new System.ComponentModel.Win32Exception(err).Message)));
+                    return;
+                }
+
+                List<string> threads = new List<string>();
+                int totalMatched = 0;
+                try {
+                    THREADENTRY32 te = new THREADENTRY32();
+                    te.dwSize = (uint)Marshal.SizeOf(typeof(THREADENTRY32));
+
+                    if (Thread32First(hSnap, ref te)) {
+                        do {
+                            if (filterByPid && te.th32OwnerProcessID != targetPid) {
+                                continue;
+                            }
+                            totalMatched++;
+                            if (threads.Count < limit) {
+                                threads.Add(string.Format(
+                                    "{{\"threadId\": {0}, \"ownerPid\": {1}, \"basePriority\": {2}, \"deltaPriority\": {3}}}",
+                                    te.th32ThreadID, te.th32OwnerProcessID, te.tpBasePri, te.tpDeltaPri
+                                ));
+                            }
+                        } while (Thread32Next(hSnap, ref te));
+                    }
+                } finally {
+                    CloseHandle(hSnap);
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"targetPid\": {0}, \"targetProcess\": {1}, \"totalThreads\": {2}, \"returnedCount\": {3}, \"threads\": [{4}]}}",
+                    filterByPid ? targetPid.ToString() : "null",
+                    targetName != null ? "\"" + EscapeJson(targetName) + "\"" : "null",
+                    totalMatched, threads.Count, string.Join(", ", threads.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        class ProcNode {
+            public uint Pid;
+            public uint ParentPid;
+            public string Name;
+            public uint Threads;
+            public int PriorityBase;
+            public List<ProcNode> Children = new List<ProcNode>();
+        }
+
+        static string BuildProcNodeJson(ProcNode node) {
+            var childStrs = new List<string>();
+            foreach (var ch in node.Children) {
+                childStrs.Add(BuildProcNodeJson(ch));
+            }
+            return string.Format(
+                "{{\"pid\": {0}, \"name\": \"{1}\", \"parentPid\": {2}, \"threads\": {3}, \"priorityBase\": {4}, \"children\": [{5}]}}",
+                node.Pid, EscapeJson(node.Name), node.ParentPid, node.Threads, node.PriorityBase, string.Join(", ", childStrs.ToArray())
+            );
+        }
+
+        static void ToolHelpProcessTreeCmd(uint rootPid, string search, int limit) {
+            try {
+                if (limit <= 0) limit = 150;
+                string q = (search ?? "").Trim().ToLowerInvariant();
+
+                IntPtr hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+                if (hSnap == IntPtr.Zero || hSnap == new IntPtr(-1)) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"errorCode\": {0}, \"error\": \"Failed to create process snapshot: {1}\"}}",
+                        err, EscapeJson(new System.ComponentModel.Win32Exception(err).Message)));
+                    return;
+                }
+
+                var allNodes = new Dictionary<uint, ProcNode>();
+                int totalCount = 0;
+                try {
+                    PROCESSENTRY32 pe = new PROCESSENTRY32();
+                    pe.dwSize = (uint)Marshal.SizeOf(typeof(PROCESSENTRY32));
+
+                    if (Process32FirstW(hSnap, ref pe)) {
+                        do {
+                            totalCount++;
+                            ProcNode node = new ProcNode {
+                                Pid = pe.th32ProcessID,
+                                ParentPid = pe.th32ParentProcessID,
+                                Name = pe.szExeFile ?? "",
+                                Threads = pe.cntThreads,
+                                PriorityBase = pe.pcPriClassBase
+                            };
+                            allNodes[node.Pid] = node;
+                        } while (Process32NextW(hSnap, ref pe));
+                    }
+                } finally {
+                    CloseHandle(hSnap);
+                }
+
+                var roots = new List<ProcNode>();
+                foreach (var kvp in allNodes) {
+                    ProcNode node = kvp.Value;
+                    if (node.Pid == 0) continue;
+                    ProcNode parent;
+                    if (node.ParentPid != 0 && node.ParentPid != node.Pid && allNodes.TryGetValue(node.ParentPid, out parent)) {
+                        parent.Children.Add(node);
+                    } else {
+                        roots.Add(node);
+                    }
+                }
+
+                List<ProcNode> targetRoots = new List<ProcNode>();
+                if (rootPid > 0) {
+                    ProcNode targetNode;
+                    if (allNodes.TryGetValue(rootPid, out targetNode)) {
+                        targetRoots.Add(targetNode);
+                    }
+                } else {
+                    targetRoots = roots;
+                }
+
+                var resultStrs = new List<string>();
+                if (!string.IsNullOrEmpty(q)) {
+                    foreach (var kvp in allNodes) {
+                        if (kvp.Value.Name.ToLowerInvariant().Contains(q)) {
+                            resultStrs.Add(BuildProcNodeJson(kvp.Value));
+                            if (resultStrs.Count >= limit) break;
+                        }
+                    }
+                } else {
+                    foreach (var r in targetRoots) {
+                        resultStrs.Add(BuildProcNodeJson(r));
+                        if (resultStrs.Count >= limit) break;
+                    }
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"totalProcesses\": {0}, \"returnedCount\": {1}, \"rootPid\": {2}, \"tree\": [{3}]}}",
+                    totalCount, resultStrs.Count, rootPid, string.Join(", ", resultStrs.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         static void ClipboardGetCmd() {
             try {
                 string text = "";
@@ -8372,6 +8694,20 @@ namespace GeminiSuperDesktop {
                 bool persistent = args.Length >= 7 ? (args[6].ToLowerInvariant() == "true" || args[6] == "1") : false;
                 bool force = args.Length >= 8 ? (args[7].ToLowerInvariant() == "true" || args[7] == "1") : false;
                 WNetManageConnectionCmd(action, remote, local, user, pass, persistent, force);
+            } else if (cmd == "toolhelp_modules" || cmd == "process_modules" || cmd == "list_modules") {
+                string target = args.Length >= 2 ? args[1] : "current";
+                string search = args.Length >= 3 ? args[2] : "";
+                int limit = args.Length >= 4 ? int.Parse(args[3]) : 100;
+                ToolHelpModulesCmd(target, search, limit);
+            } else if (cmd == "toolhelp_threads" || cmd == "process_threads" || cmd == "list_threads") {
+                string target = args.Length >= 2 ? args[1] : "current";
+                int limit = args.Length >= 3 ? int.Parse(args[2]) : 100;
+                ToolHelpThreadsCmd(target, limit);
+            } else if (cmd == "toolhelp_process_tree" || cmd == "process_tree" || cmd == "toolhelp_tree") {
+                uint rootPid = args.Length >= 2 && !string.IsNullOrEmpty(args[1]) ? uint.Parse(args[1]) : 0;
+                string search = args.Length >= 3 ? args[2] : "";
+                int limit = args.Length >= 4 ? int.Parse(args[3]) : 150;
+                ToolHelpProcessTreeCmd(rootPid, search, limit);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

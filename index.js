@@ -2416,6 +2416,71 @@ const SYSTEM_TOOLS = [
           },
           required: ["action"]
         }
+      },
+      {
+        name: "super_toolhelp_modules",
+        description: "Takes an unmanaged point-in-time snapshot of loaded DLL modules for any running Windows process via ToolHelp32 (CreateToolhelp32Snapshot / Module32First/Next). Returns virtual base memory addresses (hex), module memory size, full executable paths, and usage counts.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            target: {
+              type: "string",
+              default: "current",
+              description: "Target process identifier: PID (number/string), process name (e.g. 'node', 'explorer'), or 'current' (default)."
+            },
+            search: {
+              type: "string",
+              description: "Optional substring filter matching module name (e.g. 'ntdll', 'kernel32') or file path."
+            },
+            limit: {
+              type: "number",
+              default: 100,
+              description: "Maximum number of modules to return (default: 100)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_toolhelp_threads",
+        description: "Takes an unmanaged point-in-time snapshot of active system threads via ToolHelp32 (CreateToolhelp32Snapshot / Thread32First/Next). Reports thread IDs, owning process IDs, base priority classes, and delta priority offsets.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            target: {
+              type: "string",
+              default: "current",
+              description: "Filter threads by target process PID, process name, 'current', or 'all' for system-wide threads."
+            },
+            limit: {
+              type: "number",
+              default: 100,
+              description: "Maximum number of thread records to return (default: 100)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_toolhelp_process_tree",
+        description: "Takes an unmanaged point-in-time snapshot of all running processes via ToolHelp32 (CreateToolhelp32Snapshot / Process32First/Next) and assembles a structured process ancestry hierarchy tree (parent PID -> child processes) with thread counts and base priority classes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            rootPid: {
+              type: "number",
+              default: 0,
+              description: "Root PID to anchor tree from (0 for full system tree, or a specific PID like 4 for System, or an active app PID)."
+            },
+            search: {
+              type: "string",
+              description: "Optional case-insensitive substring search filter matching process executable name."
+            },
+            limit: {
+              type: "number",
+              default: 150,
+              description: "Maximum number of process tree nodes to return (default: 150)."
+            }
+          }
+        }
       }
 ];
 
@@ -4387,6 +4452,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [WNet Manage Connection (${action})]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_toolhelp_modules") {
+    const target = args?.target || "current";
+    const search = args?.search || "";
+    const limit = args?.limit || 100;
+    const res = await orch.getProcessModules({ target, search, limit });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [ToolHelp Modules ("${target}")]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_toolhelp_threads") {
+    const target = args?.target || "current";
+    const limit = args?.limit || 100;
+    const res = await orch.getProcessThreads({ target, limit });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [ToolHelp Threads ("${target}")]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_toolhelp_process_tree") {
+    const rootPid = args?.rootPid || 0;
+    const search = args?.search || "";
+    const limit = args?.limit || 150;
+    const res = await orch.getProcessTree({ rootPid, search, limit });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [ToolHelp Process Tree (rootPid: ${rootPid})]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

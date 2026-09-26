@@ -62,6 +62,7 @@
   - [44. Windows Native System Architecture & Firmware Subsystem](#44--windows-native-system-architecture--firmware-subsystem-sysinfoapih--kernel32dll)
   - [45. Windows Authenticode & Cryptographic Trust Verification Subsystem](#45--windows-authenticode--cryptographic-trust-verification-subsystem-wintrusth--softpubh--wintrustdll)
   - [46. Windows Multi-Provider Router & Network Drive Management Subsystem](#46--windows-multi-provider-router--network-drive-management-subsystem-winnetwkh--mprdll)
+  - [47. Windows ToolHelp32 Snapshot Subsystem](#47--windows-toolhelp32-snapshot-subsystem-tlhelp32h--kernel32dll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -651,6 +652,17 @@ Directly manages Windows network connections, mapped drives, SMB/UNC shares, and
 - **Dynamic Network Drive Mount/Unmount Actuator (`super_wnet_manage_connection`)**: Directly actuates network connections via `WNetAddConnection2W` and `WNetCancelConnection2W`. Supports connecting (mounting) remote UNC shares to drive letters with optional user credentials, persistent profile updates (`CONNECT_UPDATE_PROFILE`), and disconnecting (unmounting) drives with optional forced unmounting (`fForce`).
 - **Milestone Expansion**: **118 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
 - **Native MCP Tools**: `super_wnet_network_drives`, `super_wnet_get_connection`, `super_wnet_manage_connection`.
+
+---
+
+## 47. 🔍 Windows ToolHelp32 Snapshot Subsystem (`tlhelp32.h` / `kernel32.dll`)
+
+Directly takes unmanaged point-in-time snapshots of process modules, threads, and process hierarchy trees via native Win32 ToolHelp32 (`kernel32.dll`) without external debuggers or managed runtime overhead:
+- **Loaded DLL Modules & Memory Maps (`super_toolhelp_modules`)**: Invokes `CreateToolhelp32Snapshot` (`TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32`) and `Module32FirstW/NextW` to inspect loaded binaries for any process (or current process). Accurately reports virtual memory base addresses (hex), module image size in bytes and KB, full canonical file system paths, global usage counts, and process usage counts. Supports substring filtering and limit bounds.
+- **Active System Threads & Scheduling Priorities (`super_toolhelp_threads`)**: Invokes `CreateToolhelp32Snapshot` (`TH32CS_SNAPTHREAD`) and `Thread32First/Next` to snapshot active system threads. Returns thread IDs, owning process IDs, base priority classes (`tpBasePri`), and delta priority offsets (`tpDeltaPri`), allowing granular thread inspection across the entire OS or filtered by target process.
+- **Full Process Lineage & Ancestry Tree (`super_toolhelp_process_tree`)**: Invokes `CreateToolhelp32Snapshot` (`TH32CS_SNAPPROCESS`) and `Process32FirstW/NextW` to take an atomic system process snapshot and assemble a structured recursive ancestry tree (`System` -> `smss.exe` -> `csrss.exe` / `winlogon.exe` -> `dwm.exe`). Reports PIDs, parent PIDs, thread counts, base priority classes, and executable names, anchored from root or searched by process name.
+- **Milestone Expansion**: **121 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem.
+- **Native MCP Tools**: `super_toolhelp_modules`, `super_toolhelp_threads`, `super_toolhelp_process_tree`.
 
 ---
 

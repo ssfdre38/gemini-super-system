@@ -2423,10 +2423,66 @@ async function run() {
     assert(typeof addMissing.error === "string");
   });
 
-  it("All 118 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 32: Windows ToolHelp32 Snapshot Subsystem (tlhelp32.h / kernel32.dll)
+  console.log("\x1b[1m[Suite 32: Windows ToolHelp32 Snapshot Subsystem]\x1b[0m");
+
+  await itAsync("super_toolhelp_modules takes point-in-time snapshot of loaded DLL modules and virtual memory addresses", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getProcessModules({ target: "current", limit: 10 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.targetPid === "number");
+    assert(res.totalModules > 0);
+    assert(Array.isArray(res.modules));
+    assert(res.modules.length > 0);
+
+    const m = res.modules[0];
+    assert(typeof m.moduleName === "string");
+    assert(typeof m.baseAddress === "string" && m.baseAddress.startsWith("0x"));
+    assert(typeof m.baseSize === "number");
+    assert(typeof m.exePath === "string");
+  });
+
+  await itAsync("super_toolhelp_threads snapshots active system threads, priorities, and delta offsets", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getProcessThreads({ target: "current", limit: 10 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.totalThreads === "number" && res.totalThreads > 0);
+    assert(Array.isArray(res.threads));
+    assert(res.threads.length > 0);
+
+    const t = res.threads[0];
+    assert(typeof t.threadId === "number");
+    assert(typeof t.ownerPid === "number");
+    assert(typeof t.basePriority === "number");
+  });
+
+  await itAsync("super_toolhelp_process_tree constructs full system process hierarchy and parent-child lineages", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getProcessTree({ limit: 20 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.totalProcesses === "number" && res.totalProcesses > 0);
+    assert(Array.isArray(res.tree));
+    assert(res.tree.length > 0);
+
+    const root = res.tree[0];
+    assert(typeof root.pid === "number");
+    assert(typeof root.name === "string");
+    assert(Array.isArray(root.children));
+  });
+
+  it("All 121 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 118);
+    assert.strictEqual(SYSTEM_TOOLS.length, 121);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -2478,6 +2534,9 @@ async function run() {
     assert(toolNames.includes("super_wnet_network_drives"));
     assert(toolNames.includes("super_wnet_get_connection"));
     assert(toolNames.includes("super_wnet_manage_connection"));
+    assert(toolNames.includes("super_toolhelp_modules"));
+    assert(toolNames.includes("super_toolhelp_threads"));
+    assert(toolNames.includes("super_toolhelp_process_tree"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
