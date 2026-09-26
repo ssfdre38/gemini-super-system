@@ -6615,6 +6615,367 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows Network Management, SMB Shares & Local Accounts Subsystem (netapi32.dll / lm.h)
+
+        [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
+        static extern int NetApiBufferFree(IntPtr Buffer);
+
+        [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
+        static extern int NetGetJoinInformation([MarshalAs(UnmanagedType.LPWStr)] string lpServer, out IntPtr lpNameBuffer, out int BufferType);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct SHARE_INFO_2 {
+            public string shi2_netname;
+            public uint shi2_type;
+            public string shi2_remark;
+            public uint shi2_permissions;
+            public uint shi2_max_uses;
+            public uint shi2_current_uses;
+            public string shi2_path;
+            public string shi2_passwd;
+        }
+
+        [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
+        static extern int NetShareEnum([MarshalAs(UnmanagedType.LPWStr)] string servername, uint level, ref IntPtr bufptr, uint prefmaxlen, out uint entriesread, out uint totalentries, ref uint resume_handle);
+
+        [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
+        static extern int NetShareGetInfo([MarshalAs(UnmanagedType.LPWStr)] string servername, [MarshalAs(UnmanagedType.LPWStr)] string netname, uint level, out IntPtr bufptr);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct SESSION_INFO_1 {
+            public string sesi1_cname;
+            public string sesi1_username;
+            public uint sesi1_num_opens;
+            public uint sesi1_time;
+            public uint sesi1_idle_time;
+            public uint sesi1_user_flags;
+        }
+
+        [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
+        static extern int NetSessionEnum([MarshalAs(UnmanagedType.LPWStr)] string servername, [MarshalAs(UnmanagedType.LPWStr)] string UncClientName, [MarshalAs(UnmanagedType.LPWStr)] string username, uint level, ref IntPtr bufptr, uint prefmaxlen, out uint entriesread, out uint totalentries, ref uint resume_handle);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct FILE_INFO_3 {
+            public uint fi3_id;
+            public uint fi3_permissions;
+            public uint fi3_num_locks;
+            public string fi3_pathname;
+            public string fi3_username;
+        }
+
+        [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
+        static extern int NetFileEnum([MarshalAs(UnmanagedType.LPWStr)] string servername, [MarshalAs(UnmanagedType.LPWStr)] string basepath, [MarshalAs(UnmanagedType.LPWStr)] string username, uint level, ref IntPtr bufptr, uint prefmaxlen, out uint entriesread, out uint totalentries, ref uint resume_handle);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct LOCALGROUP_INFO_1 {
+            public string lgrpi1_name;
+            public string lgrpi1_comment;
+        }
+
+        [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
+        static extern int NetLocalGroupEnum([MarshalAs(UnmanagedType.LPWStr)] string servername, uint level, ref IntPtr bufptr, uint prefmaxlen, out uint entriesread, out uint totalentries, ref uint resumehandle);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct LOCALGROUP_MEMBERS_INFO_1 {
+            public IntPtr lgrmi1_sid;
+            public int lgrmi1_sidusage;
+            public string lgrmi1_name;
+        }
+
+        [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
+        static extern int NetLocalGroupGetMembers([MarshalAs(UnmanagedType.LPWStr)] string servername, [MarshalAs(UnmanagedType.LPWStr)] string localgroupname, uint level, ref IntPtr bufptr, uint prefmaxlen, out uint entriesread, out uint totalentries, ref uint resumehandle);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct USER_INFO_1 {
+            public string usri1_name;
+            public string usri1_password;
+            public uint usri1_password_age;
+            public uint usri1_priv;
+            public string usri1_home_dir;
+            public string usri1_comment;
+            public uint usri1_flags;
+            public string usri1_script_path;
+        }
+
+        [DllImport("netapi32.dll", CharSet = CharSet.Unicode)]
+        static extern int NetUserEnum([MarshalAs(UnmanagedType.LPWStr)] string servername, uint level, uint filter, ref IntPtr bufptr, uint prefmaxlen, out uint entriesread, out uint totalentries, ref uint resume_handle);
+
+        static void NetSharesCmd(string targetShare, string typeFilter) {
+            try {
+                string serverName = Environment.MachineName;
+                string filter = (typeFilter ?? "all").Trim().ToLowerInvariant();
+                var list = new List<string>();
+
+                if (!string.IsNullOrEmpty(targetShare)) {
+                    IntPtr pSingle = IntPtr.Zero;
+                    int singleRes = NetShareGetInfo(null, targetShare, 2, out pSingle);
+                    if (singleRes == 0 && pSingle != IntPtr.Zero) {
+                        try {
+                            var sh = (SHARE_INFO_2)Marshal.PtrToStructure(pSingle, typeof(SHARE_INFO_2));
+                            FormatShareJson(sh, list, filter);
+                        } finally {
+                            NetApiBufferFree(pSingle);
+                        }
+                    } else {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"server\": \"{0}\", \"error\": \"Share not found or access denied (Win32 error: {1})\"}}",
+                            EscapeJson(serverName), singleRes));
+                        return;
+                    }
+                } else {
+                    IntPtr pBuf = IntPtr.Zero;
+                    uint entriesRead, totalEntries, resume = 0;
+                    int res = NetShareEnum(null, 2, ref pBuf, 0xFFFFFFFF, out entriesRead, out totalEntries, ref resume);
+                    if (res == 0 && pBuf != IntPtr.Zero) {
+                        try {
+                            int sz = Marshal.SizeOf(typeof(SHARE_INFO_2));
+                            for (int i = 0; i < entriesRead; i++) {
+                                IntPtr pItem = new IntPtr(pBuf.ToInt64() + i * sz);
+                                var sh = (SHARE_INFO_2)Marshal.PtrToStructure(pItem, typeof(SHARE_INFO_2));
+                                FormatShareJson(sh, list, filter);
+                            }
+                        } finally {
+                            NetApiBufferFree(pBuf);
+                        }
+                    } else {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"server\": \"{0}\", \"error\": \"NetShareEnum failed with Win32 error: {1}\"}}",
+                            EscapeJson(serverName), res));
+                        return;
+                    }
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"server\": \"{0}\", \"typeFilter\": \"{1}\", \"count\": {2}, \"shares\": [{3}]}}",
+                    EscapeJson(serverName), EscapeJson(filter), list.Count, string.Join(", ", list.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void FormatShareJson(SHARE_INFO_2 sh, List<string> list, string filter) {
+            uint rawType = sh.shi2_type;
+            bool isSpecial = (rawType & 0x80000000) != 0;
+            uint baseType = rawType & 0x0FFFFFFF;
+
+            string typeName = "Unknown";
+            if (baseType == 0) typeName = isSpecial ? "SpecialDiskTree" : "DiskTree";
+            else if (baseType == 1) typeName = isSpecial ? "SpecialPrintQueue" : "PrintQueue";
+            else if (baseType == 2) typeName = isSpecial ? "SpecialDevice" : "Device";
+            else if (baseType == 3) typeName = isSpecial ? "SpecialIPC" : "IPC";
+
+            if (filter == "disk" && baseType != 0) return;
+            if (filter == "ipc" && baseType != 3) return;
+            if (filter == "print" && baseType != 1) return;
+            if (filter == "special" && !isSpecial) return;
+
+            list.Add(string.Format(
+                "{{\"name\": \"{0}\", \"path\": \"{1}\", \"type\": \"{2}\", \"typeRaw\": {3}, \"isSpecial\": {4}, \"comment\": \"{5}\", \"currentUses\": {6}, \"maxUses\": {7}, \"permissions\": {8}}}",
+                EscapeJson(sh.shi2_netname ?? ""),
+                EscapeJson(sh.shi2_path ?? ""),
+                typeName,
+                rawType,
+                isSpecial ? "true" : "false",
+                EscapeJson(sh.shi2_remark ?? ""),
+                sh.shi2_current_uses,
+                (int)sh.shi2_max_uses,
+                sh.shi2_permissions
+            ));
+        }
+
+        static void NetSessionsCmd(string clientFilter, string userFilter, bool includeFiles) {
+            try {
+                string serverName = Environment.MachineName;
+                var sessList = new List<string>();
+                var fileList = new List<string>();
+
+                IntPtr pSess = IntPtr.Zero;
+                uint sRead, sTotal, sResume = 0;
+                string cFilter = string.IsNullOrEmpty(clientFilter) ? null : clientFilter;
+                string uFilter = string.IsNullOrEmpty(userFilter) ? null : userFilter;
+
+                int sRes = NetSessionEnum(null, cFilter, uFilter, 1, ref pSess, 0xFFFFFFFF, out sRead, out sTotal, ref sResume);
+                if (sRes == 0 && pSess != IntPtr.Zero) {
+                    try {
+                        int sz = Marshal.SizeOf(typeof(SESSION_INFO_1));
+                        for (int i = 0; i < sRead; i++) {
+                            IntPtr pItem = new IntPtr(pSess.ToInt64() + i * sz);
+                            var s = (SESSION_INFO_1)Marshal.PtrToStructure(pItem, typeof(SESSION_INFO_1));
+                            sessList.Add(string.Format(
+                                "{{\"clientName\": \"{0}\", \"userName\": \"{1}\", \"numOpens\": {2}, \"activeTimeSeconds\": {3}, \"idleTimeSeconds\": {4}, \"userFlags\": {5}}}",
+                                EscapeJson(s.sesi1_cname ?? ""),
+                                EscapeJson(s.sesi1_username ?? ""),
+                                s.sesi1_num_opens,
+                                s.sesi1_time,
+                                s.sesi1_idle_time,
+                                s.sesi1_user_flags
+                            ));
+                        }
+                    } finally {
+                        NetApiBufferFree(pSess);
+                    }
+                }
+
+                if (includeFiles) {
+                    IntPtr pFiles = IntPtr.Zero;
+                    uint fRead, fTotal, fResume = 0;
+                    int fRes = NetFileEnum(null, null, uFilter, 3, ref pFiles, 0xFFFFFFFF, out fRead, out fTotal, ref fResume);
+                    if (fRes == 0 && pFiles != IntPtr.Zero) {
+                        try {
+                            int fSz = Marshal.SizeOf(typeof(FILE_INFO_3));
+                            for (int i = 0; i < fRead; i++) {
+                                IntPtr pItem = new IntPtr(pFiles.ToInt64() + i * fSz);
+                                var f = (FILE_INFO_3)Marshal.PtrToStructure(pItem, typeof(FILE_INFO_3));
+                                fileList.Add(string.Format(
+                                    "{{\"fileId\": {0}, \"path\": \"{1}\", \"userName\": \"{2}\", \"numLocks\": {3}, \"permissions\": {4}}}",
+                                    f.fi3_id,
+                                    EscapeJson(f.fi3_pathname ?? ""),
+                                    EscapeJson(f.fi3_username ?? ""),
+                                    f.fi3_num_locks,
+                                    f.fi3_permissions
+                                ));
+                            }
+                        } finally {
+                            NetApiBufferFree(pFiles);
+                        }
+                    }
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"server\": \"{0}\", \"sessionCount\": {1}, \"sessions\": [{2}], \"openFileCount\": {3}, \"openFiles\": [{4}]}}",
+                    EscapeJson(serverName),
+                    sessList.Count,
+                    string.Join(", ", sessList.ToArray()),
+                    fileList.Count,
+                    string.Join(", ", fileList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void NetAccountsCmd(bool includeUsers, bool includeGroups, string targetGroup) {
+            try {
+                string serverName = Environment.MachineName;
+
+                // 1. Join Information
+                IntPtr pJoinName = IntPtr.Zero;
+                int joinType = 0;
+                string domainOrWorkgroup = "";
+                string joinStatus = "Unknown";
+                int jRes = NetGetJoinInformation(null, out pJoinName, out joinType);
+                if (jRes == 0 && pJoinName != IntPtr.Zero) {
+                    try {
+                        domainOrWorkgroup = Marshal.PtrToStringUni(pJoinName) ?? "";
+                        if (joinType == 1) joinStatus = "Unjoined";
+                        else if (joinType == 2) joinStatus = "Workgroup";
+                        else if (joinType == 3) joinStatus = "Domain";
+                    } finally {
+                        NetApiBufferFree(pJoinName);
+                    }
+                }
+
+                // 2. Users
+                var usersList = new List<string>();
+                if (includeUsers) {
+                    IntPtr pUsers = IntPtr.Zero;
+                    uint uRead, uTotal, uResume = 0;
+                    int uRes = NetUserEnum(null, 1, 0x0002 /* FILTER_NORMAL_ACCOUNT */, ref pUsers, 0xFFFFFFFF, out uRead, out uTotal, ref uResume);
+                    if (uRes == 0 && pUsers != IntPtr.Zero) {
+                        try {
+                            int uSz = Marshal.SizeOf(typeof(USER_INFO_1));
+                            for (int i = 0; i < uRead; i++) {
+                                IntPtr pItem = new IntPtr(pUsers.ToInt64() + i * uSz);
+                                var u = (USER_INFO_1)Marshal.PtrToStructure(pItem, typeof(USER_INFO_1));
+                                string priv = "Guest";
+                                if (u.usri1_priv == 1) priv = "User";
+                                else if (u.usri1_priv == 2) priv = "Admin";
+
+                                bool disabled = (u.usri1_flags & 0x0001) != 0;
+                                bool pwdNotReqd = (u.usri1_flags & 0x0020) != 0;
+                                bool lockedOut = (u.usri1_flags & 0x0010) != 0;
+
+                                usersList.Add(string.Format(
+                                    "{{\"name\": \"{0}\", \"privilege\": \"{1}\", \"privilegeLevel\": {2}, \"accountDisabled\": {3}, \"passwordNotRequired\": {4}, \"accountLockedOut\": {5}, \"passwordAgeSeconds\": {6}, \"comment\": \"{7}\", \"homeDir\": \"{8}\"}}",
+                                    EscapeJson(u.usri1_name ?? ""),
+                                    priv,
+                                    u.usri1_priv,
+                                    disabled ? "true" : "false",
+                                    pwdNotReqd ? "true" : "false",
+                                    lockedOut ? "true" : "false",
+                                    u.usri1_password_age,
+                                    EscapeJson(u.usri1_comment ?? ""),
+                                    EscapeJson(u.usri1_home_dir ?? "")
+                                ));
+                            }
+                        } finally {
+                            NetApiBufferFree(pUsers);
+                        }
+                    }
+                }
+
+                // 3. Local Groups
+                var grpList = new List<string>();
+                if (includeGroups) {
+                    IntPtr pGroups = IntPtr.Zero;
+                    uint gRead, gTotal, gResume = 0;
+                    int gRes = NetLocalGroupEnum(null, 1, ref pGroups, 0xFFFFFFFF, out gRead, out gTotal, ref gResume);
+                    if (gRes == 0 && pGroups != IntPtr.Zero) {
+                        try {
+                            int gSz = Marshal.SizeOf(typeof(LOCALGROUP_INFO_1));
+                            for (int i = 0; i < gRead; i++) {
+                                IntPtr pItem = new IntPtr(pGroups.ToInt64() + i * gSz);
+                                var g = (LOCALGROUP_INFO_1)Marshal.PtrToStructure(pItem, typeof(LOCALGROUP_INFO_1));
+                                grpList.Add(string.Format(
+                                    "{{\"name\": \"{0}\", \"comment\": \"{1}\"}}",
+                                    EscapeJson(g.lgrpi1_name ?? ""),
+                                    EscapeJson(g.lgrpi1_comment ?? "")
+                                ));
+                            }
+                        } finally {
+                            NetApiBufferFree(pGroups);
+                        }
+                    }
+                }
+
+                // 4. Group Members
+                var memList = new List<string>();
+                string resolvedTargetGroup = string.IsNullOrEmpty(targetGroup) ? "Administrators" : targetGroup;
+                IntPtr pMem = IntPtr.Zero;
+                uint mRead, mTotal, mResume = 0;
+                int mRes = NetLocalGroupGetMembers(null, resolvedTargetGroup, 1, ref pMem, 0xFFFFFFFF, out mRead, out mTotal, ref mResume);
+                if (mRes == 0 && pMem != IntPtr.Zero) {
+                    try {
+                        int mSz = Marshal.SizeOf(typeof(LOCALGROUP_MEMBERS_INFO_1));
+                        for (int i = 0; i < mRead; i++) {
+                            IntPtr pItem = new IntPtr(pMem.ToInt64() + i * mSz);
+                            var m = (LOCALGROUP_MEMBERS_INFO_1)Marshal.PtrToStructure(pItem, typeof(LOCALGROUP_MEMBERS_INFO_1));
+                            memList.Add(string.Format("\"{0}\"", EscapeJson(m.lgrmi1_name ?? "")));
+                        }
+                    } finally {
+                        NetApiBufferFree(pMem);
+                    }
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"server\": \"{0}\", \"joinInfo\": {{\"joinStatus\": \"{1}\", \"joinStatusCode\": {2}, \"domainOrWorkgroup\": \"{3}\"}}, \"userCount\": {4}, \"users\": [{5}], \"groupCount\": {6}, \"groups\": [{7}], \"targetGroup\": \"{8}\", \"targetGroupMembers\": [{9}]}}",
+                    EscapeJson(serverName),
+                    joinStatus,
+                    joinType,
+                    EscapeJson(domainOrWorkgroup),
+                    usersList.Count,
+                    string.Join(", ", usersList.ToArray()),
+                    grpList.Count,
+                    string.Join(", ", grpList.ToArray()),
+                    EscapeJson(resolvedTargetGroup),
+                    string.Join(", ", memList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -9579,6 +9940,20 @@ namespace GeminiSuperDesktop {
                 PowerExecutionStateCmd(sysReq, dispReq, away, cont, rest);
             } else if (cmd == "power_hardware_telemetry" || cmd == "power_telemetry" || cmd == "battery_state") {
                 PowerHardwareTelemetryCmd();
+            } else if (cmd == "net_shares" || cmd == "net_share" || cmd == "smb_shares") {
+                string shareName = args.Length >= 2 ? args[1] : "";
+                string typeFilter = args.Length >= 3 ? args[2] : "all";
+                NetSharesCmd(shareName, typeFilter);
+            } else if (cmd == "net_sessions" || cmd == "net_session" || cmd == "smb_sessions") {
+                string clientFilter = args.Length >= 2 ? args[1] : "";
+                string userFilter = args.Length >= 3 ? args[2] : "";
+                bool includeFiles = args.Length >= 4 ? (args[3].ToLowerInvariant() != "false" && args[3] != "0") : true;
+                NetSessionsCmd(clientFilter, userFilter, includeFiles);
+            } else if (cmd == "net_accounts" || cmd == "net_users" || cmd == "net_groups") {
+                bool incUsers = args.Length >= 2 ? (args[1].ToLowerInvariant() != "false" && args[1] != "0") : true;
+                bool incGroups = args.Length >= 3 ? (args[2].ToLowerInvariant() != "false" && args[2] != "0") : true;
+                string targetGroup = args.Length >= 4 ? args[3] : "Administrators";
+                NetAccountsCmd(incUsers, incGroups, targetGroup);
             } else if (cmd == "thermal_vitals" || cmd == "thermals" || cmd == "thermal" || cmd == "cpu_thermals") {
                 GetThermalVitalsCmd();
             } else if (cmd == "vdesktops" || cmd == "virtual_desktops" || cmd == "list_desktops") {

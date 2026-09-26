@@ -2677,10 +2677,83 @@ async function run() {
     assert(Array.isArray(res.capabilities.sleepStatesSupported));
   });
 
-  it("All 130 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 36: Windows Network Management, SMB Shares & Local Accounts Subsystem
+  console.log("\n=======================================================");
+  console.log("   SUITE 36: Windows Network Management & Local Accounts");
+  console.log("=======================================================\n");
+
+  await itAsync("super_net_shares enumerates registered SMB network shares and inspects specific share", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    // 1. Enumerate all shares
+    const allShares = await kb.getNetShares({ typeFilter: "all" });
+    assert(allShares !== null && typeof allShares === "object");
+    assert.strictEqual(allShares.success, true);
+    assert(typeof allShares.server === "string");
+    assert(allShares.server.length > 0);
+    assert(typeof allShares.count === "number");
+    assert(Array.isArray(allShares.shares));
+
+    // 2. Query specific share if available (like C$)
+    if (allShares.shares.length > 0) {
+      const first = allShares.shares[0];
+      assert(typeof first.name === "string");
+      assert(typeof first.type === "string");
+      assert(typeof first.typeRaw === "number");
+
+      const singleShare = await kb.getNetShares({ shareName: first.name });
+      assert(singleShare !== null && typeof singleShare === "object");
+      assert.strictEqual(singleShare.success, true);
+      assert(singleShare.shares.length >= 1);
+      assert.strictEqual(singleShare.shares[0].name, first.name);
+    }
+  });
+
+  await itAsync("super_net_sessions queries active network sessions and open remote files", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getNetSessions({ includeFiles: true });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.server === "string");
+    assert(typeof res.sessionCount === "number");
+    assert(Array.isArray(res.sessions));
+    assert(typeof res.openFileCount === "number");
+    assert(Array.isArray(res.openFiles));
+  });
+
+  await itAsync("super_net_accounts inspects domain/workgroup join state, local users, and security groups", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getNetAccounts({ includeUsers: true, includeGroups: true, targetGroup: "Administrators" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.server === "string");
+    assert(typeof res.joinInfo === "object");
+    assert(["Workgroup", "Domain", "Unjoined", "Unknown"].includes(res.joinInfo.joinStatus));
+    assert(typeof res.joinInfo.joinStatusCode === "number");
+    assert(typeof res.userCount === "number");
+    assert(Array.isArray(res.users));
+    assert(typeof res.groupCount === "number");
+    assert(Array.isArray(res.groups));
+    assert.strictEqual(res.targetGroup, "Administrators");
+    assert(Array.isArray(res.targetGroupMembers));
+
+    if (res.users.length > 0) {
+      const u = res.users[0];
+      assert(typeof u.name === "string");
+      assert(typeof u.privilege === "string");
+      assert(typeof u.accountDisabled === "boolean");
+    }
+  });
+
+  it("All 133 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 130);
+    assert.strictEqual(SYSTEM_TOOLS.length, 133);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -2744,6 +2817,9 @@ async function run() {
     assert(toolNames.includes("super_power_schemes_list"));
     assert(toolNames.includes("super_power_execution_state"));
     assert(toolNames.includes("super_power_hardware_telemetry"));
+    assert(toolNames.includes("super_net_shares"));
+    assert(toolNames.includes("super_net_sessions"));
+    assert(toolNames.includes("super_net_accounts"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

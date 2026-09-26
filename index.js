@@ -2615,6 +2615,71 @@ const SYSTEM_TOOLS = [
           type: "object",
           properties: {}
         }
+      },
+      {
+        name: "super_net_shares",
+        description: "Enumerates or queries Windows SMB network shares via NetShareEnum / NetShareGetInfo (netapi32.dll). Reports share names, local filesystem target paths, share types (Disk, IPC, Admin/Special, Print), comments, and active connection limits.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            shareName: {
+              type: "string",
+              description: "Optional specific share name to query (e.g. 'C$', 'ADMIN$', 'SharedDocs'). If omitted, enumerates all shares."
+            },
+            typeFilter: {
+              type: "string",
+              enum: ["all", "disk", "ipc", "special", "print"],
+              default: "all",
+              description: "Filter shares by type: 'all' (default), 'disk' (filesystem folders), 'ipc' (IPC interprocess communication), 'special' (administrative shares like C$ and ADMIN$), or 'print' (shared printer queues)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_net_sessions",
+        description: "Enumerates active inbound network sessions and open remote files on Windows shares via NetSessionEnum and NetFileEnum (netapi32.dll). Reports connected client computer names/IPs, authenticated user accounts, active times, idle times, and open file handles.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            clientFilter: {
+              type: "string",
+              description: "Optional filter by client computer name or IP (e.g. '\\\\192.168.1.50')."
+            },
+            userFilter: {
+              type: "string",
+              description: "Optional filter by username."
+            },
+            includeFiles: {
+              type: "boolean",
+              default: true,
+              description: "Whether to enumerate active open files on local shares via NetFileEnum (default: true)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_net_accounts",
+        description: "Interrogates Windows domain/workgroup join state via NetGetJoinInformation, enumerates local user accounts via NetUserEnum, and inspects local security groups and memberships via NetLocalGroupEnum / NetLocalGroupGetMembers (netapi32.dll).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            includeUsers: {
+              type: "boolean",
+              default: true,
+              description: "Enumerate local user accounts with privilege levels (User, Admin, Guest) and status flags (default: true)."
+            },
+            includeGroups: {
+              type: "boolean",
+              default: true,
+              description: "Enumerate local security groups and descriptions (default: true)."
+            },
+            targetGroup: {
+              type: "string",
+              default: "Administrators",
+              description: "Local security group name to inspect member accounts for (default: 'Administrators')."
+            }
+          }
+        }
       }
 ];
 
@@ -4750,6 +4815,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [Windows Hardware Power Telemetry & Core Frequencies]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_net_shares") {
+    const shareName = args?.shareName || "";
+    const typeFilter = args?.typeFilter || "all";
+    const res = await orch.getNetShares({ shareName, typeFilter });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🌐 [Windows Network SMB Shares]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_net_sessions") {
+    const clientFilter = args?.clientFilter || "";
+    const userFilter = args?.userFilter || "";
+    const includeFiles = args?.includeFiles !== false;
+    const res = await orch.getNetSessions({ clientFilter, userFilter, includeFiles });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🌐 [Windows Inbound Network Sessions & Open Files]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_net_accounts") {
+    const includeUsers = args?.includeUsers !== false;
+    const includeGroups = args?.includeGroups !== false;
+    const targetGroup = args?.targetGroup || "Administrators";
+    const res = await orch.getNetAccounts({ includeUsers, includeGroups, targetGroup });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🌐 [Windows Domain/Workgroup Join State, Accounts & Security Groups]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

@@ -66,6 +66,7 @@
   - [48. Windows SENS & Network Perception Subsystem](#48--windows-system-event-notification-service-sens--network-perception-subsystem-sensapih--netlistmgrh--sensapidll)
   - [49. Windows System Time, Dynamic Time Zones & Chronometry Subsystem](#49--windows-system-time-dynamic-time-zones--chronometry-subsystem-timezoneapih--sysinfoapih--realtimeapiseth)
   - [50. Windows Power Policy, Execution State & Hardware Telemetry Subsystem](#50--windows-power-policy-execution-state--hardware-telemetry-subsystem-powrprofh--powerbaseh--poclassh)
+  - [51. Windows Network Management, SMB Shares & Local Accounts Subsystem](#51--windows-network-management-smb-shares--local-accounts-subsystem-netapi32dll--lmh)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -699,6 +700,17 @@ Directly manages Windows power schemes, thread execution states, and CPU/battery
 - **Silicon Throttling & Battery Chemistry Telemetry (`super_power_hardware_telemetry`)**: Directly invokes `CallNtPowerInformation` from `powrprof.dll` across multiple Information Levels: Level 11 (`ProcessorPowerInformation` for per-core current MHz, max MHz, limit MHz, idle states, and throttle flags), Level 5 (`SystemBatteryState` for AC/DC status, battery presence, charging state, estimated run-time, and capacity in mWh), and Level 4 (`SystemPowerCapabilities` for ACPI sleep states S1-S5, hibernation support, and battery counts).
 - **130 Tools Milestone**: Reaches **130 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **35 comprehensive test suites (116/116 tests passing)** and **31 environment health checks**.
 - **Native MCP Tools**: `super_power_schemes_list`, `super_power_execution_state`, `super_power_hardware_telemetry`.
+
+---
+
+## 51. 🌐 Windows Network Management, SMB Shares & Local Accounts Subsystem (`netapi32.dll` / `lm.h` / `lmshare.h` / `lmaccess.h`)
+
+Directly manages Windows network shares, inbound sessions, open files, domain/workgroup topology, and local accounts via native Win32 NetManagement (`netapi32.dll`) without external net.exe shells or PowerShell overhead:
+- **SMB Shares & Administrative Endpoints (`super_net_shares`)**: Invokes native `NetShareEnum` (Level 2) and `NetShareGetInfo` from `netapi32.dll`. Reports local filesystem paths (e.g. `C:\`, `C:\Windows`, `D:\Share`), share names (`ADMIN$`, `C$`, `IPC$`, custom shares), share types (`DiskTree`, `IPC`, `PrintQueue`, `SpecialAdmin`), comments, current connections count, maximum limits, and permissions.
+- **Inbound Network Sessions & Open Remote Files (`super_net_sessions`)**: Invokes `NetSessionEnum` (Level 1) and `NetFileEnum` (Level 3) to inspect active remote clients connected over SMB/network protocols. Discovers client computer names/IPs, authenticated user accounts, connection durations, idle times, and open file handles with lock counts and access permissions.
+- **Domain/Workgroup Topology & Account Administration (`super_net_accounts`)**: Directly calls `NetGetJoinInformation` to verify workstation domain or workgroup membership (`Workgroup`, `Domain`, `Unjoined`), `NetUserEnum` (Level 1) to inspect local user accounts with privilege classifications (`Admin`, `User`, `Guest`) and flags (disabled, password required, locked out), and `NetLocalGroupEnum` / `NetLocalGroupGetMembers` to enumerate security groups and resolve group memberships (e.g. `Administrators`).
+- **133 Tools Milestone**: Reaches **133 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **36 comprehensive test suites (119/119 tests passing)** and **32 environment health checks**.
+- **Native MCP Tools**: `super_net_shares`, `super_net_sessions`, `super_net_accounts`.
 
 ---
 
