@@ -9004,6 +9004,390 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows File System Volume & Storage Mount Management (fileapi.h / kernel32.dll)
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern IntPtr FindFirstVolumeW(StringBuilder lpszVolumeName, uint cchBufferLength);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool FindNextVolumeW(IntPtr hFindVolume, StringBuilder lpszVolumeName, uint cchBufferLength);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool FindVolumeClose(IntPtr hFindVolume);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetVolumeInformationW(
+            string lpRootPathName,
+            StringBuilder lpVolumeNameBuffer,
+            uint nVolumeNameSize,
+            out uint lpVolumeSerialNumber,
+            out uint lpMaximumComponentLength,
+            out uint lpFileSystemFlags,
+            StringBuilder lpFileSystemNameBuffer,
+            uint nFileSystemNameSize);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetVolumePathNamesForVolumeNameW(
+            string lpszVolumeName,
+            char[] lpszVolumePathNames,
+            uint cchBufferLength,
+            out uint lpcchReturnLength);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetVolumeNameForVolumeMountPointW(
+            string lpszVolumeMountPoint,
+            StringBuilder lpszVolumeName,
+            uint cchBufferLength);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetVolumePathNameW(
+            string lpszFileName,
+            StringBuilder lpszVolumePathName,
+            uint cchBufferLength);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool GetDiskFreeSpaceExW(
+            string lpDirectoryName,
+            out ulong lpFreeBytesAvailableToCaller,
+            out ulong lpTotalNumberOfBytes,
+            out ulong lpTotalNumberOfFreeBytes);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern IntPtr FindFirstVolumeMountPointW(
+            string lpszRootPathName,
+            StringBuilder lpszVolumeMountPoint,
+            uint cchBufferLength);
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool FindNextVolumeMountPointW(
+            IntPtr hFindVolumeMountPoint,
+            StringBuilder lpszVolumeMountPoint,
+            uint cchBufferLength);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool FindVolumeMountPointClose(IntPtr hFindVolumeMountPoint);
+
+        [DllImport("kernel32.dll")]
+        public static extern uint GetLogicalDrives();
+
+        [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern uint GetDriveTypeW(string lpRootPathName);
+
+        static List<string> DecodeFileSystemFlags(uint flags) {
+            var list = new List<string>();
+            if ((flags & 0x00000001) != 0) list.Add("FILE_CASE_SENSITIVE_SEARCH");
+            if ((flags & 0x00000002) != 0) list.Add("FILE_CASE_PRESERVED_NAMES");
+            if ((flags & 0x00000004) != 0) list.Add("FILE_UNICODE_ON_DISK");
+            if ((flags & 0x00000008) != 0) list.Add("FILE_PERSISTENT_ACLS");
+            if ((flags & 0x00000010) != 0) list.Add("FILE_FILE_COMPRESSION");
+            if ((flags & 0x00000020) != 0) list.Add("FILE_VOLUME_QUOTAS");
+            if ((flags & 0x00000040) != 0) list.Add("FILE_SUPPORTS_SPARSE_FILES");
+            if ((flags & 0x00000080) != 0) list.Add("FILE_SUPPORTS_REPARSE_POINTS");
+            if ((flags & 0x00000100) != 0) list.Add("FILE_SUPPORTS_REMOTE_STORAGE");
+            if ((flags & 0x00008000) != 0) list.Add("FILE_VOLUME_IS_COMPRESSED");
+            if ((flags & 0x00010000) != 0) list.Add("FILE_SUPPORTS_OBJECT_IDS");
+            if ((flags & 0x00020000) != 0) list.Add("FILE_SUPPORTS_ENCRYPTION");
+            if ((flags & 0x00040000) != 0) list.Add("FILE_NAMED_STREAMS");
+            if ((flags & 0x00080000) != 0) list.Add("FILE_READ_ONLY_VOLUME");
+            if ((flags & 0x00100000) != 0) list.Add("FILE_SEQUENTIAL_WRITE_ONCE");
+            if ((flags & 0x00200000) != 0) list.Add("FILE_SUPPORTS_TRANSACTIONS");
+            if ((flags & 0x00400000) != 0) list.Add("FILE_SUPPORTS_HARD_LINKS");
+            if ((flags & 0x00800000) != 0) list.Add("FILE_SUPPORTS_EXTENDED_ATTRIBUTES");
+            if ((flags & 0x01000000) != 0) list.Add("FILE_SUPPORTS_OPEN_BY_FILE_ID");
+            if ((flags & 0x02000000) != 0) list.Add("FILE_SUPPORTS_USN_JOURNAL");
+            if ((flags & 0x04000000) != 0) list.Add("FILE_SUPPORTS_INTEGRITY_STREAMS");
+            if ((flags & 0x08000000) != 0) list.Add("FILE_SUPPORTS_BLOCK_REFCOUNTING");
+            if ((flags & 0x10000000) != 0) list.Add("FILE_SUPPORTS_SPARSE_VDL");
+            if ((flags & 0x20000000) != 0) list.Add("FILE_DAX_VOLUME");
+            return list;
+        }
+
+        static string GetDriveTypeName(uint driveType) {
+            switch (driveType) {
+                case 0: return "DRIVE_UNKNOWN";
+                case 1: return "DRIVE_NO_ROOT_DIR";
+                case 2: return "DRIVE_REMOVABLE";
+                case 3: return "DRIVE_FIXED";
+                case 4: return "DRIVE_REMOTE";
+                case 5: return "DRIVE_CDROM";
+                case 6: return "DRIVE_RAMDISK";
+                default: return string.Format("DRIVE_OTHER_{0}", driveType);
+            }
+        }
+
+        static List<string> GetVolumeMountPaths(string volumeGuidPath) {
+            var paths = new List<string>();
+            uint returnLength = 0;
+            GetVolumePathNamesForVolumeNameW(volumeGuidPath, null, 0, out returnLength);
+            if (returnLength > 1) {
+                char[] buffer = new char[returnLength];
+                if (GetVolumePathNamesForVolumeNameW(volumeGuidPath, buffer, returnLength, out returnLength)) {
+                    int start = 0;
+                    for (int i = 0; i < returnLength; i++) {
+                        if (buffer[i] == '\0') {
+                            if (i > start) {
+                                paths.Add(new string(buffer, start, i - start));
+                            }
+                            start = i + 1;
+                        }
+                    }
+                }
+            }
+            return paths;
+        }
+
+        class VolumeMetaRecord {
+            public string VolumeGuid = "";
+            public List<string> MountPaths = new List<string>();
+            public string VolumeLabel = "";
+            public string FileSystemName = "";
+            public uint SerialNumber = 0;
+            public string SerialNumberHex = "0000-0000";
+            public uint MaxComponentLength = 0;
+            public uint Flags = 0;
+            public List<string> DecodedFlags = new List<string>();
+            public ulong FreeBytesAvailable = 0;
+            public ulong TotalBytes = 0;
+            public ulong TotalFreeBytes = 0;
+            public double FreePercentage = 0.0;
+            public bool HasCapacity = false;
+        }
+
+        static VolumeMetaRecord QueryVolumeDetails(string path) {
+            var meta = new VolumeMetaRecord();
+            meta.VolumeGuid = path ?? "";
+            
+            string root = path ?? "";
+            if (!root.EndsWith("\\")) root += "\\";
+            
+            if (root.StartsWith("\\\\?\\Volume{", StringComparison.OrdinalIgnoreCase)) {
+                meta.VolumeGuid = root;
+                meta.MountPaths = GetVolumeMountPaths(root);
+            } else {
+                var sbGuid = new StringBuilder(128);
+                if (GetVolumeNameForVolumeMountPointW(root, sbGuid, (uint)sbGuid.Capacity)) {
+                    meta.VolumeGuid = sbGuid.ToString();
+                    meta.MountPaths = GetVolumeMountPaths(meta.VolumeGuid);
+                } else {
+                    meta.MountPaths.Add(root);
+                }
+            }
+
+            var sbVolName = new StringBuilder(260);
+            var sbFsName = new StringBuilder(260);
+            uint serialNum = 0;
+            uint maxCompLen = 0;
+            uint fsFlags = 0;
+
+            if (GetVolumeInformationW(root, sbVolName, (uint)sbVolName.Capacity, out serialNum, out maxCompLen, out fsFlags, sbFsName, (uint)sbFsName.Capacity)) {
+                meta.VolumeLabel = sbVolName.ToString();
+                meta.FileSystemName = sbFsName.ToString();
+                meta.SerialNumber = serialNum;
+                meta.SerialNumberHex = string.Format("{0:X4}-{1:X4}", (serialNum >> 16) & 0xFFFF, serialNum & 0xFFFF);
+                meta.MaxComponentLength = maxCompLen;
+                meta.Flags = fsFlags;
+                meta.DecodedFlags = DecodeFileSystemFlags(fsFlags);
+            }
+
+            ulong freeCaller = 0, totalBytes = 0, totalFree = 0;
+            if (GetDiskFreeSpaceExW(root, out freeCaller, out totalBytes, out totalFree)) {
+                meta.FreeBytesAvailable = freeCaller;
+                meta.TotalBytes = totalBytes;
+                meta.TotalFreeBytes = totalFree;
+                meta.FreePercentage = totalBytes > 0 ? Math.Round((double)totalFree / (double)totalBytes * 100.0, 2) : 0.0;
+                meta.HasCapacity = true;
+            }
+
+            return meta;
+        }
+
+        static void FsVolumesCmd() {
+            try {
+                var volumes = new List<VolumeMetaRecord>();
+                var sbName = new StringBuilder(260);
+                IntPtr hFind = FindFirstVolumeW(sbName, (uint)sbName.Capacity);
+                if (hFind != new IntPtr(-1)) {
+                    try {
+                        do {
+                            string volGuid = sbName.ToString();
+                            VolumeMetaRecord vMeta = QueryVolumeDetails(volGuid);
+                            volumes.Add(vMeta);
+                        } while (FindNextVolumeW(hFind, sbName, (uint)sbName.Capacity));
+                    } finally {
+                        FindVolumeClose(hFind);
+                    }
+                }
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{\"success\": true, \"count\": " + volumes.Count + ", \"volumes\": [");
+                for (int i = 0; i < volumes.Count; i++) {
+                    var v = volumes[i];
+                    if (i > 0) sbOut.Append(", ");
+                    sbOut.Append("{");
+                    sbOut.AppendFormat("\"volumeGuid\": \"{0}\", ", EscapeJson(v.VolumeGuid));
+                    sbOut.AppendFormat("\"volumeLabel\": \"{0}\", ", EscapeJson(v.VolumeLabel));
+                    sbOut.AppendFormat("\"fileSystemName\": \"{0}\", ", EscapeJson(v.FileSystemName));
+                    sbOut.AppendFormat("\"serialNumberHex\": \"{0}\", ", v.SerialNumberHex);
+                    sbOut.AppendFormat("\"maxComponentLength\": {0}, ", v.MaxComponentLength);
+                    sbOut.AppendFormat("\"flags\": {0}, ", v.Flags);
+                    
+                    sbOut.Append("\"decodedFlags\": [");
+                    for (int f = 0; f < v.DecodedFlags.Count; f++) {
+                        if (f > 0) sbOut.Append(", ");
+                        sbOut.AppendFormat("\"{0}\"", v.DecodedFlags[f]);
+                    }
+                    sbOut.Append("], ");
+
+                    sbOut.Append("\"mountPaths\": [");
+                    for (int p = 0; p < v.MountPaths.Count; p++) {
+                        if (p > 0) sbOut.Append(", ");
+                        sbOut.AppendFormat("\"{0}\"", EscapeJson(v.MountPaths[p]));
+                    }
+                    sbOut.Append("], ");
+
+                    sbOut.AppendFormat("\"totalBytes\": {0}, ", v.TotalBytes);
+                    sbOut.AppendFormat("\"freeBytes\": {0}, ", v.TotalFreeBytes);
+                    sbOut.AppendFormat("\"availableBytes\": {0}, ", v.FreeBytesAvailable);
+                    sbOut.AppendFormat("\"freePercentage\": {0}, ", v.FreePercentage);
+                    sbOut.AppendFormat("\"totalGB\": {0}, ", Math.Round((double)v.TotalBytes / (1024.0 * 1024.0 * 1024.0), 2));
+                    sbOut.AppendFormat("\"freeGB\": {0}", Math.Round((double)v.TotalFreeBytes / (1024.0 * 1024.0 * 1024.0), 2));
+                    sbOut.Append("}");
+                }
+                sbOut.Append("]}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void FsVolumeMountPointsCmd(string rootPath) {
+            try {
+                if (string.IsNullOrEmpty(rootPath)) rootPath = "C:\\";
+                if (!rootPath.EndsWith("\\")) rootPath += "\\";
+
+                var mountPoints = new List<string>();
+                var sbMp = new StringBuilder(260);
+                IntPtr hFind = FindFirstVolumeMountPointW(rootPath, sbMp, (uint)sbMp.Capacity);
+                if (hFind != new IntPtr(-1)) {
+                    try {
+                        do {
+                            string mp = sbMp.ToString();
+                            if (!string.IsNullOrEmpty(mp)) {
+                                mountPoints.Add(mp);
+                            }
+                        } while (FindNextVolumeMountPointW(hFind, sbMp, (uint)sbMp.Capacity));
+                    } finally {
+                        FindVolumeMountPointClose(hFind);
+                    }
+                }
+
+                var sbResolved = new StringBuilder(260);
+                string resolvedVolumePath = "";
+                if (GetVolumePathNameW(rootPath, sbResolved, (uint)sbResolved.Capacity)) {
+                    resolvedVolumePath = sbResolved.ToString();
+                }
+
+                var sbGuid = new StringBuilder(128);
+                string rootVolumeGuid = "";
+                if (GetVolumeNameForVolumeMountPointW(rootPath, sbGuid, (uint)sbGuid.Capacity)) {
+                    rootVolumeGuid = sbGuid.ToString();
+                }
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.AppendFormat("\"rootPath\": \"{0}\", ", EscapeJson(rootPath));
+                sbOut.AppendFormat("\"resolvedVolumePath\": \"{0}\", ", EscapeJson(resolvedVolumePath));
+                sbOut.AppendFormat("\"rootVolumeGuid\": \"{0}\", ", EscapeJson(rootVolumeGuid));
+                sbOut.AppendFormat("\"mountPointCount\": {0}, ", mountPoints.Count);
+                sbOut.Append("\"mountPoints\": [");
+                for (int i = 0; i < mountPoints.Count; i++) {
+                    if (i > 0) sbOut.Append(", ");
+                    sbOut.AppendFormat("\"{0}\"", EscapeJson(mountPoints[i]));
+                }
+                sbOut.Append("]}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void FsDrivesCmd(string driveFilter) {
+            try {
+                uint bitmask = GetLogicalDrives();
+                string filterClean = (driveFilter ?? "").Trim().ToUpperInvariant();
+                if (filterClean.Length > 0 && !filterClean.EndsWith("\\")) {
+                    if (filterClean.Length == 1 || (filterClean.Length == 2 && filterClean[1] == ':')) {
+                        filterClean = filterClean.Substring(0, 1) + ":\\";
+                    }
+                }
+
+                var list = new List<string>();
+                for (int i = 0; i < 26; i++) {
+                    if ((bitmask & (1u << i)) != 0) {
+                        char letter = (char)('A' + i);
+                        string root = letter + ":\\";
+                        if (!string.IsNullOrEmpty(filterClean) && !root.Equals(filterClean, StringComparison.OrdinalIgnoreCase)) {
+                            continue;
+                        }
+
+                        uint dType = GetDriveTypeW(root);
+                        string dTypeName = GetDriveTypeName(dType);
+                        VolumeMetaRecord meta = QueryVolumeDetails(root);
+
+                        var sbItem = new StringBuilder();
+                        sbItem.Append("{");
+                        sbItem.AppendFormat("\"driveLetter\": \"{0}:\", ", letter);
+                        sbItem.AppendFormat("\"rootPath\": \"{0}\", ", EscapeJson(root));
+                        sbItem.AppendFormat("\"driveType\": {0}, ", dType);
+                        sbItem.AppendFormat("\"driveTypeName\": \"{0}\", ", dTypeName);
+                        sbItem.AppendFormat("\"isReady\": {0}, ", meta.HasCapacity ? "true" : "false");
+                        sbItem.AppendFormat("\"volumeLabel\": \"{0}\", ", EscapeJson(meta.VolumeLabel));
+                        sbItem.AppendFormat("\"fileSystemName\": \"{0}\", ", EscapeJson(meta.FileSystemName));
+                        sbItem.AppendFormat("\"serialNumberHex\": \"{0}\", ", meta.SerialNumberHex);
+                        sbItem.AppendFormat("\"volumeGuid\": \"{0}\", ", EscapeJson(meta.VolumeGuid));
+                        sbItem.AppendFormat("\"totalBytes\": {0}, ", meta.TotalBytes);
+                        sbItem.AppendFormat("\"freeBytes\": {0}, ", meta.TotalFreeBytes);
+                        sbItem.AppendFormat("\"availableBytes\": {0}, ", meta.FreeBytesAvailable);
+                        sbItem.AppendFormat("\"freePercentage\": {0}, ", meta.FreePercentage);
+                        sbItem.AppendFormat("\"totalGB\": {0}, ", Math.Round((double)meta.TotalBytes / (1024.0 * 1024.0 * 1024.0), 2));
+                        sbItem.AppendFormat("\"freeGB\": {0}, ", Math.Round((double)meta.TotalFreeBytes / (1024.0 * 1024.0 * 1024.0), 2));
+                        
+                        sbItem.Append("\"decodedFlags\": [");
+                        for (int f = 0; f < meta.DecodedFlags.Count; f++) {
+                            if (f > 0) sbItem.Append(", ");
+                            sbItem.AppendFormat("\"{0}\"", meta.DecodedFlags[f]);
+                        }
+                        sbItem.Append("]}");
+
+                        list.Add(sbItem.ToString());
+                    }
+                }
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{\"success\": true, \"count\": " + list.Count + ", \"drives\": [");
+                for (int i = 0; i < list.Count; i++) {
+                    if (i > 0) sbOut.Append(", ");
+                    sbOut.Append(list[i]);
+                }
+                sbOut.Append("]}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -12110,6 +12494,14 @@ namespace GeminiSuperDesktop {
                 string desc = args.Length >= 6 ? args[5] : "";
                 string entropy = args.Length >= 7 ? args[6] : null;
                 DpapiProtectFileCmd(action, src, dst, scope, desc, entropy);
+            } else if (cmd == "fs_volumes" || cmd == "fs-volumes") {
+                FsVolumesCmd();
+            } else if (cmd == "fs_mount_points" || cmd == "fs-mount-points" || cmd == "fs_mounts") {
+                string root = args.Length >= 2 ? args[1] : "C:\\";
+                FsVolumeMountPointsCmd(root);
+            } else if (cmd == "fs_drives" || cmd == "fs-drives") {
+                string filter = args.Length >= 2 ? args[1] : null;
+                FsDrivesCmd(filter);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

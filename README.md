@@ -74,6 +74,7 @@
   - [56. Windows Credential Management Subsystem](#56--windows-credential-management-subsystem-wincredh--advapi32dll)
   - [57. Windows Domain Name System Subsystem](#57--windows-domain-name-system-dns-subsystem-windnsh--dnsapidll)
   - [58. Windows Data Protection API Subsystem](#58-️-windows-data-protection-api-dpapi-subsystem-dpapih--crypt32dll)
+  - [59. Windows File System Volume & Storage Mount Management Subsystem](#59--windows-file-system-volume--storage-mount-management-subsystem-fileapih--winioctlh--kernel32dll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -795,6 +796,17 @@ Directly encrypts and decrypts sensitive data, tokens, and files using machine- 
 - **Direct File Encryption & Decryption (`super_dpapi_protect_file`)**: Directly reads, protects, or unprotects entire files on disk using DPAPI. Enables transparent protection of local agent configurations, sqlite databases, log files, model weights, or private memory stores with atomic file writes and zero temporary plaintext leaks.
 - **154 Tools Milestone**: Reaches **154 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **43 comprehensive test suites (139/139 tests passing)** and **39 environment health checks**.
 - **Native MCP Tools**: `super_dpapi_protect`, `super_dpapi_unprotect`, `super_dpapi_protect_file`.
+
+---
+
+## 59. 💾 Windows File System Volume & Storage Mount Management Subsystem (`fileapi.h` / `winioctl.h` / `kernel32.dll`)
+
+Directly enumerates, inspects, and manages physical and logical storage volumes, volume mount points/junctions, and drive letter topologies via native `kernel32.dll` P/Invoke:
+- **Comprehensive Volume Enumeration & Capacity Mapping (`super_fs_volumes`)**: Directly invokes native `FindFirstVolumeW`, `FindNextVolumeW`, and `FindVolumeClose` to discover all unique volume GUID paths (`\\?\Volume{...}\`) across the OS. Extracts volume labels, file system formats (`NTFS`, `ReFS`, `FAT32`, `exFAT`), 32-bit volume serial numbers (formatted hex), maximum component name lengths, file system capability flags (`FILE_CASE_PRESERVED_NAMES`, `FILE_PERSISTENT_ACLS`, `FILE_FILE_COMPRESSION`, `FILE_VOLUME_QUOTAS`, `FILE_SUPPORTS_ENCRYPTION`, `FILE_SUPPORTS_OBJECT_IDS`, `FILE_SUPPORTS_SPARSE_FILES`, `FILE_SUPPORTS_USN_JOURNAL`), mounted path names via `GetVolumePathNamesForVolumeNameW`, and exact 64-bit byte/GB capacities via `GetDiskFreeSpaceExW`.
+- **Volume Mount Point & Junction Discovery (`super_fs_volume_mount_points`)**: Invokes native `FindFirstVolumeMountPointW`, `FindNextVolumeMountPointW`, and `FindVolumeMountPointClose` along with `GetVolumePathNameW` and `GetVolumeNameForVolumeMountPointW`. Discovers folder-based volume mount points, directory junctions, and resolves root volume GUIDs for arbitrary directory trees.
+- **Drive Letter Bitmask & Type Classification (`super_fs_drives`)**: Interrogates all 26 drive letters (`A:\` through `Z:\`) via `GetLogicalDrives` bitmask and classifies drive device types via `GetDriveTypeW` (`DRIVE_FIXED`, `DRIVE_REMOVABLE`, `DRIVE_REMOTE`, `DRIVE_CDROM`, `DRIVE_RAMDISK`), resolving filesystem format, volume label, serial number, volume GUID, and free/total storage capacities.
+- **157 Tools Milestone**: Reaches **157 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **44 comprehensive test suites (142/142 tests passing)** and **40 environment health checks**.
+- **Native MCP Tools**: `super_fs_volumes`, `super_fs_volume_mount_points`, `super_fs_drives`.
 
 ---
 

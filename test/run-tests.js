@@ -3195,10 +3195,68 @@ async function run() {
     }
   });
 
-  it("All 154 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n=======================================================");
+  console.log("   SUITE 44: Windows File System Volume & Mount Management (fileapi.h)");
+  console.log("=======================================================");
+
+  await itAsync("super_fs_volumes enumerates system storage volumes, flags, and capacities via FindFirstVolumeW", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getVolumes();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getVolumes failed: " + JSON.stringify(res));
+    assert(typeof res.count === "number" && res.count >= 1);
+    assert(Array.isArray(res.volumes) && res.volumes.length >= 1);
+
+    const v0 = res.volumes[0];
+    assert(typeof v0.volumeGuid === "string" && v0.volumeGuid.startsWith("\\\\?\\Volume{"));
+    assert(typeof v0.fileSystemName === "string");
+    assert(typeof v0.serialNumberHex === "string");
+    assert(Array.isArray(v0.decodedFlags));
+    assert(Array.isArray(v0.mountPaths));
+    assert(typeof v0.totalBytes === "number");
+    assert(typeof v0.freeBytes === "number");
+  });
+
+  await itAsync("super_fs_volume_mount_points queries volume mount points and resolved path via FindFirstVolumeMountPointW", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getVolumeMountPoints("C:\\");
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getVolumeMountPoints failed: " + JSON.stringify(res));
+    assert(typeof res.rootPath === "string" && res.rootPath === "C:\\");
+    assert(typeof res.resolvedVolumePath === "string" && res.resolvedVolumePath.length > 0);
+    assert(typeof res.rootVolumeGuid === "string" && res.rootVolumeGuid.startsWith("\\\\?\\Volume{"));
+    assert(typeof res.mountPointCount === "number");
+    assert(Array.isArray(res.mountPoints));
+  });
+
+  await itAsync("super_fs_drives queries drive letters and drive types via GetLogicalDrives and GetDriveTypeW", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getDrives("C:");
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getDrives failed: " + JSON.stringify(res));
+    assert.strictEqual(res.count, 1);
+    assert(Array.isArray(res.drives) && res.drives.length === 1);
+
+    const cDrive = res.drives[0];
+    assert.strictEqual(cDrive.driveLetter, "C:");
+    assert.strictEqual(cDrive.driveType, 3); // DRIVE_FIXED
+    assert.strictEqual(cDrive.driveTypeName, "DRIVE_FIXED");
+    assert.strictEqual(cDrive.isReady, true);
+    assert.strictEqual(cDrive.fileSystemName, "NTFS");
+    assert(typeof cDrive.totalBytes === "number" && cDrive.totalBytes > 0);
+    assert(typeof cDrive.freeBytes === "number" && cDrive.freeBytes > 0);
+  });
+
+  it("All 157 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 154);
+    assert.strictEqual(SYSTEM_TOOLS.length, 157);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3286,6 +3344,9 @@ async function run() {
     assert(toolNames.includes("super_dpapi_protect"));
     assert(toolNames.includes("super_dpapi_unprotect"));
     assert(toolNames.includes("super_dpapi_protect_file"));
+    assert(toolNames.includes("super_fs_volumes"));
+    assert(toolNames.includes("super_fs_volume_mount_points"));
+    assert(toolNames.includes("super_fs_drives"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

@@ -3151,6 +3151,41 @@ const SYSTEM_TOOLS = [
           },
           required: ["sourcePath"]
         }
+      },
+      {
+        name: "super_fs_volumes",
+        description: "Enumerates all unique physical and logical storage volumes in Windows via native Win32 FindFirstVolumeW / FindNextVolumeW / GetVolumeInformationW / GetDiskFreeSpaceExW. Returns volume GUID paths, mount point drive letters, volume labels, file system formats (NTFS, ReFS, FAT32), serial numbers, capabilities/flags (compression, encryption, quotas, persistent ACLs), and exact byte/GB capacities.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_fs_volume_mount_points",
+        description: "Enumerates volume mount points, folder junctions, and resolved volume paths on a given volume or drive root via native Win32 FindFirstVolumeMountPointW / GetVolumePathNameW / GetVolumeNameForVolumeMountPointW.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            rootPath: {
+              type: "string",
+              default: "C:\\",
+              description: "Root path or drive letter to inspect mount points for (e.g. 'C:\\', 'D:\\')."
+            }
+          }
+        }
+      },
+      {
+        name: "super_fs_drives",
+        description: "Interrogates all logical Windows drive letters via native Win32 GetLogicalDrives bitmask and GetDriveTypeW. Returns drive type classification (FIXED, REMOVABLE, REMOTE/NETWORK, CDROM, RAMDISK), readiness status, filesystem format, volume GUID, and disk space capacity.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            driveFilter: {
+              type: "string",
+              description: "Optional specific drive letter to query (e.g. 'C:', 'D:'). If omitted, enumerates all system drives."
+            }
+          }
+        }
       }
 ];
 
@@ -5591,6 +5626,44 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `📁 [Windows DPAPI Atomic File Protection]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_fs_volumes") {
+    const res = await orch.getVolumes();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💾 [Windows File System Volumes (FindFirstVolumeW / fileapi.h)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_fs_volume_mount_points") {
+    const rootPath = args?.rootPath || "C:\\";
+    const res = await orch.getVolumeMountPoints(rootPath);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📂 [Windows Volume Mount Points (FindFirstVolumeMountPointW)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_fs_drives") {
+    const driveFilter = args?.driveFilter || null;
+    const res = await orch.getDrives(driveFilter);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💽 [Windows Logical Drives (GetLogicalDrives / GetDriveTypeW)]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
