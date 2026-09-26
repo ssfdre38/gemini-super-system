@@ -68,6 +68,7 @@
   - [50. Windows Power Policy, Execution State & Hardware Telemetry Subsystem](#50--windows-power-policy-execution-state--hardware-telemetry-subsystem-powrprofh--powerbaseh--poclassh)
   - [51. Windows Network Management, SMB Shares & Local Accounts Subsystem](#51--windows-network-management-smb-shares--local-accounts-subsystem-netapi32dll--lmh)
   - [52. Windows Virtual Memory, Heap Allocations & Working Set Subsystem](#52--windows-virtual-memory-heap-allocations--working-set-subsystem-memoryapih--heapapih)
+  - [53. Windows Console Subsystem, Screen Buffer & Terminal Mode Actuator](#53--windows-console-subsystem-screen-buffer--terminal-mode-actuator-winconh--consoleapih)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -723,6 +724,17 @@ Directly inspects and tunes process virtual memory pages, Win32 heap allocations
 - **Working Set Quota & Ceiling Governor (`super_memory_working_set_tune`)**: Interrogates and tunes process working set bounds via `GetProcessWorkingSetSizeEx`, `SetProcessWorkingSetSizeEx`, and `EmptyWorkingSet`. Allows defining minimum/maximum working set targets, enforcing hard OS working set ceilings (`QUOTA_LIMITS_HARDWS_MIN_ENABLE`, `QUOTA_LIMITS_HARDWS_MAX_ENABLE`), or immediately trimming unused physical RAM pages to minimize system memory footprint.
 - **136 Tools Milestone**: Reaches **136 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **37 comprehensive test suites (122/122 tests passing)** and **33 environment health checks**.
 - **Native MCP Tools**: `super_memory_virtual_query`, `super_memory_heap_summary`, `super_memory_working_set_tune`.
+
+---
+
+## 53. 💻 Windows Console Subsystem, Screen Buffer & Terminal Mode Actuator (`wincon.h` / `consoleapi.h`)
+
+Directly manages, inspects, and tunes the Win32 Console host subsystem, active screen buffers, and terminal input/output modes via native `kernel32.dll` P/Invoke with full headless Session 0 resilience:
+- **Console Environment & Screen Buffer Telemetry (`super_console_info`)**: Interrogates active console window HWND via `GetConsoleWindow()`, dynamically queries console title (`GetConsoleTitleW`), enumerates all process IDs attached to the console session (`GetConsoleProcessList`), extracts screen buffer columns and rows (`CONSOLE_SCREEN_BUFFER_INFO`), cursor coordinate `(X, Y)` position, cursor visibility and percentage size (`GetConsoleCursorInfo`), display mode (windowed vs fullscreen via `GetConsoleDisplayMode`), active selection regions (`GetConsoleSelectionInfo`), and mouse button count (`GetNumberOfConsoleMouseButtons`). Gracefully detects redirected pipes (`CONOUT$`) and Session 0 headless environments.
+- **Terminal Input & Output Mode Actuator (`super_console_mode`)**: Inspects and adjusts low-level console input and output modes (`GetConsoleMode` / `SetConsoleMode`). Enables or disables virtual terminal processing (`ENABLE_VIRTUAL_TERMINAL_PROCESSING` 0x0004) for full ANSI/VT100 escape code support, toggles QuickEdit mode (`ENABLE_QUICK_EDIT_MODE` 0x0040) with required extended flags (`ENABLE_EXTENDED_FLAGS` 0x0080) to prevent accidental console freezing upon mouse click, manages mouse event intake (`ENABLE_MOUSE_INPUT` 0x0010), and monitors line buffering / echo input.
+- **Dynamic Console Window & Cursor Actuator (`super_console_control`)**: Actuates console state on the fly by dynamically setting window titles (`SetConsoleTitleW`), adjusting cursor visibility and thickness (`SetConsoleCursorInfo`), or elevating and bringing the host console window into foreground focus (`ForceForegroundWindow`).
+- **139 Tools Milestone**: Reaches **139 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **38 comprehensive test suites (125/125 tests passing)** and **34 environment health checks**.
+- **Native MCP Tools**: `super_console_info`, `super_console_mode`, `super_console_control`.
 
 ---
 

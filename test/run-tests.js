@@ -2808,10 +2808,72 @@ async function run() {
     assert.strictEqual(res.emptied, false);
   });
 
-  it("All 136 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 38: Windows Console Subsystem, Screen Buffer & Terminal Modes
+  console.log("\n=======================================================");
+  console.log("   SUITE 38: Windows Console Subsystem & Terminal Modes");
+  console.log("=======================================================\n");
+
+  await itAsync("super_console_info inspects console window HWND, title, screen buffer, and process list", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getConsoleInfo({ includeProcesses: true });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.isAttached === "boolean");
+    assert(typeof res.isHeadless === "boolean");
+    assert(typeof res.hwnd === "string");
+    assert(typeof res.title === "string");
+    assert(typeof res.processCount === "number");
+    assert(Array.isArray(res.processIds));
+
+    if (res.isAttached && res.buffer) {
+      assert(typeof res.buffer.width === "number");
+      assert(typeof res.buffer.height === "number");
+      assert(typeof res.buffer.cursorX === "number");
+      assert(typeof res.buffer.cursorY === "number");
+      assert(typeof res.buffer.cursorVisible === "boolean");
+    }
+  });
+
+  await itAsync("super_console_mode inspects and validates console input and output modes", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getConsoleMode();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.isAttached === "boolean");
+    assert(typeof res.tuned === "boolean");
+    assert(typeof res.inputModeRaw === "number");
+    assert(typeof res.outputModeRaw === "number");
+    assert(typeof res.input === "object");
+    assert(typeof res.output === "object");
+    assert(typeof res.output.virtualTerminalProcessing === "boolean");
+    assert(typeof res.output.wrapAtEol === "boolean");
+  });
+
+  await itAsync("super_console_control safely queries and updates console title and cursor properties", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.controlConsole();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.hwnd === "string");
+    assert(typeof res.previousTitle === "string");
+    assert(typeof res.currentTitle === "string");
+    assert(typeof res.titleChanged === "boolean");
+    assert(typeof res.cursorChanged === "boolean");
+    assert(typeof res.cursorVisible === "boolean");
+    assert(typeof res.cursorSizePercent === "number");
+    assert(typeof res.activated === "boolean");
+  });
+
+  it("All 139 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 136);
+    assert.strictEqual(SYSTEM_TOOLS.length, 139);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -2881,6 +2943,9 @@ async function run() {
     assert(toolNames.includes("super_memory_virtual_query"));
     assert(toolNames.includes("super_memory_heap_summary"));
     assert(toolNames.includes("super_memory_working_set_tune"));
+    assert(toolNames.includes("super_console_info"));
+    assert(toolNames.includes("super_console_mode"));
+    assert(toolNames.includes("super_console_control"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

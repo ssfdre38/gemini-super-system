@@ -7246,6 +7246,382 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Phase 19: Win32 Console Subsystem (Windows.Win32.System.Console / wincon.h / consoleapi.h)
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct COORD {
+            public short X;
+            public short Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct SMALL_RECT {
+            public short Left;
+            public short Top;
+            public short Right;
+            public short Bottom;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct CONSOLE_SCREEN_BUFFER_INFO {
+            public COORD dwSize;
+            public COORD dwCursorPosition;
+            public ushort wAttributes;
+            public SMALL_RECT srWindow;
+            public COORD dwMaximumWindowSize;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct CONSOLE_CURSOR_INFO {
+            public uint dwSize;
+            public bool bVisible;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct CONSOLE_SELECTION_INFO {
+            public uint dwFlags;
+            public COORD dwSelectionAnchor;
+            public SMALL_RECT srSelection;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern IntPtr GetConsoleWindow();
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern uint GetConsoleTitle(StringBuilder lpConsoleTitle, uint nSize);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool SetConsoleTitle(string lpConsoleTitle);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern uint GetConsoleProcessList([Out] uint[] ProcessList, uint ProcessCount);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetConsoleScreenBufferInfo(IntPtr hConsoleOutput, out CONSOLE_SCREEN_BUFFER_INFO lpConsoleScreenBufferInfo);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetConsoleMode(IntPtr hConsoleHandle, out uint lpMode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool SetConsoleMode(IntPtr hConsoleHandle, uint dwMode);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetConsoleCursorInfo(IntPtr hConsoleOutput, out CONSOLE_CURSOR_INFO lpConsoleCursorInfo);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool SetConsoleCursorInfo(IntPtr hConsoleOutput, ref CONSOLE_CURSOR_INFO lpConsoleCursorInfo);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetConsoleSelectionInfo(out CONSOLE_SELECTION_INFO lpConsoleSelectionInfo);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetConsoleDisplayMode(out uint lpModeFlags);
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        static extern bool GetNumberOfConsoleMouseButtons(out uint lpNumberOfMouseButtons);
+
+        static IntPtr OpenConsoleOutputHandle() {
+            return CreateFile("CONOUT$", 0x80000000 | 0x40000000, 0x1 | 0x2, IntPtr.Zero, 3, 0, IntPtr.Zero);
+        }
+
+        static IntPtr OpenConsoleInputHandle() {
+            return CreateFile("CONIN$", 0x80000000 | 0x40000000, 0x1 | 0x2, IntPtr.Zero, 3, 0, IntPtr.Zero);
+        }
+
+        static void ConsoleInfoCmd(bool includeProcesses) {
+            try {
+                IntPtr hwnd = GetConsoleWindow();
+                StringBuilder sb = new StringBuilder(1024);
+                uint tLen = 0;
+                try { tLen = GetConsoleTitle(sb, 1024); } catch {}
+                string title = sb.ToString();
+
+                bool isAttached = (hwnd != IntPtr.Zero);
+
+                uint mouseButtons = 0;
+                try { GetNumberOfConsoleMouseButtons(out mouseButtons); } catch {}
+
+                uint dispMode = 0;
+                string displayModeStr = "WINDOWED";
+                if (GetConsoleDisplayMode(out dispMode)) {
+                    if ((dispMode & 0x0001) != 0) displayModeStr = "FULLSCREEN";
+                    else if ((dispMode & 0x0002) != 0) displayModeStr = "WINDOWED";
+                }
+
+                var procList = new List<uint>();
+                if (includeProcesses) {
+                    uint[] procs = new uint[128];
+                    uint pCount = GetConsoleProcessList(procs, (uint)procs.Length);
+                    for (int i = 0; i < pCount && i < procs.Length; i++) {
+                        procList.Add(procs[i]);
+                    }
+                }
+
+                IntPtr hConOut = OpenConsoleOutputHandle();
+                bool hasBuffer = false;
+                int bufW = 0, bufH = 0;
+                int curX = 0, curY = 0;
+                ushort attr = 0;
+                int winL = 0, winT = 0, winR = 0, winB = 0;
+                int maxWinW = 0, maxWinH = 0;
+                uint curSize = 0;
+                bool curVisible = false;
+
+                if (hConOut != IntPtr.Zero && hConOut.ToInt64() != -1) {
+                    isAttached = true;
+                    CONSOLE_SCREEN_BUFFER_INFO csbi;
+                    if (GetConsoleScreenBufferInfo(hConOut, out csbi)) {
+                        hasBuffer = true;
+                        bufW = csbi.dwSize.X;
+                        bufH = csbi.dwSize.Y;
+                        curX = csbi.dwCursorPosition.X;
+                        curY = csbi.dwCursorPosition.Y;
+                        attr = csbi.wAttributes;
+                        winL = csbi.srWindow.Left;
+                        winT = csbi.srWindow.Top;
+                        winR = csbi.srWindow.Right;
+                        winB = csbi.srWindow.Bottom;
+                        maxWinW = csbi.dwMaximumWindowSize.X;
+                        maxWinH = csbi.dwMaximumWindowSize.Y;
+                    }
+                    CONSOLE_CURSOR_INFO cci;
+                    if (GetConsoleCursorInfo(hConOut, out cci)) {
+                        curSize = cci.dwSize;
+                        curVisible = cci.bVisible;
+                    }
+                    CloseHandle(hConOut);
+                }
+
+                CONSOLE_SELECTION_INFO csi;
+                bool hasSel = false;
+                uint selFlags = 0;
+                int selAncX = 0, selAncY = 0;
+                int selL = 0, selT = 0, selR = 0, selB = 0;
+                if (GetConsoleSelectionInfo(out csi)) {
+                    hasSel = true;
+                    selFlags = csi.dwFlags;
+                    selAncX = csi.dwSelectionAnchor.X;
+                    selAncY = csi.dwSelectionAnchor.Y;
+                    selL = csi.srSelection.Left;
+                    selT = csi.srSelection.Top;
+                    selR = csi.srSelection.Right;
+                    selB = csi.srSelection.Bottom;
+                }
+
+                string bufferJson = hasBuffer ? string.Format(
+                    "{{\"width\": {0}, \"height\": {1}, \"cursorX\": {2}, \"cursorY\": {3}, \"cursorSizePercent\": {4}, \"cursorVisible\": {5}, \"windowLeft\": {6}, \"windowTop\": {7}, \"windowRight\": {8}, \"windowBottom\": {9}, \"maxWindowWidth\": {10}, \"maxWindowHeight\": {11}, \"attributes\": {12}}}",
+                    bufW, bufH, curX, curY, curSize, curVisible ? "true" : "false", winL, winT, winR, winB, maxWinW, maxWinH, attr) : "null";
+
+                string selJson = string.Format(
+                    "{{\"active\": {0}, \"flags\": {1}, \"anchorX\": {2}, \"anchorY\": {3}, \"left\": {4}, \"top\": {5}, \"right\": {6}, \"bottom\": {7}}}",
+                    hasSel && (selFlags != 0) ? "true" : "false", selFlags, selAncX, selAncY, selL, selT, selR, selB);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"isAttached\": {0}, \"isHeadless\": {1}, \"hwnd\": \"0x{2:X}\", \"title\": \"{3}\", \"displayMode\": \"{4}\", \"mouseButtons\": {5}, \"processCount\": {6}, \"processIds\": [{7}], \"buffer\": {8}, \"selection\": {9}}}",
+                    isAttached ? "true" : "false",
+                    (!isAttached) ? "true" : "false",
+                    hwnd.ToInt64(),
+                    EscapeJson(title),
+                    EscapeJson(displayModeStr),
+                    mouseButtons,
+                    procList.Count,
+                    string.Join(", ", procList.ConvertAll(p => p.ToString()).ToArray()),
+                    bufferJson,
+                    selJson
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void ConsoleModeCmd(string vtProcessingOpt, string quickEditOpt, string mouseInputOpt, string extFlagsOpt) {
+            try {
+                IntPtr hConIn = OpenConsoleInputHandle();
+                IntPtr hConOut = OpenConsoleOutputHandle();
+
+                uint inMode = 0;
+                uint outMode = 0;
+                bool hasIn = false;
+                bool hasOut = false;
+
+                if (hConIn != IntPtr.Zero && hConIn.ToInt64() != -1) {
+                    hasIn = GetConsoleMode(hConIn, out inMode);
+                }
+                if (hConOut != IntPtr.Zero && hConOut.ToInt64() != -1) {
+                    hasOut = GetConsoleMode(hConOut, out outMode);
+                }
+
+                bool tuned = false;
+
+                // Output Mode Tuning: VT Processing (0x0004)
+                if (hasOut && !string.IsNullOrEmpty(vtProcessingOpt)) {
+                    bool enableVt = (vtProcessingOpt.ToLowerInvariant() == "true" || vtProcessingOpt == "1");
+                    uint newOutMode = outMode;
+                    if (enableVt) newOutMode |= 0x0004; // ENABLE_VIRTUAL_TERMINAL_PROCESSING
+                    else newOutMode &= ~0x0004u;
+                    if (SetConsoleMode(hConOut, newOutMode)) {
+                        outMode = newOutMode;
+                        tuned = true;
+                    }
+                }
+
+                // Input Mode Tuning: QuickEdit (0x0040), MouseInput (0x0010), ExtendedFlags (0x0080)
+                if (hasIn && (!string.IsNullOrEmpty(quickEditOpt) || !string.IsNullOrEmpty(mouseInputOpt) || !string.IsNullOrEmpty(extFlagsOpt))) {
+                    uint newInMode = inMode;
+                    newInMode |= 0x0080; // ENABLE_EXTENDED_FLAGS is mandatory to modify QuickEdit
+
+                    if (!string.IsNullOrEmpty(quickEditOpt)) {
+                        bool qe = (quickEditOpt.ToLowerInvariant() == "true" || quickEditOpt == "1");
+                        if (qe) newInMode |= 0x0040; // ENABLE_QUICK_EDIT_MODE
+                        else newInMode &= ~0x0040u;
+                    }
+                    if (!string.IsNullOrEmpty(mouseInputOpt)) {
+                        bool mi = (mouseInputOpt.ToLowerInvariant() == "true" || mouseInputOpt == "1");
+                        if (mi) newInMode |= 0x0010; // ENABLE_MOUSE_INPUT
+                        else newInMode &= ~0x0010u;
+                    }
+                    if (!string.IsNullOrEmpty(extFlagsOpt)) {
+                        bool ef = (extFlagsOpt.ToLowerInvariant() == "true" || extFlagsOpt == "1");
+                        if (ef) newInMode |= 0x0080;
+                        else newInMode &= ~0x0080u;
+                    }
+
+                    if (SetConsoleMode(hConIn, newInMode)) {
+                        inMode = newInMode;
+                        tuned = true;
+                    }
+                }
+
+                if (hConIn != IntPtr.Zero && hConIn.ToInt64() != -1) CloseHandle(hConIn);
+                if (hConOut != IntPtr.Zero && hConOut.ToInt64() != -1) CloseHandle(hConOut);
+
+                bool isAttached = hasIn || hasOut;
+
+                // Breakdown of input modes
+                bool processedInput = (inMode & 0x0001) != 0;
+                bool lineInput = (inMode & 0x0002) != 0;
+                bool echoInput = (inMode & 0x0004) != 0;
+                bool windowInput = (inMode & 0x0008) != 0;
+                bool mouseInput = (inMode & 0x0010) != 0;
+                bool insertMode = (inMode & 0x0020) != 0;
+                bool quickEditMode = (inMode & 0x0040) != 0;
+                bool extendedFlags = (inMode & 0x0080) != 0;
+                bool autoPosition = (inMode & 0x0100) != 0;
+                bool virtualTerminalInput = (inMode & 0x0200) != 0;
+
+                // Breakdown of output modes
+                bool processedOutput = (outMode & 0x0001) != 0;
+                bool wrapAtEol = (outMode & 0x0002) != 0;
+                bool virtualTerminalProcessing = (outMode & 0x0004) != 0;
+                bool disableNewlineAutoReturn = (outMode & 0x0008) != 0;
+                bool lvbGridWorldwide = (outMode & 0x0010) != 0;
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"isAttached\": {0}, \"isHeadless\": {1}, \"tuned\": {2}, \"inputModeRaw\": {3}, \"outputModeRaw\": {4}, \"input\": {{\"processedInput\": {5}, \"lineInput\": {6}, \"echoInput\": {7}, \"windowInput\": {8}, \"mouseInput\": {9}, \"insertMode\": {10}, \"quickEdit\": {11}, \"extendedFlags\": {12}, \"autoPosition\": {13}, \"virtualTerminalInput\": {14}}}, \"output\": {{\"processedOutput\": {15}, \"wrapAtEol\": {16}, \"virtualTerminalProcessing\": {17}, \"disableNewlineAutoReturn\": {18}, \"lvbGridWorldwide\": {19}}}}}",
+                    isAttached ? "true" : "false",
+                    (!isAttached) ? "true" : "false",
+                    tuned ? "true" : "false",
+                    inMode,
+                    outMode,
+                    processedInput ? "true" : "false",
+                    lineInput ? "true" : "false",
+                    echoInput ? "true" : "false",
+                    windowInput ? "true" : "false",
+                    mouseInput ? "true" : "false",
+                    insertMode ? "true" : "false",
+                    quickEditMode ? "true" : "false",
+                    extendedFlags ? "true" : "false",
+                    autoPosition ? "true" : "false",
+                    virtualTerminalInput ? "true" : "false",
+                    processedOutput ? "true" : "false",
+                    wrapAtEol ? "true" : "false",
+                    virtualTerminalProcessing ? "true" : "false",
+                    disableNewlineAutoReturn ? "true" : "false",
+                    lvbGridWorldwide ? "true" : "false"
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void ConsoleControlCmd(string title, string cursorVisibleOpt, string cursorSizeOpt, string activateOpt) {
+            try {
+                IntPtr hwnd = GetConsoleWindow();
+                bool titleChanged = false;
+                string prevTitle = "";
+                StringBuilder sb = new StringBuilder(1024);
+                try {
+                    GetConsoleTitle(sb, 1024);
+                    prevTitle = sb.ToString();
+                } catch {}
+
+                if (!string.IsNullOrEmpty(title)) {
+                    titleChanged = SetConsoleTitle(title);
+                }
+
+                bool cursorChanged = false;
+                uint curSize = 25;
+                bool curVis = true;
+
+                IntPtr hConOut = OpenConsoleOutputHandle();
+                if (hConOut != IntPtr.Zero && hConOut.ToInt64() != -1) {
+                    CONSOLE_CURSOR_INFO cci;
+                    if (GetConsoleCursorInfo(hConOut, out cci)) {
+                        curSize = cci.dwSize;
+                        curVis = cci.bVisible;
+                        bool needUpdate = false;
+                        if (!string.IsNullOrEmpty(cursorVisibleOpt)) {
+                            bool v = (cursorVisibleOpt.ToLowerInvariant() == "true" || cursorVisibleOpt == "1");
+                            cci.bVisible = v;
+                            curVis = v;
+                            needUpdate = true;
+                        }
+                        if (!string.IsNullOrEmpty(cursorSizeOpt)) {
+                            uint s;
+                            if (uint.TryParse(cursorSizeOpt, out s)) {
+                                cci.dwSize = Math.Max(1, Math.Min(s, 100));
+                                curSize = cci.dwSize;
+                                needUpdate = true;
+                            }
+                        }
+                        if (needUpdate) {
+                            cursorChanged = SetConsoleCursorInfo(hConOut, ref cci);
+                        }
+                    }
+                    CloseHandle(hConOut);
+                }
+
+                bool activated = false;
+                if (!string.IsNullOrEmpty(activateOpt) && (activateOpt.ToLowerInvariant() == "true" || activateOpt == "1")) {
+                    if (hwnd != IntPtr.Zero) {
+                        try {
+                            ForceForegroundWindow(hwnd);
+                            activated = true;
+                        } catch {}
+                    }
+                }
+
+                StringBuilder curTitleSb = new StringBuilder(1024);
+                try { GetConsoleTitle(curTitleSb, 1024); } catch {}
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"hwnd\": \"0x{0:X}\", \"previousTitle\": \"{1}\", \"currentTitle\": \"{2}\", \"titleChanged\": {3}, \"cursorChanged\": {4}, \"cursorVisible\": {5}, \"cursorSizePercent\": {6}, \"activated\": {7}}}",
+                    hwnd.ToInt64(),
+                    EscapeJson(prevTitle),
+                    EscapeJson(curTitleSb.ToString()),
+                    titleChanged ? "true" : "false",
+                    cursorChanged ? "true" : "false",
+                    curVis ? "true" : "false",
+                    curSize,
+                    activated ? "true" : "false"
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -10253,6 +10629,21 @@ namespace GeminiSuperDesktop {
                 string query = args.Length >= 2 ? args[1] : "active";
                 string target = args.Length >= 3 ? args[2] : "0";
                 VirtualDesktopMoveCmd(query, target);
+            } else if (cmd == "console_info" || cmd == "con_info" || cmd == "console") {
+                bool incProcs = args.Length >= 2 ? (args[1].ToLowerInvariant() != "false" && args[1] != "0") : true;
+                ConsoleInfoCmd(incProcs);
+            } else if (cmd == "console_mode" || cmd == "con_mode") {
+                string vtOpt = args.Length >= 2 ? args[1] : null;
+                string qeOpt = args.Length >= 3 ? args[2] : null;
+                string miOpt = args.Length >= 4 ? args[3] : null;
+                string extOpt = args.Length >= 5 ? args[4] : null;
+                ConsoleModeCmd(vtOpt, qeOpt, miOpt, extOpt);
+            } else if (cmd == "console_control" || cmd == "con_control" || cmd == "console_title") {
+                string title = args.Length >= 2 ? args[1] : null;
+                string curVis = args.Length >= 3 ? args[2] : null;
+                string curSize = args.Length >= 4 ? args[3] : null;
+                string activate = args.Length >= 5 ? args[4] : null;
+                ConsoleControlCmd(title, curVis, curSize, activate);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

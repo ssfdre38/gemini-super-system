@@ -2742,6 +2742,70 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_console_info",
+        description: "Inspects the Windows Console subsystem state (wincon.h / consoleapi.h): window HWND, title, screen buffer dimensions, cursor position/visibility, attached process IDs, display mode (windowed/fullscreen), and console selection.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            includeProcesses: {
+              type: "boolean",
+              default: true,
+              description: "Whether to enumerate attached process IDs (default: true)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_console_mode",
+        description: "Inspects and tunes Windows Console input and output modes (ENABLE_VIRTUAL_TERMINAL_PROCESSING, ENABLE_QUICK_EDIT_MODE, ENABLE_MOUSE_INPUT, etc.). Prevents console hangs during mouse clicks or enables rich ANSI/VT100 escape sequence processing.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            virtualTerminalProcessing: {
+              type: "boolean",
+              description: "Enable or disable VT100 / ANSI escape sequence parsing (ENABLE_VIRTUAL_TERMINAL_PROCESSING 0x0004)."
+            },
+            quickEdit: {
+              type: "boolean",
+              description: "Enable or disable QuickEdit mode (ENABLE_QUICK_EDIT_MODE 0x0040) to prevent accidental console pauses on text click."
+            },
+            mouseInput: {
+              type: "boolean",
+              description: "Enable or disable console mouse event input reporting (ENABLE_MOUSE_INPUT 0x0010)."
+            },
+            extendedFlags: {
+              type: "boolean",
+              description: "Enable or disable extended flags (ENABLE_EXTENDED_FLAGS 0x0080)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_console_control",
+        description: "Actuates Windows Console properties dynamically: updates window title (SetConsoleTitle), alters cursor visibility/size (SetConsoleCursorInfo), or activates and brings the console window to the foreground.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            title: {
+              type: "string",
+              description: "New window title for the active console window."
+            },
+            cursorVisible: {
+              type: "boolean",
+              description: "Set cursor visibility (true/false) in the active console screen buffer."
+            },
+            cursorSize: {
+              type: "number",
+              description: "Set cursor size percentage from 1 to 100."
+            },
+            activate: {
+              type: "boolean",
+              description: "Bring the console window into foreground focus if true."
+            }
+          }
+        }
       }
 ];
 
@@ -4964,6 +5028,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🧠 [Windows Working Set Quota & Memory Ceiling Actuator]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_console_info") {
+    const includeProcesses = args?.includeProcesses !== false;
+    const res = await orch.getConsoleInfo({ includeProcesses });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💻 [Windows Console Subsystem & Screen Buffer Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_console_mode") {
+    const res = await orch.getConsoleMode(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💻 [Windows Console Input/Output Mode Actuator]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_console_control") {
+    const res = await orch.controlConsole(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💻 [Windows Console Control & Title Actuator]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
