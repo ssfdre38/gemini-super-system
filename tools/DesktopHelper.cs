@@ -12219,6 +12219,371 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Phase 34: Windows Bluetooth Subsystem (bluetoothapis.h / bthprops.cpl)
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct BLUETOOTH_FIND_RADIO_PARAMS {
+            public uint dwSize;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct BLUETOOTH_RADIO_INFO {
+            public uint dwSize;
+            public ulong address;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 248)]
+            public string szName;
+            public uint ulClassofDevice;
+            public ushort lmpSubversion;
+            public ushort manufacturer;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct BLUETOOTH_DEVICE_SEARCH_PARAMS {
+            public uint dwSize;
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool fReturnAuthenticated;
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool fReturnRemembered;
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool fReturnUnknown;
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool fReturnConnected;
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool fIssueInquiry;
+            public byte cTimeoutMultiplier;
+            public IntPtr hRadio;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct BTH_SYSTEMTIME {
+            public ushort wYear;
+            public ushort wMonth;
+            public ushort wDayOfWeek;
+            public ushort wDay;
+            public ushort wHour;
+            public ushort wMinute;
+            public ushort wSecond;
+            public ushort wMilliseconds;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct BLUETOOTH_DEVICE_INFO {
+            public uint dwSize;
+            public ulong Address;
+            public uint ulClassofDevice;
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool fConnected;
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool fRemembered;
+            [MarshalAs(UnmanagedType.Bool)]
+            public bool fAuthenticated;
+            public BTH_SYSTEMTIME stLastSeen;
+            public BTH_SYSTEMTIME stLastUsed;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 248)]
+            public string szName;
+        }
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern IntPtr BluetoothFindFirstRadio(ref BLUETOOTH_FIND_RADIO_PARAMS pbtfrp, out IntPtr phRadio);
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern bool BluetoothFindNextRadio(IntPtr hFind, out IntPtr phRadio);
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern bool BluetoothFindRadioClose(IntPtr hFind);
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern uint BluetoothGetRadioInfo(IntPtr hRadio, ref BLUETOOTH_RADIO_INFO pRadioInfo);
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern bool BluetoothIsDiscoverable(IntPtr hRadio);
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern bool BluetoothIsConnectable(IntPtr hRadio);
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern bool BluetoothEnableDiscovery(IntPtr hRadio, bool fEnable);
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern bool BluetoothEnableIncomingConnections(IntPtr hRadio, bool fEnable);
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern IntPtr BluetoothFindFirstDevice(ref BLUETOOTH_DEVICE_SEARCH_PARAMS pbtsp, ref BLUETOOTH_DEVICE_INFO pbtdi);
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern bool BluetoothFindNextDevice(IntPtr hFind, ref BLUETOOTH_DEVICE_INFO pbtdi);
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern bool BluetoothFindDeviceClose(IntPtr hFind);
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern uint BluetoothGetDeviceInfo(IntPtr hRadio, ref BLUETOOTH_DEVICE_INFO pbtdi);
+
+        [DllImport("bthprops.cpl", SetLastError = true)]
+        static extern uint BluetoothRemoveDevice(ref ulong pAddress);
+
+        static string FormatBluetoothAddress(ulong address) {
+            return string.Format("{0:X2}:{1:X2}:{2:X2}:{3:X2}:{4:X2}:{5:X2}",
+                (address >> 40) & 0xFF,
+                (address >> 32) & 0xFF,
+                (address >> 24) & 0xFF,
+                (address >> 16) & 0xFF,
+                (address >> 8) & 0xFF,
+                address & 0xFF);
+        }
+
+        static string BthSystemTimeToIso(BTH_SYSTEMTIME st) {
+            if (st.wYear == 0) return null;
+            try {
+                DateTime dt = new DateTime(st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds, DateTimeKind.Utc);
+                return dt.ToString("o");
+            } catch {
+                return null;
+            }
+        }
+
+        static string DecodeBluetoothMajorClass(uint cod) {
+            uint major = (cod >> 8) & 0x1F;
+            switch (major) {
+                case 1: return "Computer";
+                case 2: return "Phone";
+                case 3: return "NetworkAccessPoint";
+                case 4: return "AudioVideo";
+                case 5: return "Peripheral";
+                case 6: return "Imaging";
+                case 7: return "Wearable";
+                case 8: return "Toy";
+                case 9: return "Health";
+                case 31: return "Uncategorized";
+                default: return "Miscellaneous";
+            }
+        }
+
+        static string DecodeBluetoothManufacturer(ushort manufacturerId) {
+            switch (manufacturerId) {
+                case 0x0000: return "Ericsson";
+                case 0x0001: return "Nokia";
+                case 0x0002: return "Intel";
+                case 0x0003: return "IBM";
+                case 0x0006: return "Microsoft";
+                case 0x000A: return "Qualcomm";
+                case 0x000D: return "Texas Instruments";
+                case 0x000F: return "Broadcom";
+                case 0x001D: return "Qualcomm Atheros";
+                case 0x004C: return "Apple";
+                case 0x005D: return "Realtek";
+                case 0x0075: return "Samsung";
+                case 0x0087: return "MediaTek";
+                case 0x00E0: return "Google";
+                case 0x000E: return "Parthus Technologies";
+                case 0x0013: return "Atmel";
+                case 0x0017: return "Zeevo";
+                case 0x001E: return "STMicroelectronics";
+                case 0x002D: return "Sony";
+                case 0x00E1: return "Murata";
+                default: return "Unknown (" + manufacturerId + ")";
+            }
+        }
+
+        static string GetBthServiceStatus() {
+            try {
+                ServiceController sc = new ServiceController("bthserv");
+                string s = sc.Status.ToString();
+                sc.Close();
+                return s;
+            } catch {
+                return "Unavailable";
+            }
+        }
+
+        static void BluetoothRadiosCmd() {
+            try {
+                string bthservStatus = GetBthServiceStatus();
+                BLUETOOTH_FIND_RADIO_PARAMS p = new BLUETOOTH_FIND_RADIO_PARAMS();
+                p.dwSize = (uint)Marshal.SizeOf(typeof(BLUETOOTH_FIND_RADIO_PARAMS));
+
+                IntPtr hRadio = IntPtr.Zero;
+                IntPtr hFind = BluetoothFindFirstRadio(ref p, out hRadio);
+
+                StringBuilder sb = new StringBuilder();
+                int radioCount = 0;
+
+                if (hFind != IntPtr.Zero && hRadio != IntPtr.Zero) {
+                    do {
+                        BLUETOOTH_RADIO_INFO info = new BLUETOOTH_RADIO_INFO();
+                        info.dwSize = (uint)Marshal.SizeOf(typeof(BLUETOOTH_RADIO_INFO));
+                        uint err = BluetoothGetRadioInfo(hRadio, ref info);
+                        bool disc = BluetoothIsDiscoverable(hRadio);
+                        bool conn = BluetoothIsConnectable(hRadio);
+
+                        if (radioCount > 0) sb.Append(",");
+                        sb.Append("{");
+                        sb.AppendFormat("\"index\": {0},", radioCount);
+                        sb.AppendFormat("\"name\": \"{0}\",", EscapeJson(info.szName ?? ""));
+                        sb.AppendFormat("\"address\": \"{0}\",", FormatBluetoothAddress(info.address));
+                        sb.AppendFormat("\"rawAddress\": {0},", info.address);
+                        sb.AppendFormat("\"classOfDevice\": {0},", info.ulClassofDevice);
+                        sb.AppendFormat("\"majorClass\": \"{0}\",", DecodeBluetoothMajorClass(info.ulClassofDevice));
+                        sb.AppendFormat("\"manufacturerId\": {0},", info.manufacturer);
+                        sb.AppendFormat("\"manufacturerName\": \"{0}\",", EscapeJson(DecodeBluetoothManufacturer(info.manufacturer)));
+                        sb.AppendFormat("\"lmpSubversion\": {0},", info.lmpSubversion);
+                        sb.AppendFormat("\"isDiscoverable\": {0},", disc ? "true" : "false");
+                        sb.AppendFormat("\"isConnectable\": {0},", conn ? "true" : "false");
+                        sb.AppendFormat("\"queryError\": {0}", err);
+                        sb.Append("}");
+
+                        radioCount++;
+                        CloseHandle(hRadio);
+                        hRadio = IntPtr.Zero;
+                    } while (BluetoothFindNextRadio(hFind, out hRadio));
+
+                    BluetoothFindRadioClose(hFind);
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"serviceAvailable\": true, \"bthservStatus\": \"{0}\", \"radioCount\": {1}, \"radios\": [{2}]{3}}}",
+                    EscapeJson(bthservStatus),
+                    radioCount,
+                    sb.ToString(),
+                    radioCount == 0 ? ", \"warning\": \"No Bluetooth radio hardware detected on this machine\"" : ""
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void BluetoothDevicesCmd(bool returnAuth, bool returnRemembered, bool returnConn, bool returnUnknown, bool issueInquiry, byte timeoutMultiplier) {
+            try {
+                string bthservStatus = GetBthServiceStatus();
+
+                BLUETOOTH_DEVICE_SEARCH_PARAMS sp = new BLUETOOTH_DEVICE_SEARCH_PARAMS();
+                sp.dwSize = (uint)Marshal.SizeOf(typeof(BLUETOOTH_DEVICE_SEARCH_PARAMS));
+                sp.fReturnAuthenticated = returnAuth;
+                sp.fReturnRemembered = returnRemembered;
+                sp.fReturnConnected = returnConn;
+                sp.fReturnUnknown = returnUnknown;
+                sp.fIssueInquiry = issueInquiry;
+                sp.cTimeoutMultiplier = timeoutMultiplier > 0 ? timeoutMultiplier : (byte)2;
+                sp.hRadio = IntPtr.Zero;
+
+                BLUETOOTH_DEVICE_INFO di = new BLUETOOTH_DEVICE_INFO();
+                di.dwSize = (uint)Marshal.SizeOf(typeof(BLUETOOTH_DEVICE_INFO));
+
+                IntPtr hDevFind = BluetoothFindFirstDevice(ref sp, ref di);
+                StringBuilder sb = new StringBuilder();
+                int deviceCount = 0;
+
+                if (hDevFind != IntPtr.Zero) {
+                    do {
+                        string lastSeen = BthSystemTimeToIso(di.stLastSeen);
+                        string lastUsed = BthSystemTimeToIso(di.stLastUsed);
+
+                        if (deviceCount > 0) sb.Append(",");
+                        sb.Append("{");
+                        sb.AppendFormat("\"name\": \"{0}\",", EscapeJson(di.szName ?? ""));
+                        sb.AppendFormat("\"address\": \"{0}\",", FormatBluetoothAddress(di.Address));
+                        sb.AppendFormat("\"rawAddress\": {0},", di.Address);
+                        sb.AppendFormat("\"classOfDevice\": {0},", di.ulClassofDevice);
+                        sb.AppendFormat("\"majorClass\": \"{0}\",", DecodeBluetoothMajorClass(di.ulClassofDevice));
+                        sb.AppendFormat("\"connected\": {0},", di.fConnected ? "true" : "false");
+                        sb.AppendFormat("\"remembered\": {0},", di.fRemembered ? "true" : "false");
+                        sb.AppendFormat("\"authenticated\": {0},", di.fAuthenticated ? "true" : "false");
+                        sb.AppendFormat("\"lastSeen\": {0},", lastSeen == null ? "null" : ("\"" + lastSeen + "\""));
+                        sb.AppendFormat("\"lastUsed\": {0}", lastUsed == null ? "null" : ("\"" + lastUsed + "\""));
+                        sb.Append("}");
+
+                        deviceCount++;
+                        di = new BLUETOOTH_DEVICE_INFO();
+                        di.dwSize = (uint)Marshal.SizeOf(typeof(BLUETOOTH_DEVICE_INFO));
+                    } while (BluetoothFindNextDevice(hDevFind, ref di));
+
+                    BluetoothFindDeviceClose(hDevFind);
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"serviceAvailable\": true, \"bthservStatus\": \"{0}\", \"deviceCount\": {1}, \"devices\": [{2}]{3}}}",
+                    EscapeJson(bthservStatus),
+                    deviceCount,
+                    sb.ToString(),
+                    deviceCount == 0 ? ", \"warning\": \"No Bluetooth devices found or no Bluetooth radio available\"" : ""
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void BluetoothRadioStateCmd(int targetIndex, string enableDiscStr, string enableConnStr) {
+            try {
+                BLUETOOTH_FIND_RADIO_PARAMS p = new BLUETOOTH_FIND_RADIO_PARAMS();
+                p.dwSize = (uint)Marshal.SizeOf(typeof(BLUETOOTH_FIND_RADIO_PARAMS));
+
+                IntPtr hRadio = IntPtr.Zero;
+                IntPtr hFind = BluetoothFindFirstRadio(ref p, out hRadio);
+
+                if (hFind == IntPtr.Zero || hRadio == IntPtr.Zero) {
+                    Console.WriteLine("{\"success\": true, \"radioAvailable\": false, \"isDiscoverable\": false, \"isConnectable\": false, \"warning\": \"No Bluetooth radio hardware detected\"}");
+                    return;
+                }
+
+                int currentIndex = 0;
+                IntPtr targetRadio = IntPtr.Zero;
+
+                while (true) {
+                    if (currentIndex == targetIndex) {
+                        targetRadio = hRadio;
+                        break;
+                    }
+                    CloseHandle(hRadio);
+                    hRadio = IntPtr.Zero;
+                    currentIndex++;
+                    if (!BluetoothFindNextRadio(hFind, out hRadio)) break;
+                }
+
+                BluetoothFindRadioClose(hFind);
+
+                if (targetRadio == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Radio index {0} not found\"}}", targetIndex));
+                    return;
+                }
+
+                bool modified = false;
+
+                if (!string.IsNullOrEmpty(enableDiscStr) && enableDiscStr != "none") {
+                    bool enable = enableDiscStr.ToLowerInvariant() == "true" || enableDiscStr == "1";
+                    BluetoothEnableDiscovery(targetRadio, enable);
+                    modified = true;
+                }
+
+                if (!string.IsNullOrEmpty(enableConnStr) && enableConnStr != "none") {
+                    bool enable = enableConnStr.ToLowerInvariant() == "true" || enableConnStr == "1";
+                    BluetoothEnableIncomingConnections(targetRadio, enable);
+                    modified = true;
+                }
+
+                BLUETOOTH_RADIO_INFO info = new BLUETOOTH_RADIO_INFO();
+                info.dwSize = (uint)Marshal.SizeOf(typeof(BLUETOOTH_RADIO_INFO));
+                BluetoothGetRadioInfo(targetRadio, ref info);
+                bool isDisc = BluetoothIsDiscoverable(targetRadio);
+                bool isConn = BluetoothIsConnectable(targetRadio);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"radioAvailable\": true, \"radioIndex\": {0}, \"name\": \"{1}\", \"address\": \"{2}\", \"isDiscoverable\": {3}, \"isConnectable\": {4}, \"modified\": {5}}}",
+                    targetIndex,
+                    EscapeJson(info.szName ?? ""),
+                    FormatBluetoothAddress(info.address),
+                    isDisc ? "true" : "false",
+                    isConn ? "true" : "false",
+                    modified ? "true" : "false"
+                ));
+
+                CloseHandle(targetRadio);
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -15432,6 +15797,23 @@ namespace GeminiSuperDesktop {
                 string action = args.Length >= 3 ? args[2] : "status";
                 string priority = args.Length >= 4 ? args[3] : "normal";
                 BitsManageJobCmd(jobId, action, priority);
+            } else if (cmd == "bluetooth_radios" || cmd == "bluetooth-radios" || cmd == "bt_radios") {
+                BluetoothRadiosCmd();
+            } else if (cmd == "bluetooth_devices" || cmd == "bluetooth-devices" || cmd == "bt_devices") {
+                bool auth = args.Length < 2 || (args[1].ToLowerInvariant() != "false" && args[1] != "0");
+                bool rem = args.Length < 3 || (args[2].ToLowerInvariant() != "false" && args[2] != "0");
+                bool conn = args.Length < 4 || (args[3].ToLowerInvariant() != "false" && args[3] != "0");
+                bool unk = args.Length >= 5 && (args[4].ToLowerInvariant() == "true" || args[4] == "1");
+                bool inq = args.Length >= 6 && (args[5].ToLowerInvariant() == "true" || args[5] == "1");
+                byte timeout = 2;
+                if (args.Length >= 7) byte.TryParse(args[6], out timeout);
+                BluetoothDevicesCmd(auth, rem, conn, unk, inq, timeout);
+            } else if (cmd == "bluetooth_radio_state" || cmd == "bluetooth-radio-state" || cmd == "bt_radio_state") {
+                int radioIdx = 0;
+                if (args.Length >= 2) int.TryParse(args[1], out radioIdx);
+                string discStr = args.Length >= 3 ? args[2] : "";
+                string connStr = args.Length >= 4 ? args[3] : "";
+                BluetoothRadioStateCmd(radioIdx, discStr, connStr);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

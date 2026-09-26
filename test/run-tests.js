@@ -3776,10 +3776,81 @@ async function run() {
     }
   });
 
-  it("All 181 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 53: Windows Bluetooth Subsystem (Phase 34)
+  console.log("\n\x1b[1m[Suite 53: Windows Bluetooth Subsystem (bluetoothapis.h / bthprops.cpl)]\x1b[0m");
+
+  await itAsync("getBluetoothRadios returns valid local radio inventory and bthserv status", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getBluetoothRadios();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getBluetoothRadios failed: " + JSON.stringify(res));
+    assert(typeof res.serviceAvailable === "boolean");
+    assert(typeof res.radioCount === "number");
+    assert(Array.isArray(res.radios));
+    assert(typeof res.bthservStatus === "string");
+
+    if (res.radios.length > 0) {
+      const radio0 = res.radios[0];
+      assert(typeof radio0.index === "number");
+      assert(typeof radio0.name === "string");
+      assert(typeof radio0.address === "string" && radio0.address.includes(":"));
+      assert(typeof radio0.classOfDevice === "number");
+      assert(typeof radio0.majorClass === "string");
+      assert(typeof radio0.manufacturerId === "number");
+      assert(typeof radio0.manufacturerName === "string");
+      assert(typeof radio0.isDiscoverable === "boolean");
+      assert(typeof radio0.isConnectable === "boolean");
+    }
+  });
+
+  await itAsync("getBluetoothDevices queries paired, remembered, and connected devices gracefully", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getBluetoothDevices({
+      returnAuthenticated: true,
+      returnRemembered: true,
+      returnConnected: true,
+      returnUnknown: false,
+      issueInquiry: false,
+      timeoutMultiplier: 1
+    });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getBluetoothDevices failed: " + JSON.stringify(res));
+    assert(typeof res.serviceAvailable === "boolean");
+    assert(typeof res.deviceCount === "number");
+    assert(Array.isArray(res.devices));
+
+    if (res.devices.length > 0) {
+      const dev0 = res.devices[0];
+      assert(typeof dev0.name === "string");
+      assert(typeof dev0.address === "string" && dev0.address.includes(":"));
+      assert(typeof dev0.classOfDevice === "number");
+      assert(typeof dev0.majorClass === "string");
+      assert(typeof dev0.connected === "boolean");
+      assert(typeof dev0.remembered === "boolean");
+      assert(typeof dev0.authenticated === "boolean");
+    }
+  });
+
+  await itAsync("getBluetoothRadioState inspects radio discoverable and connectable state", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getBluetoothRadioState({ radioIndex: 0 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getBluetoothRadioState failed: " + JSON.stringify(res));
+    assert(typeof res.radioAvailable === "boolean");
+    assert(typeof res.isDiscoverable === "boolean");
+    assert(typeof res.isConnectable === "boolean");
+  });
+
+  it("All 184 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 181);
+    assert.strictEqual(SYSTEM_TOOLS.length, 184);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3894,6 +3965,9 @@ async function run() {
     assert(toolNames.includes("super_bits_jobs"));
     assert(toolNames.includes("super_bits_create_job"));
     assert(toolNames.includes("super_bits_manage_job"));
+    assert(toolNames.includes("super_bluetooth_radios"));
+    assert(toolNames.includes("super_bluetooth_devices"));
+    assert(toolNames.includes("super_bluetooth_radio_state"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

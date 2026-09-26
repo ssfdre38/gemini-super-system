@@ -83,6 +83,7 @@
   - [65. Windows Subsystem for Linux (WSL) Management & Linux Process Execution Subsystem](#65--windows-subsystem-for-linux-wsl-management--linux-process-execution-subsystem-wslapih--wslapidll)
   - [66. Windows Antimalware Scan Interface (AMSI) Subsystem](#66-️-windows-antimalware-scan-interface-amsi-subsystem-amsih--amsidll)
   - [67. Windows Background Intelligent Transfer Service (BITS) Subsystem](#67--windows-background-intelligent-transfer-service-bits-subsystem-bitsh--qmgrdll)
+  - [68. Windows Bluetooth & BLE Hardware Subsystem](#68--windows-bluetooth--ble-hardware-subsystem-bluetoothapish--bthpropscpl)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -902,6 +903,17 @@ Directly interfaces with the Windows Background Intelligent Transfer Service (BI
 - **Job Lifecycle & Bandwidth Priority Actuation (`super_bits_manage_job`)**: Actuates the lifecycle of existing BITS transfer jobs, supporting suspend (pause), resume (continue), cancel (abort and clean up temporary files), complete (finalize and atomically commit downloaded files into destination paths), and dynamic priority band adjustment.
 - **181 Tools Milestone**: Reaches **181 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **52 comprehensive test suites (165/165 tests passing 100%)** and **48 environment health checks**.
 - **Native MCP Tools**: `super_bits_jobs`, `super_bits_create_job`, `super_bits_manage_job`.
+
+---
+
+## 68. 📡 Windows Bluetooth & BLE Hardware Subsystem (`bluetoothapis.h` / `bthprops.cpl`)
+
+Directly accesses the Windows Bluetooth & BLE hardware subsystem via native Win32 APIs (`BluetoothFindFirstRadio`, `BluetoothFindFirstDevice`, `BluetoothGetRadioInfo`, `BluetoothIsDiscoverable`, `BluetoothIsConnectable`, `BluetoothEnableDiscovery`, `BluetoothEnableIncomingConnections`) to provide sovereign Bluetooth inventory, device discovery, pairing telemetry, and radio actuation:
+- **Local Bluetooth Radio Enumeration & Telemetry (`super_bluetooth_radios`)**: Enumerates installed Bluetooth local radios using `BluetoothFindFirstRadio`, `BluetoothFindNextRadio`, and `BluetoothGetRadioInfo`. Returns Bluetooth hardware MAC addresses, friendly radio names, device classes, manufacturer IDs (Intel, Broadcom, Microsoft, Realtek, Qualcomm, Apple, etc.), LMP firmware subversions, discoverability states, and connectability states alongside `bthserv` service status.
+- **Bluetooth Device Inventory & Active Discovery (`super_bluetooth_devices`)**: Queries and enumerates paired, remembered, and connected Bluetooth devices (`BluetoothFindFirstDevice`, `BluetoothFindNextDevice`, `BluetoothGetDeviceInfo`), decoding device classes (Audio/Video headsets, Peripherals, Phones, Computers, etc.), connection status, authentication/pairing flags, and last seen / last used timestamps.
+- **Radio State & Discoverability Control (`super_bluetooth_radio_state`)**: Queries and actuates local Bluetooth radio discoverability and incoming connection states via `BluetoothIsDiscoverable`, `BluetoothIsConnectable`, `BluetoothEnableDiscovery`, and `BluetoothEnableIncomingConnections`.
+- **184 Tools Milestone**: Reaches **184 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **53 comprehensive test suites (167/167 tests passing 100%)** and **49 environment health checks**.
+- **Native MCP Tools**: `super_bluetooth_radios`, `super_bluetooth_devices`, `super_bluetooth_radio_state`.
 
 ---
 

@@ -3592,6 +3592,77 @@ const SYSTEM_TOOLS = [
           },
           required: ["jobId"]
         }
+      },
+      {
+        name: "super_bluetooth_radios",
+        description: "Enumerates installed Bluetooth local radios using Win32 bluetoothapis.h / bthprops.cpl. Returns radio MAC hardware address, friendly name, device class, manufacturer ID and vendor name, LMP subversion, discoverable mode, and connectable status.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_bluetooth_devices",
+        description: "Discovers and enumerates paired, remembered, and connected Bluetooth devices (BluetoothFindFirstDevice / bluetoothapis.h). Returns Bluetooth MAC address, friendly name, major device class (Audio/Video, Peripheral, Phone, Computer, etc.), paired/authenticated status, connection status, last seen, and last used timestamps.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            returnAuthenticated: {
+              type: "boolean",
+              default: true,
+              description: "Include authenticated/paired devices (default: true)."
+            },
+            returnRemembered: {
+              type: "boolean",
+              default: true,
+              description: "Include remembered devices (default: true)."
+            },
+            returnConnected: {
+              type: "boolean",
+              default: true,
+              description: "Include currently connected devices (default: true)."
+            },
+            returnUnknown: {
+              type: "boolean",
+              default: false,
+              description: "Include unknown/unpaired devices (default: false)."
+            },
+            issueInquiry: {
+              type: "boolean",
+              default: false,
+              description: "Perform an active radio inquiry for new in-range devices (default: false to return cached device inventory)."
+            },
+            timeoutMultiplier: {
+              type: "integer",
+              minimum: 1,
+              maximum: 48,
+              default: 2,
+              description: "Inquiry timeout multiplier in units of 1.28 seconds (e.g. 2 = 2.56 seconds)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_bluetooth_radio_state",
+        description: "Queries or configures local Bluetooth radio discoverability and incoming connection states (BluetoothIsDiscoverable, BluetoothEnableDiscovery, BluetoothEnableIncomingConnections).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            radioIndex: {
+              type: "integer",
+              default: 0,
+              description: "0-based index of the target Bluetooth radio (default: 0 for primary radio)."
+            },
+            enableDiscovery: {
+              type: "boolean",
+              description: "Set to true to make the radio discoverable to other devices, or false to turn off discoverability."
+            },
+            enableIncomingConnections: {
+              type: "boolean",
+              description: "Set to true to allow incoming Bluetooth connections, or false to reject them."
+            }
+          }
+        }
       }
 ];
 
@@ -6361,6 +6432,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚙️ [BITS Job Lifecycle Action - ${args?.action || "STATUS"}]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_bluetooth_radios") {
+    const res = await orch.getBluetoothRadios();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📡 [Bluetooth Local Radios (${res.radioCount || 0} detected)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_bluetooth_devices") {
+    const res = await orch.getBluetoothDevices(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📱 [Bluetooth Devices (${res.deviceCount || 0} found)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_bluetooth_radio_state") {
+    const res = await orch.getBluetoothRadioState(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📶 [Bluetooth Radio State]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
