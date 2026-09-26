@@ -84,6 +84,7 @@
   - [66. Windows Antimalware Scan Interface (AMSI) Subsystem](#66-️-windows-antimalware-scan-interface-amsi-subsystem-amsih--amsidll)
   - [67. Windows Background Intelligent Transfer Service (BITS) Subsystem](#67--windows-background-intelligent-transfer-service-bits-subsystem-bitsh--qmgrdll)
   - [68. Windows Bluetooth & BLE Hardware Subsystem](#68--windows-bluetooth--ble-hardware-subsystem-bluetoothapish--bthpropscpl)
+  - [69. Windows Error Reporting & Crash Forensics Subsystem](#69--windows-error-reporting--crash-forensics-subsystem-werapih--werdll--errorreph)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -914,6 +915,17 @@ Directly accesses the Windows Bluetooth & BLE hardware subsystem via native Win3
 - **Radio State & Discoverability Control (`super_bluetooth_radio_state`)**: Queries and actuates local Bluetooth radio discoverability and incoming connection states via `BluetoothIsDiscoverable`, `BluetoothIsConnectable`, `BluetoothEnableDiscovery`, and `BluetoothEnableIncomingConnections`.
 - **184 Tools Milestone**: Reaches **184 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **53 comprehensive test suites (167/167 tests passing 100%)** and **49 environment health checks**.
 - **Native MCP Tools**: `super_bluetooth_radios`, `super_bluetooth_devices`, `super_bluetooth_radio_state`.
+
+---
+
+## 69. 💥 Windows Error Reporting & Crash Forensics Subsystem (`werapi.h` / `wer.dll` / `errorrep.h`)
+
+Directly accesses the Windows Error Reporting (WER) and crash forensics subsystem via native Win32 `wer.dll` P/Invoke (`WerStoreOpen`, `WerStoreClose`, `WerStoreGetReportCount`, `WerStoreGetFirstReportKey`, `WerStoreGetNextReportKey`, `WerStoreQueryReportMetadataV2`, `WerReportCreate`, `WerReportSetParameter`, `WerReportAddDump`, `WerReportCloseHandle`, `WerAddExcludedApplication`, `WerRemoveExcludedApplication`) to provide sovereign application crash telemetry, minidump captures, and error suppression control:
+- **Crash Archive & Event Telemetry Enumeration (`super_wer_reports`)**: Accesses the Windows Error Reporting system report store (`E_STORE_MACHINE_ARCHIVE`, `E_STORE_USER_ARCHIVE`, `E_STORE_MACHINE_QUEUE`, `E_STORE_USER_QUEUE`) to query crash reports, application hangs, BSOD bugchecks, and architectural fault metadata. Extracts unique report keys, event type names (e.g. `APPCRASH`, `MoAppCrash`, `LiveKernelEvent`), application names, process image paths, crash timestamps, and up to 10 diagnostic crash parameters (`AppName`, `AppVersion`, `ModName`, `ModVersion`, `ExceptionCode`, `ExceptionOffset`).
+- **Programmatic Diagnostic Crash Report & Minidump Capture (`super_wer_create_report`)**: Creates and customizes diagnostic error reports in the WER engine (`WerReportCreate`, `WerReportSetParameter`), attaching live process state and minidumps via `WerReportAddDump` (`WER_DUMP_TYPE_MINI`, `WER_DUMP_TYPE_HEAP`, `WER_DUMP_TYPE_TRIAGE`, `WER_DUMP_TYPE_MICRO`) for sovereign post-mortem crash forensics and crash diagnostics.
+- **Application Error Reporting Exclusion Management (`super_wer_exclusions`)**: Inspects and controls the Windows Error Reporting excluded application registry lists (`WerAddExcludedApplication`, `WerRemoveExcludedApplication`, `HKCU\Software\Microsoft\Windows\Windows Error Reporting\ExcludedApplications`, `HKLM\Software\Microsoft\Windows\Windows Error Reporting\ExcludedApplications`). Prevents unwanted WER crash dialogues or diagnostic reporting popups during automated headless or development workflows.
+- **187 Tools Milestone**: Reaches **187 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **54 comprehensive test suites (170/170 tests passing 100%)** and **50 environment health checks**.
+- **Native MCP Tools**: `super_wer_reports`, `super_wer_create_report`, `super_wer_exclusions`.
 
 ---
 

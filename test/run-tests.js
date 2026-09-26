@@ -3847,10 +3847,65 @@ async function run() {
     assert(typeof res.isConnectable === "boolean");
   });
 
-  it("All 184 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 54: Windows Error Reporting & Crash Forensics Subsystem (werapi.h / wer.dll / errorrep.h)
+  console.log("\n\x1b[1m[Suite 54: Windows Error Reporting & Crash Forensics Subsystem (werapi.h / wer.dll)]\x1b[0m");
+
+  await itAsync("getWerReports queries machine archive reports and metadata", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWerReports({ store: "machine_archive", limit: 5 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWerReports failed: " + JSON.stringify(res));
+    assert(typeof res.store === "string");
+    assert(typeof res.totalReports === "number");
+    assert(typeof res.reportCount === "number");
+    assert(Array.isArray(res.reports));
+
+    if (res.reports.length > 0) {
+      const rep0 = res.reports[0];
+      assert(typeof rep0.key === "string" || typeof rep0.reportId === "string");
+      assert(typeof rep0.eventName === "string");
+      assert(typeof rep0.appName === "string");
+    }
+  });
+
+  await itAsync("createWerReport creates custom diagnostic report with parameters", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.createWerReport({
+      eventType: "GeminiDiagnosticReportTest",
+      reportType: "non_critical",
+      parameters: { P1: "GeminiTest", P2: "ForensicsAudit" },
+      dumpType: "none",
+      closeHandle: true
+    });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "createWerReport failed: " + JSON.stringify(res));
+    assert.strictEqual(res.eventType, "GeminiDiagnosticReportTest");
+    assert(typeof res.reportHandle === "string");
+    assert.strictEqual(res.handleClosed, true);
+  });
+
+  await itAsync("manageWerExclusions inspects and manages WER exclusion lists", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.manageWerExclusions({ action: "list" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "manageWerExclusions failed: " + JSON.stringify(res));
+    assert.strictEqual(res.action, "list");
+    assert(typeof res.userCount === "number");
+    assert(Array.isArray(res.userExclusions));
+    assert(typeof res.machineCount === "number");
+    assert(Array.isArray(res.machineExclusions));
+  });
+
+  it("All 187 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 184);
+    assert.strictEqual(SYSTEM_TOOLS.length, 187);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3968,6 +4023,9 @@ async function run() {
     assert(toolNames.includes("super_bluetooth_radios"));
     assert(toolNames.includes("super_bluetooth_devices"));
     assert(toolNames.includes("super_bluetooth_radio_state"));
+    assert(toolNames.includes("super_wer_reports"));
+    assert(toolNames.includes("super_wer_create_report"));
+    assert(toolNames.includes("super_wer_exclusions"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

@@ -3663,6 +3663,95 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_wer_reports",
+        description: "Queries and analyzes application crash, hang, and error reports in the Windows Error Reporting (WER) store (WerStoreOpen / werapi.h). Returns application names, faulting modules, exception codes, offsets, bucket IDs, and crash metadata.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            store: {
+              type: "string",
+              enum: ["machine_archive", "user_archive", "machine_queue", "user_queue"],
+              default: "machine_archive",
+              description: "Target WER report store to query (default: 'machine_archive')."
+            },
+            limit: {
+              type: "integer",
+              minimum: 1,
+              maximum: 100,
+              default: 10,
+              description: "Maximum number of reports to inspect (default: 10, max: 100)."
+            },
+            filter: {
+              type: "string",
+              description: "Optional case-insensitive substring filter for application name, faulting module, or event name."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wer_create_report",
+        description: "Programmatically creates a Windows Error Report with optional minidump/heapdump attachment for a running or crashing process (WerReportCreate / werapi.h).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            eventType: {
+              type: "string",
+              default: "GeminiDiagnosticReport",
+              description: "WER event name identifier (e.g. 'GeminiDiagnosticReport', 'AppCrash')."
+            },
+            reportType: {
+              type: "string",
+              enum: ["non_critical", "critical", "crash", "hang"],
+              default: "non_critical",
+              description: "WER report severity kind (default: 'non_critical')."
+            },
+            pid: {
+              type: "integer",
+              description: "Optional process ID to capture a memory dump from."
+            },
+            dumpType: {
+              type: "string",
+              enum: ["mini", "micro", "heap", "triage", "none"],
+              default: "mini",
+              description: "Type of memory dump to include with the report (default: 'mini')."
+            },
+            parameters: {
+              type: "object",
+              description: "Key-value dictionary of custom report parameters (up to 10 parameters)."
+            },
+            closeHandle: {
+              type: "boolean",
+              default: true,
+              description: "Close report handle immediately after creation (default: true)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wer_exclusions",
+        description: "Inspects and manages the Windows Error Reporting application exclusion list (WerAddExcludedApplication / WerRemoveExcludedApplication), preventing crash dialogs or reporting for specific binaries.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["list", "add", "remove"],
+              default: "list",
+              description: "Exclusion management action: 'list', 'add', or 'remove' (default: 'list')."
+            },
+            exeName: {
+              type: "string",
+              description: "Target executable name to add or remove (e.g. 'unstable_app.exe')."
+            },
+            allUsers: {
+              type: "boolean",
+              default: false,
+              description: "Apply exclusion system-wide across all users (requires administrative privilege)."
+            }
+          }
+        }
       }
 ];
 
@@ -6468,6 +6557,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `📶 [Bluetooth Radio State]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wer_reports") {
+    const res = await orch.getWerReports(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💥 [Windows Error Reporting (WER) - ${res.totalReports || 0} Reports in Store]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wer_create_report") {
+    const res = await orch.createWerReport(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📝 [WER Report Generated]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wer_exclusions") {
+    const res = await orch.manageWerExclusions(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [WER Exclusions List - Action: ${res.action || "list"}]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

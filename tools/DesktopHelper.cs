@@ -12584,6 +12584,388 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Phase 35: Windows Error Reporting & Crash Forensics Subsystem (werapi.h / wer.dll / errorrep.h)
+
+        public enum WER_STORE_TYPE {
+            E_STORE_USER_ARCHIVE = 0,
+            E_STORE_USER_QUEUE = 1,
+            E_STORE_MACHINE_ARCHIVE = 2,
+            E_STORE_MACHINE_QUEUE = 3,
+            E_STORE_INVALID = 4
+        }
+
+        public enum WER_REPORT_KIND {
+            WerReportNonCritical = 0,
+            WerReportCritical = 1,
+            WerReportApplicationCrash = 2,
+            WerReportApplicationHang = 3,
+            WerReportKernel = 4,
+            WerReportInvalid
+        }
+
+        public enum WER_DUMP_KIND {
+            WerDumpTypeNone = 0,
+            WerDumpTypeMicroDump = 1,
+            WerDumpTypeMiniDump = 2,
+            WerDumpTypeHeapDump = 3,
+            WerDumpTypeTriageDump = 4
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct WER_PARAM_PAIR {
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 129)]
+            public string Name;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+            public string Value;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct WER_SIG {
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 65)]
+            public string EventName;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 10)]
+            public WER_PARAM_PAIR[] Parameters;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WER_FILETIME {
+            public uint dwLowDateTime;
+            public uint dwHighDateTime;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct WER_META_V2 {
+            public WER_SIG Signature;
+            public Guid BucketId;
+            public Guid ReportId;
+            public WER_FILETIME CreationTime;
+            public ulong SizeInBytes;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
+            public string CabId;
+            public uint ReportStatus;
+            public Guid ReportIntegratorId;
+            public uint NumberOfFiles;
+            public uint SizeOfFileNames;
+            public IntPtr FileNames;
+        }
+
+        [DllImport("wer.dll", SetLastError = true)]
+        static extern int WerStoreOpen(WER_STORE_TYPE repStoreType, out IntPtr phReportStore);
+
+        [DllImport("wer.dll", SetLastError = true)]
+        static extern void WerStoreClose(IntPtr hReportStore);
+
+        [DllImport("wer.dll", SetLastError = true)]
+        static extern int WerStoreGetReportCount(IntPtr hReportStore, out uint pdwReportCount);
+
+        [DllImport("wer.dll", SetLastError = true)]
+        static extern int WerStoreGetFirstReportKey(IntPtr hReportStore, out IntPtr ppszReportKey);
+
+        [DllImport("wer.dll", SetLastError = true)]
+        static extern int WerStoreGetNextReportKey(IntPtr hReportStore, out IntPtr ppszReportKey);
+
+        [DllImport("wer.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern int WerStoreQueryReportMetadataV2(IntPtr hReportStore, string pszReportKey, ref WER_META_V2 pReportMetadata);
+
+        [DllImport("wer.dll", SetLastError = true)]
+        static extern void WerFreeString(IntPtr pwszStr);
+
+        [DllImport("wer.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern int WerReportCreate(string pwzEventType, WER_REPORT_KIND repType, IntPtr pReportInformation, out IntPtr phReportHandle);
+
+        [DllImport("wer.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern int WerReportSetParameter(IntPtr hReportHandle, uint dwparamID, string pwzName, string pwzValue);
+
+        [DllImport("wer.dll", SetLastError = true)]
+        static extern int WerReportAddDump(IntPtr hReportHandle, IntPtr hProcess, IntPtr hThread, WER_DUMP_KIND dumpType, IntPtr pExceptionParam, IntPtr pDumpCustomOptions, uint dwFlags);
+
+        [DllImport("wer.dll", SetLastError = true)]
+        static extern int WerReportCloseHandle(IntPtr hReportHandle);
+
+        [DllImport("wer.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern int WerAddExcludedApplication(string pwzExeName, bool bAllUsers);
+
+        [DllImport("wer.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern int WerRemoveExcludedApplication(string pwzExeName, bool bAllUsers);
+
+        static string WerFileTimeToIso(WER_FILETIME ft) {
+            try {
+                long fileTime = ((long)ft.dwHighDateTime << 32) | (long)ft.dwLowDateTime;
+                if (fileTime == 0) return null;
+                DateTime dt = DateTime.FromFileTimeUtc(fileTime);
+                return dt.ToString("o");
+            } catch {
+                return null;
+            }
+        }
+
+        static WER_STORE_TYPE ParseWerStoreType(string store) {
+            string s = (store ?? "").ToLowerInvariant().Trim();
+            if (s == "user_archive" || s == "userarchive" || s == "user") return WER_STORE_TYPE.E_STORE_USER_ARCHIVE;
+            if (s == "user_queue" || s == "userqueue") return WER_STORE_TYPE.E_STORE_USER_QUEUE;
+            if (s == "machine_queue" || s == "machinequeue") return WER_STORE_TYPE.E_STORE_MACHINE_QUEUE;
+            return WER_STORE_TYPE.E_STORE_MACHINE_ARCHIVE;
+        }
+
+        static WER_REPORT_KIND ParseWerReportKind(string kind) {
+            string s = (kind ?? "").ToLowerInvariant().Trim();
+            if (s == "critical") return WER_REPORT_KIND.WerReportCritical;
+            if (s == "crash" || s == "application_crash") return WER_REPORT_KIND.WerReportApplicationCrash;
+            if (s == "hang" || s == "application_hang") return WER_REPORT_KIND.WerReportApplicationHang;
+            if (s == "kernel") return WER_REPORT_KIND.WerReportKernel;
+            return WER_REPORT_KIND.WerReportNonCritical;
+        }
+
+        static WER_DUMP_KIND ParseWerDumpKind(string kind) {
+            string s = (kind ?? "").ToLowerInvariant().Trim();
+            if (s == "micro") return WER_DUMP_KIND.WerDumpTypeMicroDump;
+            if (s == "heap") return WER_DUMP_KIND.WerDumpTypeHeapDump;
+            if (s == "triage") return WER_DUMP_KIND.WerDumpTypeTriageDump;
+            if (s == "none") return WER_DUMP_KIND.WerDumpTypeNone;
+            return WER_DUMP_KIND.WerDumpTypeMiniDump;
+        }
+
+        static void WerReportsCmd(string storeStr, int limit, string filter) {
+            try {
+                WER_STORE_TYPE st = ParseWerStoreType(storeStr);
+                IntPtr hStore;
+                int hr = WerStoreOpen(st, out hStore);
+
+                if (hr != 0 || hStore == IntPtr.Zero) {
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"store\": \"{0}\", \"errorCode\": \"0x{1:X}\", \"totalReports\": 0, \"reportCount\": 0, \"reports\": [], \"warning\": \"WER store not accessible or empty: 0x{1:X}\"}}",
+                        EscapeJson(storeStr), hr
+                    ));
+                    return;
+                }
+
+                uint totalReports = 0;
+                WerStoreGetReportCount(hStore, out totalReports);
+
+                StringBuilder sb = new StringBuilder();
+                int matchedCount = 0;
+                int maxReports = limit > 0 ? Math.Min(limit, 100) : 10;
+                string filterLower = (filter ?? "").ToLowerInvariant().Trim();
+
+                IntPtr pKey = IntPtr.Zero;
+                int hrKey = WerStoreGetFirstReportKey(hStore, out pKey);
+
+                while (hrKey == 0 && pKey != IntPtr.Zero && matchedCount < maxReports) {
+                    string keyStr = Marshal.PtrToStringUni(pKey);
+                    WerFreeString(pKey);
+                    pKey = IntPtr.Zero;
+
+                    bool matches = true;
+                    if (!string.IsNullOrEmpty(filterLower)) {
+                        matches = keyStr.ToLowerInvariant().Contains(filterLower);
+                    }
+
+                    WER_META_V2 meta = new WER_META_V2();
+                    meta.Signature = new WER_SIG();
+                    meta.Signature.Parameters = new WER_PARAM_PAIR[10];
+
+                    int hrMeta = WerStoreQueryReportMetadataV2(hStore, keyStr, ref meta);
+                    if (hrMeta == 0) {
+                        string appName = "";
+                        string appVer = "";
+                        string faultMod = "";
+                        string faultVer = "";
+                        string excCode = "";
+                        string excOffset = "";
+
+                        if (meta.Signature.Parameters != null) {
+                            for (int i = 0; i < meta.Signature.Parameters.Length; i++) {
+                                string pName = meta.Signature.Parameters[i].Name ?? "";
+                                string pVal = meta.Signature.Parameters[i].Value ?? "";
+                                if (i == 0 || pName.IndexOf("Application Name", StringComparison.OrdinalIgnoreCase) >= 0) appName = pVal;
+                                else if (i == 1 || pName.IndexOf("Application Version", StringComparison.OrdinalIgnoreCase) >= 0) appVer = pVal;
+                                else if (i == 3 || pName.IndexOf("Fault Module Name", StringComparison.OrdinalIgnoreCase) >= 0) faultMod = pVal;
+                                else if (i == 4 || pName.IndexOf("Fault Module Version", StringComparison.OrdinalIgnoreCase) >= 0) faultVer = pVal;
+                                else if (i == 6 || pName.IndexOf("Exception Code", StringComparison.OrdinalIgnoreCase) >= 0) excCode = pVal;
+                                else if (i == 7 || pName.IndexOf("Exception Offset", StringComparison.OrdinalIgnoreCase) >= 0) excOffset = pVal;
+                            }
+                        }
+
+                        if (!matches && !string.IsNullOrEmpty(filterLower)) {
+                            if (appName.ToLowerInvariant().Contains(filterLower) ||
+                                (meta.Signature.EventName != null && meta.Signature.EventName.ToLowerInvariant().Contains(filterLower)) ||
+                                faultMod.ToLowerInvariant().Contains(filterLower)) {
+                                matches = true;
+                            }
+                        }
+
+                        if (matches) {
+                            if (matchedCount > 0) sb.Append(",");
+                            sb.Append("{");
+                            sb.AppendFormat("\"reportId\": \"{0}\",", meta.ReportId.ToString("D"));
+                            sb.AppendFormat("\"key\": \"{0}\",", EscapeJson(keyStr));
+                            sb.AppendFormat("\"eventName\": \"{0}\",", EscapeJson(meta.Signature.EventName ?? ""));
+                            sb.AppendFormat("\"appName\": \"{0}\",", EscapeJson(appName));
+                            sb.AppendFormat("\"appVersion\": \"{0}\",", EscapeJson(appVer));
+                            sb.AppendFormat("\"faultModule\": \"{0}\",", EscapeJson(faultMod));
+                            sb.AppendFormat("\"faultModuleVersion\": \"{0}\",", EscapeJson(faultVer));
+                            sb.AppendFormat("\"exceptionCode\": \"0x{0}\",", EscapeJson(excCode));
+                            sb.AppendFormat("\"exceptionOffset\": \"0x{0}\",", EscapeJson(excOffset));
+                            sb.AppendFormat("\"sizeInBytes\": {0},", meta.SizeInBytes);
+                            sb.AppendFormat("\"creationTime\": {0},", meta.CreationTime.dwHighDateTime == 0 ? "null" : ("\"" + WerFileTimeToIso(meta.CreationTime) + "\""));
+                            sb.AppendFormat("\"bucketId\": \"{0}\",", meta.BucketId.ToString("D"));
+                            sb.AppendFormat("\"cabId\": \"{0}\",", EscapeJson(meta.CabId ?? ""));
+                            sb.AppendFormat("\"reportStatus\": {0},", meta.ReportStatus);
+                            sb.AppendFormat("\"numberOfFiles\": {0}", meta.NumberOfFiles);
+                            sb.Append("}");
+                            matchedCount++;
+                        }
+                    }
+
+                    hrKey = WerStoreGetNextReportKey(hStore, out pKey);
+                }
+
+                if (pKey != IntPtr.Zero) WerFreeString(pKey);
+                WerStoreClose(hStore);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"store\": \"{0}\", \"totalReports\": {1}, \"reportCount\": {2}, \"reports\": [{3}]}}",
+                    EscapeJson(storeStr), totalReports, matchedCount, sb.ToString()
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WerCreateReportCmd(string eventType, string reportKindStr, int targetPid, string dumpKindStr, string paramsJson, bool closeHandle) {
+            try {
+                WER_REPORT_KIND rk = ParseWerReportKind(reportKindStr);
+                string evtType = string.IsNullOrEmpty(eventType) ? "GeminiDiagnosticReport" : eventType;
+
+                IntPtr hReport;
+                int hr = WerReportCreate(evtType, rk, IntPtr.Zero, out hReport);
+
+                if (hr != 0 || hReport == IntPtr.Zero) {
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": false, \"errorCode\": \"0x{0:X}\", \"error\": \"WerReportCreate failed: 0x{0:X}\"}}",
+                        hr
+                    ));
+                    return;
+                }
+
+                int paramsSet = 0;
+                if (!string.IsNullOrEmpty(paramsJson) && paramsJson.Trim().Length > 0) {
+                    try {
+                        string clean = paramsJson.Trim().TrimStart('{').TrimEnd('}');
+                        string[] pairs = clean.Split(new char[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+                        uint pIndex = 0;
+                        foreach (var pair in pairs) {
+                            if (pIndex >= 10) break;
+                            string[] kv = pair.Split(new char[] { ':' }, 2);
+                            if (kv.Length == 2) {
+                                string k = kv[0].Trim().Trim('"', '\'');
+                                string v = kv[1].Trim().Trim('"', '\'');
+                                if (WerReportSetParameter(hReport, pIndex, k, v) == 0) {
+                                    paramsSet++;
+                                    pIndex++;
+                                }
+                            }
+                        }
+                    } catch {}
+                }
+
+                bool dumpAdded = false;
+                if (targetPid > 0) {
+                    WER_DUMP_KIND dk = ParseWerDumpKind(dumpKindStr);
+                    IntPtr hProc = OpenProcess(0x0400 | 0x0010, false, (uint)targetPid);
+                    if (hProc != IntPtr.Zero) {
+                        int hrDump = WerReportAddDump(hReport, hProc, IntPtr.Zero, dk, IntPtr.Zero, IntPtr.Zero, 0);
+                        dumpAdded = (hrDump == 0);
+                        CloseHandle(hProc);
+                    }
+                }
+
+                long handleVal = hReport.ToInt64();
+                if (closeHandle) {
+                    WerReportCloseHandle(hReport);
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"eventType\": \"{0}\", \"reportType\": \"{1}\", \"reportHandle\": \"0x{2:X}\", \"handleClosed\": {3}, \"parametersSet\": {4}, \"dumpAdded\": {5}, \"pid\": {6}}}",
+                    EscapeJson(evtType),
+                    EscapeJson(reportKindStr),
+                    handleVal,
+                    closeHandle ? "true" : "false",
+                    paramsSet,
+                    dumpAdded ? "true" : "false",
+                    targetPid
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WerExclusionsCmd(string action, string exeName, bool allUsers) {
+            try {
+                string act = (action ?? "list").ToLowerInvariant().Trim();
+                bool modified = false;
+
+                if (act == "add" && !string.IsNullOrEmpty(exeName)) {
+                    int hrAdd = WerAddExcludedApplication(exeName, allUsers);
+                    modified = (hrAdd == 0);
+                } else if (act == "remove" && !string.IsNullOrEmpty(exeName)) {
+                    int hrRem = WerRemoveExcludedApplication(exeName, allUsers);
+                    modified = (hrRem == 0);
+                }
+
+                List<string> userExclusions = new List<string>();
+                List<string> machineExclusions = new List<string>();
+
+                try {
+                    using (RegistryKey k = Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\Windows Error Reporting\ExcludedApplications")) {
+                        if (k != null) {
+                            foreach (string vn in k.GetValueNames()) {
+                                userExclusions.Add(vn);
+                            }
+                        }
+                    }
+                } catch {}
+
+                try {
+                    using (RegistryKey k = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\Windows Error Reporting\ExcludedApplications")) {
+                        if (k != null) {
+                            foreach (string vn in k.GetValueNames()) {
+                                machineExclusions.Add(vn);
+                            }
+                        }
+                    }
+                } catch {}
+
+                StringBuilder sbUser = new StringBuilder();
+                for (int i = 0; i < userExclusions.Count; i++) {
+                    if (i > 0) sbUser.Append(",");
+                    sbUser.Append("\"" + EscapeJson(userExclusions[i]) + "\"");
+                }
+
+                StringBuilder sbMach = new StringBuilder();
+                for (int i = 0; i < machineExclusions.Count; i++) {
+                    if (i > 0) sbMach.Append(",");
+                    sbMach.Append("\"" + EscapeJson(machineExclusions[i]) + "\"");
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"action\": \"{0}\", \"exeName\": \"{1}\", \"allUsers\": {2}, \"modified\": {3}, \"userCount\": {4}, \"userExclusions\": [{5}], \"machineCount\": {6}, \"machineExclusions\": [{7}]}}",
+                    EscapeJson(act),
+                    EscapeJson(exeName ?? ""),
+                    allUsers ? "true" : "false",
+                    modified ? "true" : "false",
+                    userExclusions.Count,
+                    sbUser.ToString(),
+                    machineExclusions.Count,
+                    sbMach.ToString()
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -15814,6 +16196,26 @@ namespace GeminiSuperDesktop {
                 string discStr = args.Length >= 3 ? args[2] : "";
                 string connStr = args.Length >= 4 ? args[3] : "";
                 BluetoothRadioStateCmd(radioIdx, discStr, connStr);
+            } else if (cmd == "wer_reports" || cmd == "wer-reports") {
+                string store = args.Length >= 2 ? args[1] : "machine_archive";
+                int limit = 10;
+                if (args.Length >= 3) int.TryParse(args[2], out limit);
+                string filter = args.Length >= 4 ? args[3] : "";
+                WerReportsCmd(store, limit, filter);
+            } else if (cmd == "wer_create_report" || cmd == "wer-create-report") {
+                string evtType = args.Length >= 2 ? args[1] : "GeminiDiagnosticReport";
+                string repKind = args.Length >= 3 ? args[2] : "non_critical";
+                int pid = 0;
+                if (args.Length >= 4) int.TryParse(args[3], out pid);
+                string dumpKind = args.Length >= 5 ? args[4] : "mini";
+                string paramsJson = args.Length >= 6 ? args[5] : "";
+                bool closeHandle = args.Length < 7 || (args[6].ToLowerInvariant() != "false" && args[6] != "0");
+                WerCreateReportCmd(evtType, repKind, pid, dumpKind, paramsJson, closeHandle);
+            } else if (cmd == "wer_exclusions" || cmd == "wer-exclusions") {
+                string action = args.Length >= 2 ? args[1] : "list";
+                string exeName = args.Length >= 3 ? args[2] : "";
+                bool allUsers = args.Length >= 4 && (args[3].ToLowerInvariant() == "true" || args[3] == "1");
+                WerExclusionsCmd(action, exeName, allUsers);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
