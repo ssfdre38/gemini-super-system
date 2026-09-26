@@ -3360,6 +3360,40 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_vhd_attached_disks",
+        description: "Enumerates all currently attached and mounted virtual hard disks (VHD and VHDX images) across the Windows system via native Win32 GetAllAttachedVirtualDiskPhysicalPaths from virtdisk.h / virtdisk.dll. Returns attached disk count and physical device paths (\\\\.\\PhysicalDriveX).",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_vhd_inspect",
+        description: "Inspects a virtual hard disk file (VHD, VHDX, or ISO image) on disk via native Win32 OpenVirtualDisk and GetVirtualDiskInformation from virtdisk.h / virtdisk.dll. Returns virtual storage format (VHD vs VHDX), disk sub-type (Fixed, Dynamic, Differencing), virtual capacity (GB), physical host allocation (MB), block size, sector size (512 vs 4K), 4K sector alignment, unique disk GUID identifier, and file timestamps.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            vhdPath: {
+              type: "string",
+              description: "Full file path to the .vhd, .vhdx, or .iso image to inspect. If omitted, automatically discovers and inspects local WSL2 / Windows virtual disks."
+            }
+          }
+        }
+      },
+      {
+        name: "super_vhd_storage_dependencies",
+        description: "Interrogates volume storage dependencies via Win32 GetStorageDependencyInformation from virtdisk.h / virtdisk.dll to determine if a drive letter or volume is hosted on bare-metal physical storage (NVMe/SATA/SAS) or backed by a virtualized hard disk (Hyper-V, WSL2, VHD-boot, Sandbox).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            drive: {
+              type: "string",
+              description: "Drive letter or volume path (e.g. 'C:', 'D:'). Default is 'C:'."
+            }
+          }
+        }
       }
 ];
 
@@ -5983,6 +6017,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🔍 [Windows Display Device Capabilities (GetDeviceCaps)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_vhd_attached_disks") {
+    const res = await orch.getAttachedVirtualDisks();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💽 [Windows Attached Virtual Disks (GetAllAttachedVirtualDiskPhysicalPaths)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_vhd_inspect") {
+    const res = await orch.inspectVirtualDisk(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔬 [Windows Virtual Disk Inspection (GetVirtualDiskInformation)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_vhd_storage_dependencies") {
+    const res = await orch.getStorageDependencies(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⛓️ [Windows Storage Dependency Information (GetStorageDependencyInformation)]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

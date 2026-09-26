@@ -10750,6 +10750,269 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows Virtual Storage & Virtual Hard Disk (VHD/VHDX) Subsystem (virtdisk.h / virtdisk.dll)
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct VIRTUAL_STORAGE_TYPE {
+            public uint DeviceId;
+            public Guid VendorId;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct OPEN_VIRTUAL_DISK_PARAMETERS_V1 {
+            public int Version;
+            public uint RWDepth;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct GET_VIRTUAL_DISK_INFO_SIZE {
+            public int Version;
+            public ulong VirtualSize;
+            public ulong PhysicalSize;
+            public uint BlockSize;
+            public uint SectorSize;
+        }
+
+        [DllImport("virtdisk.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern int GetAllAttachedVirtualDiskPhysicalPaths(ref uint pathsBufferSizeInBytes, IntPtr pathsBuffer);
+
+        [DllImport("virtdisk.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern int OpenVirtualDisk(
+            ref VIRTUAL_STORAGE_TYPE VirtualStorageType,
+            string Path,
+            uint VirtualDiskAccessMask,
+            uint Flags,
+            ref OPEN_VIRTUAL_DISK_PARAMETERS_V1 Parameters,
+            out IntPtr Handle
+        );
+
+        [DllImport("virtdisk.dll", EntryPoint = "GetVirtualDiskInformation", SetLastError = true)]
+        public static extern int GetVirtualDiskInfoSize(
+            IntPtr VirtualDiskHandle,
+            ref uint VirtualDiskInfoSize,
+            ref GET_VIRTUAL_DISK_INFO_SIZE VirtualDiskInfo,
+            out uint SizeUsed
+        );
+
+        [DllImport("virtdisk.dll", EntryPoint = "GetVirtualDiskInformation", SetLastError = true)]
+        public static extern int GetVirtualDiskInfoRaw(
+            IntPtr VirtualDiskHandle,
+            ref uint VirtualDiskInfoSize,
+            IntPtr VirtualDiskInfo,
+            out uint SizeUsed
+        );
+
+        [DllImport("virtdisk.dll", SetLastError = true)]
+        public static extern int GetStorageDependencyInformation(
+            IntPtr ObjectHandle,
+            uint Flags,
+            uint StorageDependencyInfoSize,
+            IntPtr StorageDependencyInfo,
+            out uint SizeUsed
+        );
+
+        static void VhdAttachedDisksCmd() {
+            try {
+                uint bufSize = 0;
+                GetAllAttachedVirtualDiskPhysicalPaths(ref bufSize, IntPtr.Zero);
+                var disks = new List<string>();
+
+                if (bufSize > 2) {
+                    IntPtr pBuf = Marshal.AllocHGlobal((int)bufSize);
+                    try {
+                        int res = GetAllAttachedVirtualDiskPhysicalPaths(ref bufSize, pBuf);
+                        if (res == 0) {
+                            IntPtr cur = pBuf;
+                            int idx = 0;
+                            while (true) {
+                                string s = Marshal.PtrToStringUni(cur);
+                                if (string.IsNullOrEmpty(s)) break;
+                                disks.Add(string.Format("{{\"index\": {0}, \"physicalPath\": \"{1}\"}}", idx, EscapeJson(s)));
+                                idx++;
+                                cur = new IntPtr(cur.ToInt64() + (s.Length + 1) * 2);
+                            }
+                        }
+                    } finally {
+                        Marshal.FreeHGlobal(pBuf);
+                    }
+                }
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.AppendFormat("\"attachedCount\": {0}, ", disks.Count);
+                sbOut.AppendFormat("\"disks\": [{0}]", string.Join(", ", disks.ToArray()));
+                sbOut.Append("}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void VhdInspectCmd(string vhdPath) {
+            IntPtr handle = IntPtr.Zero;
+            try {
+                string targetPath = vhdPath;
+                if (string.IsNullOrEmpty(targetPath)) {
+                    string userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    string wslPackages = Path.Combine(userProfile, @"AppData\Local\Packages");
+                    if (Directory.Exists(wslPackages)) {
+                        string[] matches = Directory.GetFiles(wslPackages, "*.vhdx", SearchOption.AllDirectories);
+                        if (matches.Length > 0) targetPath = matches[0];
+                    }
+                }
+
+                if (string.IsNullOrEmpty(targetPath) || !File.Exists(targetPath)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"VHD file not found: {0}\"}}", EscapeJson(targetPath ?? "")));
+                    return;
+                }
+
+                FileInfo fi = new FileInfo(targetPath);
+                string ext = fi.Extension.ToLowerInvariant();
+                string format = (ext == ".vhdx") ? "VHDX" : ((ext == ".iso") ? "ISO" : "VHD");
+
+                VIRTUAL_STORAGE_TYPE st = new VIRTUAL_STORAGE_TYPE();
+                st.DeviceId = (format == "VHDX") ? 3u : ((format == "VHD") ? 2u : 0u);
+                st.VendorId = Guid.Empty;
+
+                OPEN_VIRTUAL_DISK_PARAMETERS_V1 op = new OPEN_VIRTUAL_DISK_PARAMETERS_V1();
+                op.Version = 1;
+                op.RWDepth = 1000;
+
+                const uint VIRTUAL_DISK_ACCESS_GET_INFO = 0x00080000;
+                int openRes = OpenVirtualDisk(ref st, targetPath, VIRTUAL_DISK_ACCESS_GET_INFO, 0, ref op, out handle);
+                if (openRes != 0 || handle == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"OpenVirtualDisk failed with error code: {0}\", \"path\": \"{1}\"}}", openRes, EscapeJson(targetPath)));
+                    return;
+                }
+
+                GET_VIRTUAL_DISK_INFO_SIZE sz = new GET_VIRTUAL_DISK_INFO_SIZE();
+                sz.Version = 1;
+                uint szSize = (uint)Marshal.SizeOf(typeof(GET_VIRTUAL_DISK_INFO_SIZE));
+                uint used;
+                int infoRes = GetVirtualDiskInfoSize(handle, ref szSize, ref sz, out used);
+
+                Guid diskGuid = Guid.Empty;
+                int subType = 0;
+                bool is4k = false;
+
+                IntPtr pBuf = Marshal.AllocHGlobal(256);
+                try {
+                    Marshal.WriteInt32(pBuf, 2);
+                    uint bSize = 256;
+                    if (GetVirtualDiskInfoRaw(handle, ref bSize, pBuf, out used) == 0) {
+                        byte[] gb = new byte[16];
+                        Marshal.Copy(new IntPtr(pBuf.ToInt64() + 4), gb, 0, 16);
+                        diskGuid = new Guid(gb);
+                    }
+
+                    Marshal.WriteInt32(pBuf, 7);
+                    bSize = 256;
+                    if (GetVirtualDiskInfoRaw(handle, ref bSize, pBuf, out used) == 0) {
+                        subType = Marshal.ReadInt32(pBuf, 4);
+                    }
+
+                    Marshal.WriteInt32(pBuf, 8);
+                    bSize = 256;
+                    if (GetVirtualDiskInfoRaw(handle, ref bSize, pBuf, out used) == 0) {
+                        is4k = (Marshal.ReadInt32(pBuf, 4) != 0);
+                    }
+                } finally {
+                    Marshal.FreeHGlobal(pBuf);
+                }
+
+                string typeName = "Unknown";
+                if (subType == 2) typeName = "Fixed";
+                else if (subType == 3) typeName = "Dynamic";
+                else if (subType == 4) typeName = "Differencing";
+
+                double virtualGb = Math.Round((double)sz.VirtualSize / (1024.0 * 1024.0 * 1024.0), 2);
+                double physicalMb = Math.Round((double)sz.PhysicalSize / (1024.0 * 1024.0), 2);
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.AppendFormat("\"path\": \"{0}\", ", EscapeJson(targetPath));
+                sbOut.AppendFormat("\"format\": \"{0}\", ", format);
+                sbOut.AppendFormat("\"subType\": \"{0}\", ", typeName);
+                sbOut.AppendFormat("\"virtualSizeBytes\": {0}, ", sz.VirtualSize);
+                sbOut.AppendFormat("\"virtualSizeGb\": {0}, ", virtualGb.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
+                sbOut.AppendFormat("\"physicalSizeBytes\": {0}, ", sz.PhysicalSize);
+                sbOut.AppendFormat("\"physicalSizeMb\": {0}, ", physicalMb.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture));
+                sbOut.AppendFormat("\"blockSizeBytes\": {0}, ", sz.BlockSize);
+                sbOut.AppendFormat("\"sectorSizeBytes\": {0}, ", sz.SectorSize);
+                sbOut.AppendFormat("\"diskGuid\": \"{0}\", ", diskGuid);
+                sbOut.AppendFormat("\"is4kAligned\": {0}, ", is4k ? "true" : "false");
+                sbOut.AppendFormat("\"fileSizeBytes\": {0}, ", fi.Length);
+                sbOut.AppendFormat("\"creationTime\": \"{0:o}\", ", fi.CreationTimeUtc);
+                sbOut.AppendFormat("\"lastWriteTime\": \"{0:o}\"", fi.LastWriteTimeUtc);
+                sbOut.Append("}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (handle != IntPtr.Zero) {
+                    CloseHandle(handle);
+                }
+            }
+        }
+
+        static void VhdStorageDependenciesCmd(string driveOrVolume) {
+            IntPtr hFile = IntPtr.Zero;
+            try {
+                string target = driveOrVolume;
+                if (string.IsNullOrEmpty(target)) target = "C:";
+                target = target.TrimEnd('\\');
+                if (!target.StartsWith(@"\\.\")) {
+                    target = @"\\.\" + target;
+                }
+
+                const uint GENERIC_READ = 0x80000000;
+                const uint FILE_SHARE_READ_WRITE = 3;
+                const uint OPEN_EXISTING = 3;
+
+                hFile = CreateFile(target, GENERIC_READ, FILE_SHARE_READ_WRITE, IntPtr.Zero, OPEN_EXISTING, 0, IntPtr.Zero);
+                if (hFile == IntPtr.Zero || hFile == new IntPtr(-1)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to open volume: {0}\", \"target\": \"{1}\"}}", Marshal.GetLastWin32Error(), EscapeJson(target)));
+                    return;
+                }
+
+                uint bufSize = 4096;
+                IntPtr pBuf = Marshal.AllocHGlobal((int)bufSize);
+                try {
+                    Marshal.WriteInt32(pBuf, 1); // STORAGE_DEPENDENCY_INFO_VERSION_1
+                    uint sizeUsed;
+                    const uint GET_STORAGE_DEPENDENCY_FLAG_PARENTS = 1;
+                    int res = GetStorageDependencyInformation(hFile, GET_STORAGE_DEPENDENCY_FLAG_PARENTS, bufSize, pBuf, out sizeUsed);
+
+                    bool isVirtual = (res == 0);
+                    string backingType = isVirtual ? "Virtual Hard Disk (VHD/VHDX)" : "Physical Bare-Metal Drive (NVMe/SATA/SAS)";
+                    var parentPaths = new List<string>();
+
+                    var sbOut = new StringBuilder();
+                    sbOut.Append("{");
+                    sbOut.Append("\"success\": true, ");
+                    sbOut.AppendFormat("\"target\": \"{0}\", ", EscapeJson(target));
+                    sbOut.AppendFormat("\"isVirtualDisk\": {0}, ", isVirtual ? "true" : "false");
+                    sbOut.AppendFormat("\"storageBacking\": \"{0}\", ", EscapeJson(backingType));
+                    sbOut.AppendFormat("\"statusResultCode\": {0}, ", res);
+                    sbOut.AppendFormat("\"parentPaths\": [{0}]", string.Join(", ", parentPaths.ToArray()));
+                    sbOut.Append("}");
+                    Console.WriteLine(sbOut.ToString());
+                } finally {
+                    Marshal.FreeHGlobal(pBuf);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (hFile != IntPtr.Zero && hFile != new IntPtr(-1)) {
+                    CloseHandle(hFile);
+                }
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -13910,6 +14173,14 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "display_capabilities" || cmd == "device_caps" || cmd == "display_caps") {
                 string deviceName = args.Length >= 2 ? args[1] : "";
                 DisplayCapsCmd(deviceName);
+            } else if (cmd == "vhd_attached_disks" || cmd == "attached_vhds" || cmd == "virtual_disks") {
+                VhdAttachedDisksCmd();
+            } else if (cmd == "vhd_inspect" || cmd == "inspect_vhd" || cmd == "vhdx_info") {
+                string vhdPath = args.Length >= 2 ? args[1] : "";
+                VhdInspectCmd(vhdPath);
+            } else if (cmd == "vhd_storage_dependencies" || cmd == "storage_dependencies" || cmd == "vhd_dependencies") {
+                string drive = args.Length >= 2 ? args[1] : "C:";
+                VhdStorageDependenciesCmd(drive);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

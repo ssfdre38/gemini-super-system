@@ -79,6 +79,7 @@
   - [61. Windows National Language Support & Internationalization Subsystem](#61--windows-national-language-support--internationalization-subsystem-winnlsh--kernel32dll)
   - [62. Windows IP Helper & Network Routing Subsystem](#62--windows-ip-helper--network-routing-subsystem-iphlpapih--iphlpapidll)
   - [63. Windows Display Devices, Monitor Topology & Graphics Modes](#63--windows-display-devices-monitor-topology--graphics-modes-wingdih--winuserh)
+  - [64. Windows Virtual Storage & Virtual Hard Disk (VHD/VHDX) Subsystem](#64--windows-virtual-storage--virtual-hard-disk-vhdvhdx-subsystem-virtdiskh--virtdiskdll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -855,6 +856,17 @@ Directly interrogates the Windows display adapter pipeline, attached physical mo
 - **Hardware Display Capabilities & DPI Scaling Metrics (`super_display_capabilities`)**: Creates an unmediated display device context via `CreateDCW("DISPLAY", ...)` and queries deep hardware metrics via `GetDeviceCaps`. Computes logical vs unscaled desktop resolution, precise DPI scaling ratios (`LOGPIXELSX`/`LOGPIXELSY` e.g., 100%, 125%, 150%, 200%), physical panel dimensions (width/height in mm, diagonal size in inches), color planes, and raster/shading capabilities.
 - **169 Tools Milestone**: Reaches **169 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **48 comprehensive test suites (153/153 tests passing 100%)** and **44 environment health checks**.
 - **Native MCP Tools**: `super_display_devices`, `super_display_modes`, `super_display_capabilities`.
+
+---
+
+## 64. 💽 Windows Virtual Storage & Virtual Hard Disk (VHD/VHDX) Subsystem (`virtdisk.h` / `virtdisk.dll`)
+
+Directly interrogates the Windows Virtual Storage and VHD/VHDX architecture, attached virtual disk devices, sector geometries, and volume storage dependency graphs via native `virtdisk.dll` P/Invoke:
+- **Attached Virtual Disk Enumeration (`super_vhd_attached_disks`)**: Queries all active, attached, and mounted VHD and VHDX virtual hard disks across the host using native `GetAllAttachedVirtualDiskPhysicalPaths`. Maps virtual storage back to host physical drive handles (`\\.\PhysicalDriveX`) and partition tables.
+- **Deep Virtual Hard Disk Image Inspection (`super_vhd_inspect`)**: Opens any `.vhd`, `.vhdx`, or `.iso` image on disk (including WSL2 distributions, Hyper-V virtual machines, and Windows Sandbox disks) via `OpenVirtualDisk` with read-only info access and interrogates `GetVirtualDiskInformation`. Extracts virtual capacity (GB), physical host allocation (MB), block size, sector size (512 vs 4K), 4K sector alignment, disk format (`VHD` vs `VHDX`), sub-type (`Fixed`, `Dynamic`, `Differencing`), unique disk GUID, and file creation/modification timestamps.
+- **Storage Dependency Graph & Hypervisor Storage Identification (`super_vhd_storage_dependencies`)**: Analyzes volume handles (e.g. `C:`, `D:`) via `GetStorageDependencyInformation` to distinguish between direct bare-metal NVMe/SATA physical storage and virtualized/nested storage stacks (Hyper-V, WSL2, Azure VMs, AWS EC2, or VHD-native boot).
+- **172 Tools Milestone**: Reaches **172 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **49 comprehensive test suites (156/156 tests passing 100%)** and **45 environment health checks**.
+- **Native MCP Tools**: `super_vhd_attached_disks`, `super_vhd_inspect`, `super_vhd_storage_dependencies`.
 
 ---
 

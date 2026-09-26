@@ -3495,10 +3495,54 @@ async function run() {
     assert(typeof res.refreshRateHz === "number");
   });
 
-  it("All 169 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n=======================================================");
+  console.log("   SUITE 49: Windows Virtual Storage & VHD Subsystem (virtdisk.h / virtdisk.dll)");
+  console.log("=======================================================\n");
+
+  await itAsync("super_vhd_attached_disks queries active virtual hard disk attachments", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getAttachedVirtualDisks();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getAttachedVirtualDisks failed: " + JSON.stringify(res));
+    assert(typeof res.attachedCount === "number");
+    assert(Array.isArray(res.disks));
+  });
+
+  await itAsync("super_vhd_inspect inspects virtual hard disk format, capacity, and sector geometry", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.inspectVirtualDisk();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "inspectVirtualDisk failed: " + JSON.stringify(res));
+    assert(typeof res.path === "string" && res.path.length > 0);
+    assert(typeof res.format === "string");
+    assert(typeof res.virtualSizeBytes === "number" && res.virtualSizeBytes > 0);
+    assert(typeof res.physicalSizeBytes === "number" && res.physicalSizeBytes > 0);
+    assert(typeof res.sectorSizeBytes === "number");
+    assert(typeof res.diskGuid === "string");
+    assert(typeof res.is4kAligned === "boolean");
+  });
+
+  await itAsync("super_vhd_storage_dependencies queries backing storage hierarchy", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getStorageDependencies({ drive: "C:" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getStorageDependencies failed: " + JSON.stringify(res));
+    assert(typeof res.target === "string");
+    assert(typeof res.isVirtualDisk === "boolean");
+    assert(typeof res.storageBacking === "string" && res.storageBacking.length > 0);
+    assert(Array.isArray(res.parentPaths));
+  });
+
+  it("All 172 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 169);
+    assert.strictEqual(SYSTEM_TOOLS.length, 172);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3601,6 +3645,9 @@ async function run() {
     assert(toolNames.includes("super_display_devices"));
     assert(toolNames.includes("super_display_modes"));
     assert(toolNames.includes("super_display_capabilities"));
+    assert(toolNames.includes("super_vhd_attached_disks"));
+    assert(toolNames.includes("super_vhd_inspect"));
+    assert(toolNames.includes("super_vhd_storage_dependencies"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
