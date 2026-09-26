@@ -69,6 +69,7 @@
   - [51. Windows Network Management, SMB Shares & Local Accounts Subsystem](#51--windows-network-management-smb-shares--local-accounts-subsystem-netapi32dll--lmh)
   - [52. Windows Virtual Memory, Heap Allocations & Working Set Subsystem](#52--windows-virtual-memory-heap-allocations--working-set-subsystem-memoryapih--heapapih)
   - [53. Windows Console Subsystem, Screen Buffer & Terminal Mode Actuator](#53--windows-console-subsystem-screen-buffer--terminal-mode-actuator-winconh--consoleapih)
+  - [54. Windows Terminal Services & Remote Desktop Subsystem](#54-️-windows-terminal-services--remote-desktop-subsystem-wtsapi32h--wtsapi32dll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -208,7 +209,7 @@ Antigravity scrolled the chat via physical mouse wheel inputs, clicked the input
 
 ---
 
-## 🧰 MCP Tool Reference (94 Sovereign Tools)
+## 🧰 MCP Tool Reference (142 Sovereign Tools)
 
 All tools are exposed natively over stdio to Antigravity, Gemini CLI, and any MCP-compliant client:
 
@@ -735,6 +736,17 @@ Directly manages, inspects, and tunes the Win32 Console host subsystem, active s
 - **Dynamic Console Window & Cursor Actuator (`super_console_control`)**: Actuates console state on the fly by dynamically setting window titles (`SetConsoleTitleW`), adjusting cursor visibility and thickness (`SetConsoleCursorInfo`), or elevating and bringing the host console window into foreground focus (`ForceForegroundWindow`).
 - **139 Tools Milestone**: Reaches **139 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **38 comprehensive test suites (125/125 tests passing)** and **34 environment health checks**.
 - **Native MCP Tools**: `super_console_info`, `super_console_mode`, `super_console_control`.
+
+---
+
+## 54. 🖥️ Windows Terminal Services & Remote Desktop Subsystem (`WtsApi32.h` / `wtsapi32.dll`)
+
+Directly enumerates, inspects, and notifies Windows Terminal Services (WTS) logon sessions and mapped processes across interactive console, RDP, and headless Session 0 services boundaries via native `wtsapi32.dll` P/Invoke:
+- **Interactive & Remote Session Topology (`super_wts_sessions`)**: Directly calls `WTSEnumerateSessionsW` and `WTSQuerySessionInformationW` from `wtsapi32.dll`. Discovers all active, disconnected, and listening logon sessions (`WTSActive`, `WTSConnected`, `WTSConnectQuery`, `WTSShadow`, `WTSDisconnected`, `WTSIdle`, `WTSListen`, `WTSReset`, `WTSDown`, `WTSInit`). Retrieves session user names, domain credentials, client machine names, remote IP addresses, and display parameters (resolution and color depth) across physical console and remote desktop connections.
+- **Process Boundary & Session Isolation Inspection (`super_wts_processes`)**: Invokes native `WTSEnumerateProcessesW` to enumerate all running processes across session boundaries. Maps process IDs, executable names, session IDs, and security identifiers (SIDs) in a single atomic kernel snapshot without per-process enumeration overhead.
+- **Desktop Session Notification & User Broadcast (`super_wts_session_message`)**: Dispatches native Windows message boxes to specific interactive sessions via `WTSSendMessageW`. Allows sending operational alerts, emergency warnings, or human-in-the-loop prompts across session boundaries with configurable buttons (`OK`, `YesNo`, `RetryCancel`), icons (`Information`, `Warning`, `Error`), and timeouts without blocking the background event loop.
+- **142 Tools Milestone**: Reaches **142 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **39 comprehensive test suites (128/128 tests passing)** and **35 environment health checks**.
+- **Native MCP Tools**: `super_wts_sessions`, `super_wts_processes`, `super_wts_session_message`.
 
 ---
 

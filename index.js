@@ -2806,6 +2806,82 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_wts_sessions",
+        description: "Enumerates and queries active, disconnected, and listening Windows Terminal Services / Remote Desktop sessions (WTSEnumerateSessionsW, WTSQuerySessionInformationW). Provides session ID, station name, active user, client IP/name, protocol type, and display resolution.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            includeDetails: {
+              type: "boolean",
+              default: true,
+              description: "Whether to query extended session details including username, domain, client name, and display resolution (default: true)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wts_processes",
+        description: "Enumerates processes across Terminal Services sessions via WTSEnumerateProcessesW. Distinguishes processes executing within Session 0 (Windows system services) from interactive user logon sessions, returning PID, process name, and user SID.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            sessionId: {
+              type: "number",
+              default: -1,
+              description: "Target session ID to filter processes (-1 to enumerate across all active sessions)."
+            },
+            nameFilter: {
+              type: "string",
+              description: "Optional case-insensitive substring filter for process executable name."
+            },
+            limit: {
+              type: "number",
+              default: 50,
+              description: "Maximum number of processes to return (default: 50, max: 200)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wts_session_message",
+        description: "Dispatches system messages or interactive popup dialog boxes to target Terminal Services / Remote Desktop sessions via WTSSendMessageW. Allows background agents and services to present notifications or prompt interactive users directly.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            sessionId: {
+              type: "number",
+              default: -1,
+              description: "Target Terminal Services session ID (-1 for current or active user session)."
+            },
+            title: {
+              type: "string",
+              default: "Gemini Super System",
+              description: "Title of the system message box dialog."
+            },
+            message: {
+              type: "string",
+              description: "Body text content of the message."
+            },
+            style: {
+              type: "number",
+              default: 64,
+              description: "Win32 MessageBox style flags (default: 0x40 for MB_ICONINFORMATION | MB_OK)."
+            },
+            timeoutSeconds: {
+              type: "number",
+              default: 10,
+              description: "Timeout in seconds before the dialog auto-dismisses (default: 10)."
+            },
+            wait: {
+              type: "boolean",
+              default: false,
+              description: "Whether to block synchronously waiting for the user to dismiss or respond to the dialog (default: false)."
+            }
+          },
+          required: ["message"]
+        }
       }
 ];
 
@@ -5065,6 +5141,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `💻 [Windows Console Control & Title Actuator]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wts_sessions") {
+    const includeDetails = args?.includeDetails !== false;
+    const res = await orch.getWtsSessions({ includeDetails });
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🖥️ [Windows Terminal Services & Remote Desktop Sessions]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wts_processes") {
+    const res = await orch.getWtsProcesses(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🖥️ [Windows Terminal Services Multi-Session Processes]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wts_session_message") {
+    const res = await orch.sendWtsSessionMessage(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🖥️ [Windows Terminal Services Message Actuator]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

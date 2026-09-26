@@ -7622,6 +7622,326 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Phase 20: Windows Terminal Services & Remote Desktop (Windows.Win32.System.RemoteDesktop / WtsApi32.h / wtsapi32.dll)
+
+        [DllImport("wtsapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool WTSEnumerateSessionsW(
+            IntPtr hServer,
+            uint Reserved,
+            uint Version,
+            out IntPtr ppSessionInfo,
+            out uint pCount);
+
+        [DllImport("wtsapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool WTSQuerySessionInformationW(
+            IntPtr hServer,
+            uint sessionId,
+            int wtsInfoClass,
+            out IntPtr ppBuffer,
+            out uint pBytesReturned);
+
+        [DllImport("wtsapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool WTSEnumerateProcessesW(
+            IntPtr hServer,
+            uint Reserved,
+            uint Version,
+            out IntPtr ppProcessInfo,
+            out uint pCount);
+
+        [DllImport("wtsapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool WTSSendMessageW(
+            IntPtr hServer,
+            uint SessionId,
+            string pTitle,
+            uint TitleLength,
+            string pMessage,
+            uint MessageLength,
+            uint Style,
+            uint Timeout,
+            out uint pResponse,
+            bool bWait);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WTS_SESSION_INFOW {
+            public uint SessionId;
+            public IntPtr pWinStationName;
+            public int State;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WTS_PROCESS_INFOW {
+            public uint SessionId;
+            public uint ProcessId;
+            public IntPtr pProcessName;
+            public IntPtr pUserSid;
+        }
+
+        static string FormatWtsState(int state) {
+            switch (state) {
+                case 0: return "WTSActive";
+                case 1: return "WTSConnected";
+                case 2: return "WTSConnectQuery";
+                case 3: return "WTSShadow";
+                case 4: return "WTSDisconnected";
+                case 5: return "WTSIdle";
+                case 6: return "WTSListen";
+                case 7: return "WTSReset";
+                case 8: return "WTSDown";
+                case 9: return "WTSInit";
+                default: return "Unknown (" + state + ")";
+            }
+        }
+
+        static string FormatWtsProtocol(int proto) {
+            switch (proto) {
+                case 0: return "Console";
+                case 1: return "ICA";
+                case 2: return "RDP";
+                default: return "Other (" + proto + ")";
+            }
+        }
+
+        static void WtsSessionsCmd(bool includeDetails) {
+            try {
+                IntPtr pSessions = IntPtr.Zero;
+                uint sCount = 0;
+                bool ok = WTSEnumerateSessionsW(IntPtr.Zero, 0, 1, out pSessions, out sCount);
+                if (!ok || pSessions == IntPtr.Zero) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"WTSEnumerateSessionsW failed (Win32: {0})\"}}", err));
+                    return;
+                }
+
+                uint currentSessionId = 0;
+                try {
+                    currentSessionId = (uint)Process.GetCurrentProcess().SessionId;
+                } catch {}
+
+                var sessionList = new List<string>();
+                int structSize = Marshal.SizeOf(typeof(WTS_SESSION_INFOW));
+
+                for (int i = 0; i < sCount; i++) {
+                    IntPtr itemPtr = new IntPtr(pSessions.ToInt64() + (i * structSize));
+                    WTS_SESSION_INFOW si = (WTS_SESSION_INFOW)Marshal.PtrToStructure(itemPtr, typeof(WTS_SESSION_INFOW));
+                    string station = Marshal.PtrToStringUni(si.pWinStationName) ?? "";
+                    string stateStr = FormatWtsState(si.State);
+                    bool isCurrent = (si.SessionId == currentSessionId);
+
+                    string userName = "";
+                    string domainName = "";
+                    string clientName = "";
+                    string protocolStr = "Unknown";
+                    int dispW = 0, dispH = 0, bpp = 0;
+
+                    if (includeDetails) {
+                        IntPtr pBuf = IntPtr.Zero;
+                        uint bytes = 0;
+                        if (WTSQuerySessionInformationW(IntPtr.Zero, si.SessionId, 5 /* WTSUserName */, out pBuf, out bytes)) {
+                            if (pBuf != IntPtr.Zero) {
+                                userName = Marshal.PtrToStringUni(pBuf) ?? "";
+                                WTSFreeMemory(pBuf);
+                            }
+                        }
+                        if (WTSQuerySessionInformationW(IntPtr.Zero, si.SessionId, 7 /* WTSDomainName */, out pBuf, out bytes)) {
+                            if (pBuf != IntPtr.Zero) {
+                                domainName = Marshal.PtrToStringUni(pBuf) ?? "";
+                                WTSFreeMemory(pBuf);
+                            }
+                        }
+                        if (WTSQuerySessionInformationW(IntPtr.Zero, si.SessionId, 10 /* WTSClientName */, out pBuf, out bytes)) {
+                            if (pBuf != IntPtr.Zero) {
+                                clientName = Marshal.PtrToStringUni(pBuf) ?? "";
+                                WTSFreeMemory(pBuf);
+                            }
+                        }
+                        if (WTSQuerySessionInformationW(IntPtr.Zero, si.SessionId, 16 /* WTSClientProtocolType */, out pBuf, out bytes)) {
+                            if (pBuf != IntPtr.Zero) {
+                                short p = Marshal.ReadInt16(pBuf);
+                                protocolStr = FormatWtsProtocol((int)p);
+                                WTSFreeMemory(pBuf);
+                            }
+                        }
+                        if (WTSQuerySessionInformationW(IntPtr.Zero, si.SessionId, 15 /* WTSClientDisplay */, out pBuf, out bytes)) {
+                            if (pBuf != IntPtr.Zero) {
+                                WTS_CLIENT_DISPLAY disp = (WTS_CLIENT_DISPLAY)Marshal.PtrToStructure(pBuf, typeof(WTS_CLIENT_DISPLAY));
+                                dispW = (int)disp.HorizontalResolution;
+                                dispH = (int)disp.VerticalResolution;
+                                bpp = (int)disp.ColorDepth;
+                                WTSFreeMemory(pBuf);
+                            }
+                        }
+                    }
+
+                    sessionList.Add(string.Format(
+                        "{{\"sessionId\": {0}, \"winStationName\": \"{1}\", \"state\": \"{2}\", \"stateRaw\": {3}, \"userName\": \"{4}\", \"domainName\": \"{5}\", \"clientName\": \"{6}\", \"protocol\": \"{7}\", \"displayWidth\": {8}, \"displayHeight\": {9}, \"colorDepth\": {10}, \"isCurrentSession\": {11}}}",
+                        si.SessionId,
+                        EscapeJson(station),
+                        EscapeJson(stateStr),
+                        si.State,
+                        EscapeJson(userName),
+                        EscapeJson(domainName),
+                        EscapeJson(clientName),
+                        EscapeJson(protocolStr),
+                        dispW,
+                        dispH,
+                        bpp,
+                        isCurrent ? "true" : "false"
+                    ));
+                }
+
+                WTSFreeMemory(pSessions);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"currentSessionId\": {0}, \"sessionCount\": {1}, \"sessions\": [{2}]}}",
+                    currentSessionId,
+                    sessionList.Count,
+                    string.Join(", ", sessionList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WtsProcessesCmd(int targetSessionId, string nameFilter, int maxLimit) {
+            try {
+                IntPtr pProcs = IntPtr.Zero;
+                uint pCount = 0;
+                bool ok = WTSEnumerateProcessesW(IntPtr.Zero, 0, 1, out pProcs, out pCount);
+                if (!ok || pProcs == IntPtr.Zero) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"WTSEnumerateProcessesW failed (Win32: {0})\"}}", err));
+                    return;
+                }
+
+                int limit = Math.Max(1, Math.Min(maxLimit <= 0 ? 50 : maxLimit, 200));
+                string filter = (nameFilter ?? "").Trim().ToLowerInvariant();
+
+                var procList = new List<string>();
+                var sessionCounts = new Dictionary<uint, int>();
+                int matchedCount = 0;
+
+                int structSize = Marshal.SizeOf(typeof(WTS_PROCESS_INFOW));
+
+                for (int i = 0; i < pCount; i++) {
+                    IntPtr itemPtr = new IntPtr(pProcs.ToInt64() + (i * structSize));
+                    WTS_PROCESS_INFOW pi = (WTS_PROCESS_INFOW)Marshal.PtrToStructure(itemPtr, typeof(WTS_PROCESS_INFOW));
+
+                    if (!sessionCounts.ContainsKey(pi.SessionId)) sessionCounts[pi.SessionId] = 0;
+                    sessionCounts[pi.SessionId]++;
+
+                    if (targetSessionId >= 0 && pi.SessionId != (uint)targetSessionId) continue;
+
+                    string pName = Marshal.PtrToStringUni(pi.pProcessName) ?? "";
+                    if (!string.IsNullOrEmpty(filter) && !pName.ToLowerInvariant().Contains(filter)) continue;
+
+                    matchedCount++;
+
+                    if (procList.Count < limit) {
+                        string sidStr = "";
+                        if (pi.pUserSid != IntPtr.Zero) {
+                            try {
+                                var sid = new System.Security.Principal.SecurityIdentifier(pi.pUserSid);
+                                sidStr = sid.Value;
+                            } catch {}
+                        }
+
+                        procList.Add(string.Format(
+                            "{{\"sessionId\": {0}, \"pid\": {1}, \"processName\": \"{2}\", \"userSid\": \"{3}\"}}",
+                            pi.SessionId,
+                            pi.ProcessId,
+                            EscapeJson(pName),
+                            EscapeJson(sidStr)
+                        ));
+                    }
+                }
+
+                WTSFreeMemory(pProcs);
+
+                var sCountsJson = new List<string>();
+                foreach (var kvp in sessionCounts) {
+                    sCountsJson.Add(string.Format("{{\"sessionId\": {0}, \"count\": {1}}}", kvp.Key, kvp.Value));
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"totalProcesses\": {0}, \"matchedProcesses\": {1}, \"returnedProcesses\": {2}, \"sessionDistribution\": [{3}], \"processes\": [{4}]}}",
+                    pCount,
+                    matchedCount,
+                    procList.Count,
+                    string.Join(", ", sCountsJson.ToArray()),
+                    string.Join(", ", procList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WtsSessionMessageCmd(int sessionId, string title, string message, uint style, uint timeoutSec, bool wait) {
+            try {
+                uint targetSession = 0;
+                if (sessionId >= 0) {
+                    targetSession = (uint)sessionId;
+                } else {
+                    targetSession = (uint)Process.GetCurrentProcess().SessionId;
+                }
+
+                string msgTitle = string.IsNullOrEmpty(title) ? "Gemini Super System" : title;
+                string msgBody = string.IsNullOrEmpty(message) ? "Notice from Gemini Super System" : message;
+                uint msgStyle = style == 0 ? 0x00000040u /* MB_ICONINFORMATION | MB_OK */ : style;
+                uint timeout = timeoutSec <= 0 ? 10u : timeoutSec;
+
+                uint response = 0;
+                uint titleLen = (uint)(msgTitle.Length * sizeof(char));
+                uint msgLen = (uint)(msgBody.Length * sizeof(char));
+
+                bool ok = WTSSendMessageW(
+                    IntPtr.Zero,
+                    targetSession,
+                    msgTitle,
+                    titleLen,
+                    msgBody,
+                    msgLen,
+                    msgStyle,
+                    timeout,
+                    out response,
+                    wait
+                );
+
+                int lastErr = 0;
+                if (!ok) lastErr = Marshal.GetLastWin32Error();
+
+                string responseStr = "ASYNC_DISPATCHED";
+                if (wait && ok) {
+                    switch (response) {
+                        case 1: responseStr = "IDOK"; break;
+                        case 2: responseStr = "IDCANCEL"; break;
+                        case 3: responseStr = "IDABORT"; break;
+                        case 4: responseStr = "IDRETRY"; break;
+                        case 5: responseStr = "IDIGNORE"; break;
+                        case 6: responseStr = "IDYES"; break;
+                        case 7: responseStr = "IDNO"; break;
+                        case 32000: responseStr = "IDTIMEOUT"; break;
+                        case 32001: responseStr = "IDASYNC"; break;
+                        default: responseStr = "CODE_" + response; break;
+                    }
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": {0}, \"sessionId\": {1}, \"title\": \"{2}\", \"wait\": {3}, \"response\": \"{4}\", \"responseRaw\": {5}, \"win32Error\": {6}}}",
+                    ok ? "true" : "false",
+                    targetSession,
+                    EscapeJson(msgTitle),
+                    wait ? "true" : "false",
+                    EscapeJson(responseStr),
+                    response,
+                    lastErr
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -10644,6 +10964,27 @@ namespace GeminiSuperDesktop {
                 string curSize = args.Length >= 4 ? args[3] : null;
                 string activate = args.Length >= 5 ? args[4] : null;
                 ConsoleControlCmd(title, curVis, curSize, activate);
+            } else if (cmd == "wts_sessions" || cmd == "terminal_sessions" || cmd == "rdp_sessions") {
+                bool incDetails = args.Length >= 2 ? (args[1].ToLowerInvariant() != "false" && args[1] != "0") : true;
+                WtsSessionsCmd(incDetails);
+            } else if (cmd == "wts_processes" || cmd == "terminal_processes" || cmd == "session_processes") {
+                int sId = -1;
+                if (args.Length >= 2 && !string.IsNullOrEmpty(args[1])) int.TryParse(args[1], out sId);
+                string filter = args.Length >= 3 ? args[2] : "";
+                int limit = 50;
+                if (args.Length >= 4 && !string.IsNullOrEmpty(args[3])) int.TryParse(args[3], out limit);
+                WtsProcessesCmd(sId, filter, limit);
+            } else if (cmd == "wts_session_message" || cmd == "wts_message" || cmd == "session_message") {
+                int sId = -1;
+                if (args.Length >= 2 && !string.IsNullOrEmpty(args[1])) int.TryParse(args[1], out sId);
+                string title = args.Length >= 3 ? args[2] : "Gemini Super System";
+                string message = args.Length >= 4 ? args[3] : "Notice from Gemini Super System";
+                uint style = 0x40;
+                if (args.Length >= 5 && !string.IsNullOrEmpty(args[4])) uint.TryParse(args[4], out style);
+                uint timeout = 10;
+                if (args.Length >= 6 && !string.IsNullOrEmpty(args[5])) uint.TryParse(args[5], out timeout);
+                bool wait = args.Length >= 7 ? (args[6].ToLowerInvariant() == "true" || args[6] == "1") : false;
+                WtsSessionMessageCmd(sId, title, message, style, timeout, wait);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

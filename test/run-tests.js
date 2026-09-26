@@ -2870,10 +2870,66 @@ async function run() {
     assert(typeof res.activated === "boolean");
   });
 
-  it("All 139 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 39: Windows Terminal Services & Remote Desktop (WTS) Subsystem
+  console.log("\n=======================================================");
+  console.log("   SUITE 39: Windows Terminal Services & Remote Desktop");
+  console.log("=======================================================\n");
+
+  await itAsync("super_wts_sessions enumerates active, disconnected, and listening logon sessions", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWtsSessions({ includeDetails: true });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.currentSessionId === "number");
+    assert(typeof res.sessionCount === "number");
+    assert(res.sessionCount > 0);
+    assert(Array.isArray(res.sessions));
+    assert(res.sessions.length > 0);
+
+    const s0 = res.sessions.find(s => s.sessionId === 0);
+    assert(s0 !== undefined, "Session 0 (Services) should exist");
+    assert(typeof s0.winStationName === "string");
+    assert(typeof s0.state === "string");
+  });
+
+  await itAsync("super_wts_processes enumerates processes mapped to session boundaries", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWtsProcesses({ limit: 10 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.totalProcesses === "number");
+    assert(res.totalProcesses > 0);
+    assert(Array.isArray(res.sessionDistribution));
+    assert(Array.isArray(res.processes));
+    assert(res.processes.length > 0);
+    assert(typeof res.processes[0].pid === "number");
+    assert(typeof res.processes[0].processName === "string");
+  });
+
+  await itAsync("super_wts_session_message dispatches session notification without blocking", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    // Non-blocking dispatch with timeout 1s
+    const res = await kb.sendWtsSessionMessage({
+      title: "Test Unit Notice",
+      message: "Automated regression verification",
+      timeoutSeconds: 1,
+      wait: false
+    });
+
+    assert(res !== null && typeof res === "object");
+    assert(typeof res.sessionId === "number");
+    assert.strictEqual(res.wait, false);
+  });
+
+  it("All 142 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 139);
+    assert.strictEqual(SYSTEM_TOOLS.length, 142);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -2946,6 +3002,9 @@ async function run() {
     assert(toolNames.includes("super_console_info"));
     assert(toolNames.includes("super_console_mode"));
     assert(toolNames.includes("super_console_control"));
+    assert(toolNames.includes("super_wts_sessions"));
+    assert(toolNames.includes("super_wts_processes"));
+    assert(toolNames.includes("super_wts_session_message"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
