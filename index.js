@@ -3309,6 +3309,57 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_display_devices",
+        description: "Enumerates all Windows display adapters (GPUs) and attached physical monitors via native Win32 EnumDisplayDevicesW from winuser.h / user32.dll. Returns device names (\\\\.\\DISPLAY1), descriptive strings (GPU / monitor model names), state flags (primary, attached to desktop, mirroring, remote), PnP hardware IDs, and registry keys.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            adapterFilter: {
+              type: "string",
+              description: "Optional substring filter on adapter name, description, or hardware ID."
+            },
+            includeMonitors: {
+              type: "boolean",
+              description: "Whether to enumerate attached physical monitors for each display adapter. Default is true."
+            }
+          }
+        }
+      },
+      {
+        name: "super_display_modes",
+        description: "Enumerates active and supported graphics display modes (resolutions, refresh rates in Hz, color bit depths, orientation, interlacing) for a display device via native Win32 EnumDisplaySettingsW from wingdi.h / user32.dll. Can inspect current mode, registry default mode, or enumerate all supported hardware modes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            deviceName: {
+              type: "string",
+              description: "Display device name (e.g. \\\\.\\DISPLAY1). If omitted, queries the primary display."
+            },
+            modeType: {
+              type: "string",
+              description: "Mode type to query: 'all' (supported modes), 'current' (active mode), or 'registry' (registry default). Default is 'all'."
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of modes to return when modeType is 'all'. Default is 100."
+            }
+          }
+        }
+      },
+      {
+        name: "super_display_capabilities",
+        description: "Interrogates deep hardware display capabilities, physical dimensions (width/height in mm, diagonal inches), logical vs physical desktop resolutions, DPI scaling factors (LOGPIXELSX/Y and scale percentage e.g. 100%, 125%, 150%), color depths, and raster/shading capabilities via Win32 CreateDCW and GetDeviceCaps from wingdi.h / gdi32.dll.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            deviceName: {
+              type: "string",
+              description: "Display device name (e.g. \\\\.\\DISPLAY1). If omitted, queries the primary display."
+            }
+          }
+        }
       }
 ];
 
@@ -5896,6 +5947,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🔌 [Windows Network Interfaces (IP Helper)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_display_devices") {
+    const res = await orch.getDisplayDevices(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🖥️ [Windows Display Devices & Monitors (EnumDisplayDevicesW)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_display_modes") {
+    const res = await orch.getDisplayModes(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📐 [Windows Graphics Display Modes (EnumDisplaySettingsW)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_display_capabilities") {
+    const res = await orch.getDisplayCapabilities(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔍 [Windows Display Device Capabilities (GetDeviceCaps)]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

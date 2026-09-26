@@ -78,6 +78,7 @@
   - [60. Windows Print Spooler Subsystem](#60--windows-print-spooler-subsystem-winspooldrv--winspoolh)
   - [61. Windows National Language Support & Internationalization Subsystem](#61--windows-national-language-support--internationalization-subsystem-winnlsh--kernel32dll)
   - [62. Windows IP Helper & Network Routing Subsystem](#62--windows-ip-helper--network-routing-subsystem-iphlpapih--iphlpapidll)
+  - [63. Windows Display Devices, Monitor Topology & Graphics Modes](#63--windows-display-devices-monitor-topology--graphics-modes-wingdih--winuserh)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -843,6 +844,17 @@ Directly interrogates the Windows IP Helper architecture, kernel IP routing tabl
 - **Network Interface Telemetry & Bandwidth Telemetry (`super_iphlp_interfaces`)**: Interrogates all installed adapters (10 Gbps Ethernet, WireGuard `wt0`, WSL virtual switch, loopback) via IP Helper and .NET hardware counters. Inspects operational link status (`Up`, `Down`), link speeds (up to 100 Gbps), MTU sizes, physical MAC addresses, assigned IPv4 and IPv6 addresses, gateway addresses, configured DNS servers, and 64-bit sent/received octet traffic counters.
 - **166 Tools Milestone**: Reaches **166 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **47 comprehensive test suites (150/150 tests passing)** and **43 environment health checks**.
 - **Native MCP Tools**: `super_iphlp_routing_table`, `super_iphlp_arp_table`, `super_iphlp_interfaces`.
+
+---
+
+## 63. 🖥️ Windows Display Devices, Monitor Topology & Graphics Modes (`wingdi.h` / `winuser.h`)
+
+Directly interrogates the Windows display adapter pipeline, attached physical monitors, active/supported graphics resolutions, and hardware device context capabilities via native `user32.dll` and `gdi32.dll` P/Invoke:
+- **Display Adapter & Physical Monitor Topology (`super_display_devices`)**: Directly enumerates all graphics adapters and attached physical displays via native Win32 `EnumDisplayDevicesW`. Retrieves adapter device names (`\\.\DISPLAY1`), descriptive GPU hardware strings, display state flags (`AttachedToDesktop`, `PrimaryDevice`, `MirroringDriver`, `Remote`), PnP hardware IDs (`PCI\VEN_...` or `MONITOR\...`), and active monitor registry keys.
+- **Graphics Display Modes & Resolution Enumeration (`super_display_modes`)**: Interrogates active, registry default, and all hardware-supported screen resolutions via native `EnumDisplaySettingsW`. Queries pixel dimensions (`dmPelsWidth` x `dmPelsHeight`), vertical refresh frequencies in Hz (`dmDisplayFrequency`), color bit depths (`dmBitsPerPel`), display orientation angles (0°, 90°, 180°, 270°), and interlaced raster scan flags.
+- **Hardware Display Capabilities & DPI Scaling Metrics (`super_display_capabilities`)**: Creates an unmediated display device context via `CreateDCW("DISPLAY", ...)` and queries deep hardware metrics via `GetDeviceCaps`. Computes logical vs unscaled desktop resolution, precise DPI scaling ratios (`LOGPIXELSX`/`LOGPIXELSY` e.g., 100%, 125%, 150%, 200%), physical panel dimensions (width/height in mm, diagonal size in inches), color planes, and raster/shading capabilities.
+- **169 Tools Milestone**: Reaches **169 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **48 comprehensive test suites (153/153 tests passing 100%)** and **44 environment health checks**.
+- **Native MCP Tools**: `super_display_devices`, `super_display_modes`, `super_display_capabilities`.
 
 ---
 

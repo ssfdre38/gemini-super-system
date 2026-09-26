@@ -3428,10 +3428,77 @@ async function run() {
     assert(Array.isArray(if0.ipAddresses));
   });
 
-  it("All 166 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n=======================================================");
+  console.log("   SUITE 48: Windows Display Devices & Graphics Modes (wingdi.h / winuser.h)");
+  console.log("=======================================================\n");
+
+  await itAsync("super_display_devices enumerates display adapters, monitors, and hardware IDs", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getDisplayDevices();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getDisplayDevices failed: " + JSON.stringify(res));
+    assert(typeof res.totalAdaptersFound === "number" && res.totalAdaptersFound > 0);
+    assert(typeof res.adapterCount === "number" && res.adapterCount > 0);
+    assert(Array.isArray(res.adapters) && res.adapters.length > 0);
+
+    const a0 = res.adapters[0];
+    assert(typeof a0.deviceName === "string" && a0.deviceName.length > 0);
+    assert(typeof a0.deviceString === "string");
+    assert(typeof a0.stateFlags === "number");
+    assert(typeof a0.isAttachedToDesktop === "boolean");
+    assert(typeof a0.isPrimary === "boolean");
+    assert(typeof a0.deviceID === "string");
+    assert(Array.isArray(a0.monitors));
+    if (a0.monitors.length > 0) {
+      const m0 = a0.monitors[0];
+      assert(typeof m0.deviceName === "string");
+      assert(typeof m0.deviceString === "string");
+      assert(typeof m0.deviceID === "string");
+    }
+  });
+
+  await itAsync("super_display_modes interrogates active and supported display resolutions", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getDisplayModes({ limit: 10 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getDisplayModes failed: " + JSON.stringify(res));
+    assert(typeof res.deviceName === "string");
+    assert(typeof res.hasCurrent === "boolean");
+    if (res.hasCurrent && res.currentMode) {
+      assert(typeof res.currentMode.width === "number" && res.currentMode.width > 0);
+      assert(typeof res.currentMode.height === "number" && res.currentMode.height > 0);
+      assert(typeof res.currentMode.refreshRateHz === "number");
+      assert(typeof res.currentMode.bitsPerPixel === "number");
+      assert(typeof res.currentMode.orientation === "string");
+    }
+    assert(Array.isArray(res.modes));
+  });
+
+  await itAsync("super_display_capabilities measures DPI scaling, dimensions, and color depths", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getDisplayCapabilities();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getDisplayCapabilities failed: " + JSON.stringify(res));
+    assert(typeof res.deviceName === "string");
+    assert(res.logicalResolution && typeof res.logicalResolution.width === "number" && res.logicalResolution.width > 0);
+    assert(res.desktopResolution && typeof res.desktopResolution.width === "number" && res.desktopResolution.width > 0);
+    assert(typeof res.scaleFactorPercent === "number" && res.scaleFactorPercent >= 50);
+    assert(res.dpi && typeof res.dpi.dpiX === "number" && res.dpi.dpiX > 0);
+    assert(res.physicalDimensionsMm && typeof res.physicalDimensionsMm.widthMm === "number");
+    assert(res.color && typeof res.color.bitsPerPixel === "number" && res.color.bitsPerPixel > 0);
+    assert(typeof res.refreshRateHz === "number");
+  });
+
+  it("All 169 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 166);
+    assert.strictEqual(SYSTEM_TOOLS.length, 169);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3531,6 +3598,9 @@ async function run() {
     assert(toolNames.includes("super_iphlp_routing_table"));
     assert(toolNames.includes("super_iphlp_arp_table"));
     assert(toolNames.includes("super_iphlp_interfaces"));
+    assert(toolNames.includes("super_display_devices"));
+    assert(toolNames.includes("super_display_modes"));
+    assert(toolNames.includes("super_display_capabilities"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

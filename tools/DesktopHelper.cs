@@ -10464,6 +10464,292 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows Display Devices, Monitor Topology & Graphics Modes (wingdi.h / winuser.h)
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct DISPLAY_DEVICE_FULL {
+            public int cb;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string DeviceName;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string DeviceString;
+            public uint StateFlags;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string DeviceID;
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string DeviceKey;
+        }
+
+        [DllImport("user32.dll", EntryPoint = "EnumDisplayDevicesW", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern bool EnumDisplayDevicesFull(string lpDevice, uint iDevNum, ref DISPLAY_DEVICE_FULL lpDisplayDevice, uint dwFlags);
+
+        [DllImport("gdi32.dll", EntryPoint = "CreateDCW", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern IntPtr CreateDisplayDC(string lpszDriver, string lpszDevice, string lpszOutput, IntPtr lpInitData);
+
+        [DllImport("gdi32.dll", SetLastError = true)]
+        static extern bool DeleteDC(IntPtr hdc);
+
+        [DllImport("gdi32.dll", SetLastError = true)]
+        static extern int GetDeviceCaps(IntPtr hdc, int nIndex);
+
+        const int GDC_HORZSIZE = 4;
+        const int GDC_VERTSIZE = 6;
+        const int GDC_HORZRES = 8;
+        const int GDC_VERTRES = 10;
+        const int GDC_BITSPIXEL = 12;
+        const int GDC_PLANES = 14;
+        const int GDC_NUMCOLORS = 24;
+        const int GDC_RASTERCAPS = 38;
+        const int GDC_LOGPIXELSX = 88;
+        const int GDC_LOGPIXELSY = 90;
+        const int GDC_COLORRES = 108;
+        const int GDC_VREFRESH = 116;
+        const int GDC_DESKTOPVERTRES = 117;
+        const int GDC_DESKTOPHORZRES = 118;
+        const int GDC_SHADEBLENDCAPS = 120;
+
+        static void DisplayDevicesCmd(string adapterFilter, bool includeMonitors) {
+            try {
+                var adapters = new List<string>();
+                uint devNum = 0;
+                int matchedAdapters = 0;
+                DISPLAY_DEVICE_FULL d = new DISPLAY_DEVICE_FULL();
+                d.cb = Marshal.SizeOf(d);
+
+                while (EnumDisplayDevicesFull(null, devNum, ref d, 0)) {
+                    bool match = true;
+                    if (!string.IsNullOrEmpty(adapterFilter)) {
+                        string q = adapterFilter.Trim().ToLowerInvariant();
+                        match = (d.DeviceName != null && d.DeviceName.ToLowerInvariant().Contains(q)) ||
+                                (d.DeviceString != null && d.DeviceString.ToLowerInvariant().Contains(q)) ||
+                                (d.DeviceID != null && d.DeviceID.ToLowerInvariant().Contains(q));
+                    }
+
+                    if (match) {
+                        matchedAdapters++;
+                        bool isAttached = (d.StateFlags & 0x00000001) != 0;
+                        bool isPrimary = (d.StateFlags & 0x00000004) != 0;
+                        bool isMirror = (d.StateFlags & 0x00000008) != 0;
+                        bool isVga = (d.StateFlags & 0x00000010) != 0;
+                        bool isRemovable = (d.StateFlags & 0x00000020) != 0;
+                        bool isRemote = (d.StateFlags & 0x04000000) != 0;
+                        bool modesPruned = (d.StateFlags & 0x08000000) != 0;
+
+                        var monitors = new List<string>();
+                        if (includeMonitors) {
+                            uint monNum = 0;
+                            DISPLAY_DEVICE_FULL mon = new DISPLAY_DEVICE_FULL();
+                            mon.cb = Marshal.SizeOf(mon);
+                            while (EnumDisplayDevicesFull(d.DeviceName, monNum, ref mon, 0)) {
+                                bool monAttached = (mon.StateFlags & 0x00000001) != 0;
+                                bool monPrimary = (mon.StateFlags & 0x00000004) != 0;
+                                var sbMon = new StringBuilder();
+                                sbMon.Append("{");
+                                sbMon.AppendFormat("\"index\": {0}, ", monNum);
+                                sbMon.AppendFormat("\"deviceName\": \"{0}\", ", EscapeJson(mon.DeviceName ?? ""));
+                                sbMon.AppendFormat("\"deviceString\": \"{0}\", ", EscapeJson(mon.DeviceString ?? ""));
+                                sbMon.AppendFormat("\"stateFlags\": {0}, ", mon.StateFlags);
+                                sbMon.AppendFormat("\"isAttachedToDesktop\": {0}, ", monAttached ? "true" : "false");
+                                sbMon.AppendFormat("\"isPrimary\": {0}, ", monPrimary ? "true" : "false");
+                                sbMon.AppendFormat("\"deviceID\": \"{0}\", ", EscapeJson(mon.DeviceID ?? ""));
+                                sbMon.AppendFormat("\"deviceKey\": \"{0}\"", EscapeJson(mon.DeviceKey ?? ""));
+                                sbMon.Append("}");
+                                monitors.Add(sbMon.ToString());
+                                monNum++;
+                                mon = new DISPLAY_DEVICE_FULL();
+                                mon.cb = Marshal.SizeOf(mon);
+                            }
+                        }
+
+                        var sbAd = new StringBuilder();
+                        sbAd.Append("{");
+                        sbAd.AppendFormat("\"index\": {0}, ", devNum);
+                        sbAd.AppendFormat("\"deviceName\": \"{0}\", ", EscapeJson(d.DeviceName ?? ""));
+                        sbAd.AppendFormat("\"deviceString\": \"{0}\", ", EscapeJson(d.DeviceString ?? ""));
+                        sbAd.AppendFormat("\"stateFlags\": {0}, ", d.StateFlags);
+                        sbAd.AppendFormat("\"isAttachedToDesktop\": {0}, ", isAttached ? "true" : "false");
+                        sbAd.AppendFormat("\"isPrimary\": {0}, ", isPrimary ? "true" : "false");
+                        sbAd.AppendFormat("\"isMirroring\": {0}, ", isMirror ? "true" : "false");
+                        sbAd.AppendFormat("\"isVgaCompatible\": {0}, ", isVga ? "true" : "false");
+                        sbAd.AppendFormat("\"isRemovable\": {0}, ", isRemovable ? "true" : "false");
+                        sbAd.AppendFormat("\"isRemote\": {0}, ", isRemote ? "true" : "false");
+                        sbAd.AppendFormat("\"modesPruned\": {0}, ", modesPruned ? "true" : "false");
+                        sbAd.AppendFormat("\"deviceID\": \"{0}\", ", EscapeJson(d.DeviceID ?? ""));
+                        sbAd.AppendFormat("\"deviceKey\": \"{0}\", ", EscapeJson(d.DeviceKey ?? ""));
+                        sbAd.AppendFormat("\"monitorCount\": {0}, ", monitors.Count);
+                        sbAd.AppendFormat("\"monitors\": [{0}]", string.Join(", ", monitors.ToArray()));
+                        sbAd.Append("}");
+                        adapters.Add(sbAd.ToString());
+                    }
+
+                    devNum++;
+                    d = new DISPLAY_DEVICE_FULL();
+                    d.cb = Marshal.SizeOf(d);
+                }
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.AppendFormat("\"totalAdaptersFound\": {0}, ", devNum);
+                sbOut.AppendFormat("\"adapterCount\": {0}, ", adapters.Count);
+                sbOut.AppendFormat("\"adapters\": [{0}]", string.Join(", ", adapters.ToArray()));
+                sbOut.Append("}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DisplayModesCmd(string deviceName, string modeType, int limit) {
+            try {
+                string dev = string.IsNullOrEmpty(deviceName) ? null : deviceName;
+                if (limit <= 0) limit = 100;
+                string queryType = (modeType ?? "all").ToLowerInvariant();
+
+                DEVMODE cur = new DEVMODE();
+                cur.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+                bool hasCurrent = EnumDisplaySettings(dev, ENUM_CURRENT_SETTINGS, ref cur);
+
+                DEVMODE reg = new DEVMODE();
+                reg.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+                const int ENUM_REGISTRY_SETTINGS = -2;
+                bool hasRegistry = EnumDisplaySettings(dev, ENUM_REGISTRY_SETTINGS, ref reg);
+
+                var modes = new List<string>();
+                int totalModes = 0;
+
+                if (queryType == "all" || queryType == "supported") {
+                    int modeIndex = 0;
+                    var seen = new HashSet<string>();
+                    DEVMODE m = new DEVMODE();
+                    m.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+
+                    while (EnumDisplaySettings(dev, modeIndex, ref m)) {
+                        totalModes++;
+                        string key = string.Format("{0}x{1}@{2}Hz-{3}bpp-rot{4}", m.dmPelsWidth, m.dmPelsHeight, m.dmDisplayFrequency, m.dmBitsPerPel, m.dmDisplayOrientation);
+                        if (!seen.Contains(key) && modes.Count < limit) {
+                            seen.Add(key);
+                            string orientStr = "default";
+                            if (m.dmDisplayOrientation == 1) orientStr = "90";
+                            else if (m.dmDisplayOrientation == 2) orientStr = "180";
+                            else if (m.dmDisplayOrientation == 3) orientStr = "270";
+
+                            bool interlaced = (m.dmDisplayFlags & 2) != 0;
+
+                            modes.Add(string.Format(
+                                "{{\"modeIndex\": {0}, \"width\": {1}, \"height\": {2}, \"refreshRateHz\": {3}, \"bitsPerPixel\": {4}, \"orientation\": \"{5}\", \"interlaced\": {6}}}",
+                                modeIndex, m.dmPelsWidth, m.dmPelsHeight, m.dmDisplayFrequency, m.dmBitsPerPel, orientStr, interlaced ? "true" : "false"
+                            ));
+                        }
+                        modeIndex++;
+                        m = new DEVMODE();
+                        m.dmSize = (short)Marshal.SizeOf(typeof(DEVMODE));
+                    }
+                }
+
+                Func<DEVMODE, string> formatModeObj = (dm) => {
+                    string oStr = "default";
+                    if (dm.dmDisplayOrientation == 1) oStr = "90";
+                    else if (dm.dmDisplayOrientation == 2) oStr = "180";
+                    else if (dm.dmDisplayOrientation == 3) oStr = "270";
+                    bool isInter = (dm.dmDisplayFlags & 2) != 0;
+                    return string.Format(
+                        "{{\"width\": {0}, \"height\": {1}, \"refreshRateHz\": {2}, \"bitsPerPixel\": {3}, \"orientation\": \"{4}\", \"interlaced\": {5}, \"positionX\": {6}, \"positionY\": {7}}}",
+                        dm.dmPelsWidth, dm.dmPelsHeight, dm.dmDisplayFrequency, dm.dmBitsPerPel, oStr, isInter ? "true" : "false", dm.dmPositionX, dm.dmPositionY
+                    );
+                };
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.AppendFormat("\"deviceName\": \"{0}\", ", EscapeJson(dev ?? "Primary Display"));
+                sbOut.AppendFormat("\"modeType\": \"{0}\", ", EscapeJson(queryType));
+                sbOut.AppendFormat("\"hasCurrent\": {0}, ", hasCurrent ? "true" : "false");
+                if (hasCurrent) {
+                    sbOut.AppendFormat("\"currentMode\": {0}, ", formatModeObj(cur));
+                } else {
+                    sbOut.Append("\"currentMode\": null, ");
+                }
+                sbOut.AppendFormat("\"hasRegistry\": {0}, ", hasRegistry ? "true" : "false");
+                if (hasRegistry) {
+                    sbOut.AppendFormat("\"registryMode\": {0}, ", formatModeObj(reg));
+                } else {
+                    sbOut.Append("\"registryMode\": null, ");
+                }
+                sbOut.AppendFormat("\"totalSupportedModes\": {0}, ", totalModes);
+                sbOut.AppendFormat("\"returnedModeCount\": {0}, ", modes.Count);
+                sbOut.AppendFormat("\"modes\": [{0}]", string.Join(", ", modes.ToArray()));
+                sbOut.Append("}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DisplayCapsCmd(string deviceName) {
+            IntPtr hdc = IntPtr.Zero;
+            try {
+                string dev = string.IsNullOrEmpty(deviceName) ? null : deviceName;
+                hdc = CreateDisplayDC("DISPLAY", dev, null, IntPtr.Zero);
+                if (hdc == IntPtr.Zero) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Failed to create device context (CreateDCW) for display\"}");
+                    return;
+                }
+
+                int horzRes = GetDeviceCaps(hdc, GDC_HORZRES);
+                int vertRes = GetDeviceCaps(hdc, GDC_VERTRES);
+                int desktopHorzRes = GetDeviceCaps(hdc, GDC_DESKTOPHORZRES);
+                int desktopVertRes = GetDeviceCaps(hdc, GDC_DESKTOPVERTRES);
+                int logPixelsX = GetDeviceCaps(hdc, GDC_LOGPIXELSX);
+                int logPixelsY = GetDeviceCaps(hdc, GDC_LOGPIXELSY);
+                int bitsPixel = GetDeviceCaps(hdc, GDC_BITSPIXEL);
+                int planes = GetDeviceCaps(hdc, GDC_PLANES);
+                int numColors = GetDeviceCaps(hdc, GDC_NUMCOLORS);
+                int colorRes = GetDeviceCaps(hdc, GDC_COLORRES);
+                int horzSizeMm = GetDeviceCaps(hdc, GDC_HORZSIZE);
+                int vertSizeMm = GetDeviceCaps(hdc, GDC_VERTSIZE);
+                int vRefresh = GetDeviceCaps(hdc, GDC_VREFRESH);
+                int shadeBlendCaps = GetDeviceCaps(hdc, GDC_SHADEBLENDCAPS);
+                int rasterCaps = GetDeviceCaps(hdc, GDC_RASTERCAPS);
+
+                double scaleFactorPercent = 100.0;
+                if (logPixelsX > 0 && logPixelsX != 96) {
+                    scaleFactorPercent = Math.Round(((double)logPixelsX / 96.0) * 100.0, 1);
+                } else if (horzRes > 0 && desktopHorzRes > horzRes) {
+                    scaleFactorPercent = Math.Round(((double)desktopHorzRes / (double)horzRes) * 100.0, 1);
+                }
+
+                double diagonalMm = Math.Sqrt((double)horzSizeMm * horzSizeMm + (double)vertSizeMm * vertSizeMm);
+                double diagonalInches = Math.Round(diagonalMm / 25.4, 1);
+
+                var sbOut = new StringBuilder();
+                sbOut.Append("{");
+                sbOut.Append("\"success\": true, ");
+                sbOut.AppendFormat("\"deviceName\": \"{0}\", ", EscapeJson(dev ?? "Primary Display"));
+                sbOut.AppendFormat("\"logicalResolution\": {{\"width\": {0}, \"height\": {1}}}, ", horzRes, vertRes);
+                sbOut.AppendFormat("\"desktopResolution\": {{\"width\": {0}, \"height\": {1}}}, ", desktopHorzRes, desktopVertRes);
+                sbOut.AppendFormat("\"scaleFactorPercent\": {0}, ", scaleFactorPercent.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
+                sbOut.AppendFormat("\"dpi\": {{\"dpiX\": {0}, \"dpiY\": {1}, \"standardDpi\": 96}}, ", logPixelsX, logPixelsY);
+                sbOut.AppendFormat("\"physicalDimensionsMm\": {{\"widthMm\": {0}, \"heightMm\": {1}, \"diagonalInches\": {2}}}, ",
+                    horzSizeMm, vertSizeMm, diagonalInches.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture));
+                sbOut.AppendFormat("\"color\": {{\"bitsPerPixel\": {0}, \"planes\": {1}, \"colorResolutionBits\": {2}, \"numColors\": {3}}}, ",
+                    bitsPixel, planes, colorRes, numColors);
+                sbOut.AppendFormat("\"refreshRateHz\": {0}, ", vRefresh);
+                sbOut.AppendFormat("\"rasterCaps\": {0}, ", rasterCaps);
+                sbOut.AppendFormat("\"shadeBlendCaps\": {0}", shadeBlendCaps);
+                sbOut.Append("}");
+                Console.WriteLine(sbOut.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (hdc != IntPtr.Zero) {
+                    DeleteDC(hdc);
+                }
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -13611,6 +13897,19 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "iphlp_interfaces" || cmd == "network_interfaces" || cmd == "interfaces") {
                 string filter = args.Length >= 2 ? args[1] : "";
                 IpHlpInterfacesCmd(filter);
+            } else if (cmd == "display_devices" || cmd == "enum_display_devices" || cmd == "graphics_adapters") {
+                string adapterFilter = args.Length >= 2 ? args[1] : "";
+                bool includeMonitors = args.Length >= 3 ? (args[2].Equals("true", StringComparison.OrdinalIgnoreCase) || args[2] == "1") : true;
+                DisplayDevicesCmd(adapterFilter, includeMonitors);
+            } else if (cmd == "display_modes" || cmd == "enum_display_settings" || cmd == "graphics_modes") {
+                string deviceName = args.Length >= 2 ? args[1] : "";
+                string modeType = args.Length >= 3 ? args[2] : "all";
+                int limit = 100;
+                if (args.Length >= 4 && !string.IsNullOrEmpty(args[3])) int.TryParse(args[3], out limit);
+                DisplayModesCmd(deviceName, modeType, limit);
+            } else if (cmd == "display_capabilities" || cmd == "device_caps" || cmd == "display_caps") {
+                string deviceName = args.Length >= 2 ? args[1] : "";
+                DisplayCapsCmd(deviceName);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
