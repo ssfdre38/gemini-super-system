@@ -3058,10 +3058,61 @@ async function run() {
     assert.strictEqual(delRes.deleted, true);
   });
 
-  it("All 148 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  console.log("\n=======================================================");
+  console.log("   SUITE 42: Windows Domain Name System Subsystem (windns.h)");
+  console.log("=======================================================\n");
+
+  await itAsync("super_dns_query queries host address records and TXT verification records via DnsQuery_W", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const bridge = getKernelBridge();
+    const res = await bridge.queryDns({ name: "google.com", type: "A", bypassCache: false });
+
+    assert(res, "Result should exist");
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.query, "google.com");
+    assert.strictEqual(res.recordType, "A");
+    assert.strictEqual(res.recordTypeId, 1);
+    assert(res.recordCount > 0, "Record count should be > 0");
+    assert(Array.isArray(res.records), "Records should be array");
+    assert(res.records.length > 0, "Should contain at least one A record");
+
+    const sample = res.records[0];
+    assert(sample.name, "Record should have name");
+    assert.strictEqual(sample.type, "A");
+    assert(sample.ttl >= 0, "TTL should be >= 0");
+    assert(sample.data && sample.data.ip, "Record data should have ip address");
+  });
+
+  await itAsync("super_dns_cache_flush purges Windows DNS resolver cache via DnsFlushResolverCache", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const bridge = getKernelBridge();
+    const res = await bridge.flushDnsCache();
+
+    assert(res, "Result should exist");
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.flushed, true);
+    assert(res.timestamp, "Flush timestamp should be present");
+  });
+
+  await itAsync("super_dns_resolve_host resolves dual-stack IPv4/IPv6 addresses and benchmarks latency", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const bridge = getKernelBridge();
+    const res = await bridge.resolveHostDns({ host: "google.com" });
+
+    assert(res, "Result should exist");
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.host, "google.com");
+    assert(typeof res.latencyMs === "number", "LatencyMs should be number");
+    assert(Array.isArray(res.ipv4Addresses), "ipv4Addresses should be array");
+    assert(res.ipv4Addresses.length > 0, "Should resolve at least one IPv4 address");
+    assert(Array.isArray(res.records), "Records should be array");
+    assert(res.records.length > 0, "Records length should be > 0");
+  });
+
+  it("All 151 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 148);
+    assert.strictEqual(SYSTEM_TOOLS.length, 151);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -3143,6 +3194,9 @@ async function run() {
     assert(toolNames.includes("super_cred_enumerate"));
     assert(toolNames.includes("super_cred_read"));
     assert(toolNames.includes("super_cred_manage"));
+    assert(toolNames.includes("super_dns_query"));
+    assert(toolNames.includes("super_dns_cache_flush"));
+    assert(toolNames.includes("super_dns_resolve_host"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

@@ -3014,6 +3014,58 @@ const SYSTEM_TOOLS = [
           },
           required: ["targetName"]
         }
+      },
+      {
+        name: "super_dns_query",
+        description: "Queries Domain Name System (DNS) resource records directly via native DnsQuery_W (windns.h / dnsapi.dll). Supports querying IPv4 host addresses (A), IPv6 addresses (AAAA), Canonical Name aliases (CNAME), Mail Exchangers (MX), Text/SPF/DKIM records (TXT), Name Servers (NS), Start of Authority (SOA), Pointer reverse lookups (PTR), Service records (SRV), and ANY records, with optional resolver cache bypassing.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            name: {
+              type: "string",
+              description: "Domain name or host name to query (e.g. 'google.com', '_sip._tcp.example.com', '1.1.1.1.in-addr.arpa')."
+            },
+            type: {
+              type: "string",
+              enum: ["A", "AAAA", "CNAME", "MX", "TXT", "NS", "SOA", "PTR", "SRV", "ANY"],
+              default: "A",
+              description: "DNS resource record type (default: 'A')."
+            },
+            bypassCache: {
+              type: "boolean",
+              default: false,
+              description: "Whether to bypass the local Windows DNS resolver cache and query the wire directly (default: false)."
+            }
+          },
+          required: ["name"]
+        }
+      },
+      {
+        name: "super_dns_cache_flush",
+        description: "Instantly flushes and clears the local Windows DNS Client Resolver Cache via DnsFlushResolverCache (dnsapi.dll). Purges stale DNS entries, expired TTL records, and negative cache responses system-wide.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_dns_resolve_host",
+        description: "High-performance multi-record DNS host resolution via DnsQuery_W (windns.h / dnsapi.dll). Simultaneously resolves IPv4 addresses (A), IPv6 addresses (AAAA), and canonical alias chains (CNAME) with round-trip resolution latency benchmarking and minimum TTL discovery.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            host: {
+              type: "string",
+              description: "Hostname or domain name to resolve (e.g. 'github.com', 'cloudflare.com')."
+            },
+            bypassCache: {
+              type: "boolean",
+              default: false,
+              description: "Whether to bypass local resolver cache (default: false)."
+            }
+          },
+          required: ["host"]
+        }
       }
 ];
 
@@ -5382,6 +5434,42 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🔒 [Windows Credential Manager Mutation (CredWriteW / CredDeleteW)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dns_query") {
+    const res = await orch.queryDns(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🌐 [Windows DNS Query (DnsQuery_W)]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dns_cache_flush") {
+    const res = await orch.flushDnsCache(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🧹 [Windows DNS Client Resolver Cache Flushed]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dns_resolve_host") {
+    const res = await orch.resolveHostDns(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔍 [Windows Multi-Record DNS Host Resolution]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

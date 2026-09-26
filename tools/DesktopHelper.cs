@@ -8426,6 +8426,292 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Windows DNS Client Subsystem (windns.h / dnsapi.dll)
+
+        const ushort DNS_TYPE_A = 0x0001;
+        const ushort DNS_TYPE_NS = 0x0002;
+        const ushort DNS_TYPE_CNAME = 0x0005;
+        const ushort DNS_TYPE_SOA = 0x0006;
+        const ushort DNS_TYPE_PTR = 0x000c;
+        const ushort DNS_TYPE_MX = 0x000f;
+        const ushort DNS_TYPE_TXT = 0x0010;
+        const ushort DNS_TYPE_AAAA = 0x001c;
+        const ushort DNS_TYPE_SRV = 0x0021;
+        const ushort DNS_TYPE_ANY = 0x00ff;
+
+        const uint DNS_QUERY_STANDARD = 0x00000000;
+        const uint DNS_QUERY_ACCEPT_TRUNCATED_RESPONSE = 0x00000001;
+        const uint DNS_QUERY_USE_TCP_ONLY = 0x00000002;
+        const uint DNS_QUERY_BYPASS_CACHE = 0x00000008;
+        const uint DNS_QUERY_NO_HOSTS_FILE = 0x00000040;
+        const uint DNS_QUERY_NO_LOCAL_NAME = 0x00000080;
+        const uint DNS_QUERY_WIRE_ONLY = 0x00000100;
+
+        [DllImport("dnsapi.dll", EntryPoint = "DnsQuery_W", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern int DnsQuery_W(
+            string pszName,
+            ushort wType,
+            uint options,
+            IntPtr pExtra,
+            out IntPtr ppQueryResultsSet,
+            IntPtr pReserved
+        );
+
+        [DllImport("dnsapi.dll", SetLastError = true)]
+        static extern void DnsRecordListFree(IntPtr pRecordList, int FreeType);
+
+        [DllImport("dnsapi.dll", EntryPoint = "DnsFlushResolverCache")]
+        static extern int DnsFlushResolverCache();
+
+        static ushort ParseDnsType(string typeStr) {
+            if (string.IsNullOrEmpty(typeStr)) return DNS_TYPE_A;
+            switch (typeStr.Trim().ToUpperInvariant()) {
+                case "A": return DNS_TYPE_A;
+                case "AAAA": return DNS_TYPE_AAAA;
+                case "CNAME": return DNS_TYPE_CNAME;
+                case "MX": return DNS_TYPE_MX;
+                case "TXT": return DNS_TYPE_TXT;
+                case "NS": return DNS_TYPE_NS;
+                case "SOA": return DNS_TYPE_SOA;
+                case "PTR": return DNS_TYPE_PTR;
+                case "SRV": return DNS_TYPE_SRV;
+                case "ANY": case "*": return DNS_TYPE_ANY;
+                default:
+                    ushort parsed;
+                    if (ushort.TryParse(typeStr, out parsed)) return parsed;
+                    return DNS_TYPE_A;
+            }
+        }
+
+        static string FormatDnsType(ushort type) {
+            switch (type) {
+                case DNS_TYPE_A: return "A";
+                case DNS_TYPE_AAAA: return "AAAA";
+                case DNS_TYPE_CNAME: return "CNAME";
+                case DNS_TYPE_MX: return "MX";
+                case DNS_TYPE_TXT: return "TXT";
+                case DNS_TYPE_NS: return "NS";
+                case DNS_TYPE_SOA: return "SOA";
+                case DNS_TYPE_PTR: return "PTR";
+                case DNS_TYPE_SRV: return "SRV";
+                case DNS_TYPE_ANY: return "ANY";
+                default: return "TYPE_" + type;
+            }
+        }
+
+        static void DnsQueryCmd(string name, string typeStr, bool bypassCache) {
+            try {
+                if (string.IsNullOrEmpty(name)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Name or host parameter is required\"}");
+                    return;
+                }
+
+                ushort wType = ParseDnsType(typeStr);
+                uint options = DNS_QUERY_STANDARD;
+                if (bypassCache) {
+                    options |= DNS_QUERY_BYPASS_CACHE | DNS_QUERY_WIRE_ONLY;
+                }
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                IntPtr pRecords = IntPtr.Zero;
+                int status = DnsQuery_W(name, wType, options, IntPtr.Zero, out pRecords, IntPtr.Zero);
+                sw.Stop();
+
+                if (status != 0 && status != 9003 /* DNS_ERROR_RCODE_NAME_ERROR */ && status != 9501 /* DNS_INFO_NO_RECORDS */) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"query\": \"{0}\", \"type\": \"{1}\", \"errorCode\": {2}, \"error\": \"DnsQuery failed with status {2}\"}}", EscapeJson(name), FormatDnsType(wType), status));
+                    return;
+                }
+
+                var records = new List<string>();
+                int recordCount = 0;
+
+                if (pRecords != IntPtr.Zero) {
+                    try {
+                        IntPtr curr = pRecords;
+                        while (curr != IntPtr.Zero && recordCount < 100) {
+                            string rName = Marshal.PtrToStringUni(Marshal.ReadIntPtr(curr, 8)) ?? name;
+                            ushort rType = (ushort)Marshal.ReadInt16(curr, 16);
+                            uint rFlags = (uint)Marshal.ReadInt32(curr, 20);
+                            uint rTtl = (uint)Marshal.ReadInt32(curr, 24);
+
+                            string dataJson = "{}";
+
+                            if (rType == DNS_TYPE_A) {
+                                byte b0 = Marshal.ReadByte(curr, 32);
+                                byte b1 = Marshal.ReadByte(curr, 33);
+                                byte b2 = Marshal.ReadByte(curr, 34);
+                                byte b3 = Marshal.ReadByte(curr, 35);
+                                dataJson = string.Format("{{\"ip\": \"{0}.{1}.{2}.{3}\"}}", b0, b1, b2, b3);
+                            } else if (rType == DNS_TYPE_AAAA) {
+                                byte[] ip6 = new byte[16];
+                                Marshal.Copy(new IntPtr(curr.ToInt64() + 32), ip6, 0, 16);
+                                string ipStr = new System.Net.IPAddress(ip6).ToString();
+                                dataJson = string.Format("{{\"ip\": \"{0}\"}}", EscapeJson(ipStr));
+                            } else if (rType == DNS_TYPE_CNAME || rType == DNS_TYPE_PTR || rType == DNS_TYPE_NS) {
+                                IntPtr pTarget = Marshal.ReadIntPtr(curr, 32);
+                                string target = Marshal.PtrToStringUni(pTarget) ?? "";
+                                dataJson = string.Format("{{\"target\": \"{0}\"}}", EscapeJson(target));
+                            } else if (rType == DNS_TYPE_MX) {
+                                IntPtr pExchange = Marshal.ReadIntPtr(curr, 32);
+                                string exchange = Marshal.PtrToStringUni(pExchange) ?? "";
+                                ushort pref = (ushort)Marshal.ReadInt16(curr, 40);
+                                dataJson = string.Format("{{\"exchange\": \"{0}\", \"preference\": {1}}}", EscapeJson(exchange), pref);
+                            } else if (rType == DNS_TYPE_TXT) {
+                                uint strCount = (uint)Marshal.ReadInt32(curr, 32);
+                                var strList = new List<string>();
+                                for (int s = 0; s < strCount && s < 25; s++) {
+                                    IntPtr pStr = Marshal.ReadIntPtr(curr, 40 + s * IntPtr.Size);
+                                    if (pStr != IntPtr.Zero) {
+                                        strList.Add("\"" + EscapeJson(Marshal.PtrToStringUni(pStr) ?? "") + "\"");
+                                    }
+                                }
+                                dataJson = string.Format("{{\"stringCount\": {0}, \"strings\": [{1}]}}", strCount, string.Join(", ", strList.ToArray()));
+                            } else if (rType == DNS_TYPE_SRV) {
+                                IntPtr pTarget = Marshal.ReadIntPtr(curr, 32);
+                                string target = Marshal.PtrToStringUni(pTarget) ?? "";
+                                ushort prio = (ushort)Marshal.ReadInt16(curr, 40);
+                                ushort weight = (ushort)Marshal.ReadInt16(curr, 42);
+                                ushort port = (ushort)Marshal.ReadInt16(curr, 44);
+                                dataJson = string.Format("{{\"target\": \"{0}\", \"priority\": {1}, \"weight\": {2}, \"port\": {3}}}", EscapeJson(target), prio, weight, port);
+                            } else if (rType == DNS_TYPE_SOA) {
+                                IntPtr pPrimary = Marshal.ReadIntPtr(curr, 32);
+                                IntPtr pAdmin = Marshal.ReadIntPtr(curr, 40);
+                                string prim = Marshal.PtrToStringUni(pPrimary) ?? "";
+                                string admin = Marshal.PtrToStringUni(pAdmin) ?? "";
+                                uint serial = (uint)Marshal.ReadInt32(curr, 48);
+                                uint refresh = (uint)Marshal.ReadInt32(curr, 52);
+                                uint retry = (uint)Marshal.ReadInt32(curr, 56);
+                                uint expire = (uint)Marshal.ReadInt32(curr, 60);
+                                uint defTtl = (uint)Marshal.ReadInt32(curr, 64);
+                                dataJson = string.Format("{{\"primaryServer\": \"{0}\", \"administrator\": \"{1}\", \"serial\": {2}, \"refresh\": {3}, \"retry\": {4}, \"expire\": {5}, \"defaultTtl\": {6}}}",
+                                    EscapeJson(prim), EscapeJson(admin), serial, refresh, retry, expire, defTtl);
+                            }
+
+                            records.Add(string.Format("{{\"name\": \"{0}\", \"type\": \"{1}\", \"typeId\": {2}, \"ttl\": {3}, \"flags\": {4}, \"data\": {5}}}",
+                                EscapeJson(rName), FormatDnsType(rType), rType, rTtl, rFlags, dataJson));
+
+                            recordCount++;
+                            curr = Marshal.ReadIntPtr(curr, 0); // pNext
+                        }
+                    } finally {
+                        DnsRecordListFree(pRecords, 1 /* DnsFreeRecordList */);
+                    }
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"query\": \"{0}\", \"recordType\": \"{1}\", \"recordTypeId\": {2}, \"bypassCache\": {3}, \"latencyMs\": {4:F2}, \"recordCount\": {5}, \"records\": [{6}]}}",
+                    EscapeJson(name), FormatDnsType(wType), wType, bypassCache ? "true" : "false", sw.Elapsed.TotalMilliseconds, records.Count, string.Join(", ", records.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DnsFlushCmd() {
+            try {
+                int res = DnsFlushResolverCache();
+                bool ok = res != 0;
+                Console.WriteLine(string.Format(
+                    "{{\"success\": {0}, \"flushed\": {0}, \"message\": \"{1}\", \"timestamp\": \"{2}\"}}",
+                    ok ? "true" : "false",
+                    ok ? "Windows DNS Resolver Cache flushed successfully." : "DnsFlushResolverCache returned 0",
+                    DateTime.UtcNow.ToString("o")
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"flushed\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DnsResolveCmd(string host, bool bypassCache) {
+            try {
+                if (string.IsNullOrEmpty(host)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Host parameter is required\"}");
+                    return;
+                }
+
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                uint options = DNS_QUERY_STANDARD;
+                if (bypassCache) options |= DNS_QUERY_BYPASS_CACHE | DNS_QUERY_WIRE_ONLY;
+
+                var v4List = new List<string>();
+                var v6List = new List<string>();
+                string canonicalName = host;
+                uint minTtl = uint.MaxValue;
+                var allRecords = new List<string>();
+
+                // Query A records
+                IntPtr pA;
+                if (DnsQuery_W(host, DNS_TYPE_A, options, IntPtr.Zero, out pA, IntPtr.Zero) == 0 && pA != IntPtr.Zero) {
+                    try {
+                        IntPtr curr = pA;
+                        while (curr != IntPtr.Zero) {
+                            ushort rType = (ushort)Marshal.ReadInt16(curr, 16);
+                            uint rTtl = (uint)Marshal.ReadInt32(curr, 24);
+                            if (rTtl < minTtl) minTtl = rTtl;
+
+                            if (rType == DNS_TYPE_A) {
+                                byte b0 = Marshal.ReadByte(curr, 32);
+                                byte b1 = Marshal.ReadByte(curr, 33);
+                                byte b2 = Marshal.ReadByte(curr, 34);
+                                byte b3 = Marshal.ReadByte(curr, 35);
+                                string ip = string.Format("{0}.{1}.{2}.{3}", b0, b1, b2, b3);
+                                if (!v4List.Contains(ip)) v4List.Add(ip);
+                                allRecords.Add(string.Format("{{\"type\": \"A\", \"address\": \"{0}\", \"ttl\": {1}}}", ip, rTtl));
+                            } else if (rType == DNS_TYPE_CNAME) {
+                                IntPtr pTarget = Marshal.ReadIntPtr(curr, 32);
+                                canonicalName = Marshal.PtrToStringUni(pTarget) ?? canonicalName;
+                                allRecords.Add(string.Format("{{\"type\": \"CNAME\", \"target\": \"{0}\", \"ttl\": {1}}}", EscapeJson(canonicalName), rTtl));
+                            }
+                            curr = Marshal.ReadIntPtr(curr, 0);
+                        }
+                    } finally {
+                        DnsRecordListFree(pA, 1);
+                    }
+                }
+
+                // Query AAAA records
+                IntPtr pAAAA;
+                if (DnsQuery_W(host, DNS_TYPE_AAAA, options, IntPtr.Zero, out pAAAA, IntPtr.Zero) == 0 && pAAAA != IntPtr.Zero) {
+                    try {
+                        IntPtr curr = pAAAA;
+                        while (curr != IntPtr.Zero) {
+                            ushort rType = (ushort)Marshal.ReadInt16(curr, 16);
+                            uint rTtl = (uint)Marshal.ReadInt32(curr, 24);
+                            if (rTtl < minTtl) minTtl = rTtl;
+
+                            if (rType == DNS_TYPE_AAAA) {
+                                byte[] ip6 = new byte[16];
+                                Marshal.Copy(new IntPtr(curr.ToInt64() + 32), ip6, 0, 16);
+                                string ipStr = new System.Net.IPAddress(ip6).ToString();
+                                if (!v6List.Contains(ipStr)) v6List.Add(ipStr);
+                                allRecords.Add(string.Format("{{\"type\": \"AAAA\", \"address\": \"{0}\", \"ttl\": {1}}}", EscapeJson(ipStr), rTtl));
+                            }
+                            curr = Marshal.ReadIntPtr(curr, 0);
+                        }
+                    } finally {
+                        DnsRecordListFree(pAAAA, 1);
+                    }
+                }
+
+                sw.Stop();
+                if (minTtl == uint.MaxValue) minTtl = 0;
+
+                var v4Json = new List<string>();
+                foreach (var ip in v4List) v4Json.Add("\"" + EscapeJson(ip) + "\"");
+                var v6Json = new List<string>();
+                foreach (var ip in v6List) v6Json.Add("\"" + EscapeJson(ip) + "\"");
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"host\": \"{0}\", \"canonicalName\": \"{1}\", \"latencyMs\": {2:F2}, \"minTtl\": {3}, \"ipv4Addresses\": [{4}], \"ipv6Addresses\": [{5}], \"records\": [{6}]}}",
+                    EscapeJson(host), EscapeJson(canonicalName), sw.Elapsed.TotalMilliseconds, minTtl, string.Join(", ", v4Json.ToArray()), string.Join(", ", v6Json.ToArray()), string.Join(", ", allRecords.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -11503,6 +11789,17 @@ namespace GeminiSuperDesktop {
                 uint persist = 2;
                 if (args.Length >= 8 && !string.IsNullOrEmpty(args[7])) uint.TryParse(args[7], out persist);
                 CredManageCmd(action, targetName, userName, secret, comment, credType, persist);
+            } else if (cmd == "dns_query" || cmd == "dns" || cmd == "dns_lookup") {
+                string host = args.Length >= 2 ? args[1] : "";
+                string typeStr = args.Length >= 3 ? args[2] : "A";
+                bool bypassCache = args.Length >= 4 ? (args[3].ToLowerInvariant() == "true" || args[3] == "1") : false;
+                DnsQueryCmd(host, typeStr, bypassCache);
+            } else if (cmd == "dns_flush" || cmd == "dns_cache_flush" || cmd == "flush_dns") {
+                DnsFlushCmd();
+            } else if (cmd == "dns_resolve" || cmd == "resolve_host" || cmd == "dns_resolve_host") {
+                string host = args.Length >= 2 ? args[1] : "";
+                bool bypassCache = args.Length >= 3 ? (args[2].ToLowerInvariant() == "true" || args[2] == "1") : false;
+                DnsResolveCmd(host, bypassCache);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

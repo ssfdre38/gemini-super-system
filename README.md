@@ -72,6 +72,7 @@
   - [54. Windows Terminal Services & Remote Desktop Subsystem](#54-️-windows-terminal-services--remote-desktop-subsystem-wtsapi32h--wtsapi32dll)
   - [55. Windows Process Status, Kernel Driver Table & Performance Subsystem](#55--windows-process-status-kernel-driver-table--performance-subsystem-psapih--psapidll)
   - [56. Windows Credential Management Subsystem](#56--windows-credential-management-subsystem-wincredh--advapi32dll)
+  - [57. Windows Domain Name System Subsystem](#57--windows-domain-name-system-dns-subsystem-windnsh--dnsapidll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -771,6 +772,17 @@ Directly enumerates, reads, and manages encrypted secrets, API tokens, generic c
 - **Sovereign Credential Persistence & Mutation (`super_cred_manage`)**: Calls native `CredWriteW` and `CredDeleteW` to write, update, or remove credentials in the Windows Credential Manager. Allows sovereign AI agents to persist API keys, tokens, and certificates securely in the native OS vault with configurable persistence scopes (Session-only in-memory or LocalMachine surviving OS reboots) without plaintext configuration files.
 - **148 Tools Milestone**: Reaches **148 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **41 comprehensive test suites (135/135 tests passing)** and **37 environment health checks**.
 - **Native MCP Tools**: `super_cred_enumerate`, `super_cred_read`, `super_cred_manage`.
+
+---
+
+## 57. 🌐 Windows Domain Name System (DNS) Subsystem (`windns.h` / `dnsapi.dll`)
+
+Directly queries DNS resource records, resolves multi-record dual-stack hostnames, and flushes the Windows DNS Client Resolver Cache via native `dnsapi.dll` P/Invoke:
+- **Comprehensive DNS Resource Record Querying (`super_dns_query`)**: Directly invokes native `DnsQuery_W` from `dnsapi.dll`. Queries standard resource records: IPv4 host address (`A`), IPv6 host address (`AAAA`), Canonical Name aliases (`CNAME`), Mail Exchangers (`MX` with preference levels), Text records (`TXT` for SPF and DKIM identity tokens), Name Servers (`NS`), Start of Authority (`SOA`), Reverse DNS pointer lookups (`PTR`), and Service Locators (`SRV`). Supports bypass of the local DNS cache (`DNS_QUERY_BYPASS_CACHE` | `DNS_QUERY_WIRE_ONLY`) for fresh wire responses.
+- **Instant Local Resolver Cache Flush (`super_dns_cache_flush`)**: Directly calls native `DnsFlushResolverCache()` from `dnsapi.dll`. Programmatically flushes and purges the Windows DNS Client Resolver Cache without invoking external shell tools, clearing stale entries, expired TTLs, and negative responses.
+- **Dual-Stack Host Resolution & Latency Profiling (`super_dns_resolve_host`)**: High-performance multi-record resolver that queries IPv4 (`A`) and IPv6 (`AAAA`) addresses alongside canonical alias chains (`CNAME`) in parallel, measuring round-trip DNS resolution latency in milliseconds and minimum TTL discovery.
+- **151 Tools Milestone**: Reaches **151 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **42 comprehensive test suites (136/136 tests passing)** and **38 environment health checks**.
+- **Native MCP Tools**: `super_dns_query`, `super_dns_cache_flush`, `super_dns_resolve_host`.
 
 ---
 
