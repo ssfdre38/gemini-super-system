@@ -4156,10 +4156,69 @@ async function run() {
     assert.strictEqual(closeRes.closeReason, "Normal");
   });
 
-  it("All 196 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 58: Windows Connection Manager (WCM) Subsystem (wcmapi.h / wcmapi.dll)
+  console.log("\n\x1b[1m[Suite 58: Windows Connection Manager Subsystem]\x1b[0m");
+
+  await itAsync("getWcmProfileList enumerates network profiles via wcmapi.dll", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWcmProfileList();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWcmProfileList failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.totalProfiles === "number");
+    assert(Array.isArray(res.profiles));
+  });
+
+  await itAsync("getWcmGlobalPolicies queries connection manager global policies", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWcmGlobalPolicies();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWcmGlobalPolicies failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.policies === "object");
+    assert(typeof res.policies.minimizeConnections === "object");
+    assert(typeof res.policies.domainPrecedence === "object");
+    assert(typeof res.policies.roamingRestriction === "object");
+    assert(typeof res.policies.powerManagement === "object");
+  });
+
+  await itAsync("getWcmConnectionCost queries connection cost and metered status with defaults", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWcmConnectionCost({});
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWcmConnectionCost failed: " + JSON.stringify(res));
+    assert(typeof res.isMetered === "boolean");
+    assert(typeof res.costLevel === "string");
+    assert(typeof res.flags === "object");
+    assert(typeof res.flags.overDataLimit === "boolean");
+    assert(typeof res.flags.congested === "boolean");
+    assert(typeof res.flags.roaming === "boolean");
+  });
+
+  await itAsync("getWcmDataplanStatus queries dataplan telemetry and transfer caps", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWcmDataplanStatus({});
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWcmDataplanStatus failed: " + JSON.stringify(res));
+    assert(typeof res.hasActiveDataplan === "boolean");
+    assert(typeof res.usageMegabytes === "number");
+    assert(typeof res.dataLimitMegabytes === "number");
+    assert(typeof res.inboundBandwidthKbps === "number");
+    assert(typeof res.outboundBandwidthKbps === "number");
+  });
+
+  it("All 200 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 196);
+    assert.strictEqual(SYSTEM_TOOLS.length, 200);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -4289,6 +4348,10 @@ async function run() {
     assert(toolNames.includes("super_websocket_status"));
     assert(toolNames.includes("super_websocket_handshake"));
     assert(toolNames.includes("super_websocket_frame_inspect"));
+    assert(toolNames.includes("super_wcm_profile_list"));
+    assert(toolNames.includes("super_wcm_connection_cost"));
+    assert(toolNames.includes("super_wcm_dataplan_status"));
+    assert(toolNames.includes("super_wcm_global_policies"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

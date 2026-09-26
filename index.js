@@ -3877,6 +3877,56 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_wcm_profile_list",
+        description: "Queries Windows Connection Manager (WCM) network profiles, interface GUID mappings, and connection media types (Ethernet, WLAN, MBN/Cellular) via wcmapi.dll / wcmapi.h.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_wcm_connection_cost",
+        description: "Queries network connection cost, metered connection status (Unrestricted, Fixed, Variable), cost source, and network cost flags (over data limit, congested, roaming, approaching limit) via wcmapi.dll / wcmapi.h.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            profileName: {
+              type: "string",
+              description: "Optional network profile name."
+            },
+            adapterGuid: {
+              type: "string",
+              description: "Optional network adapter interface GUID."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wcm_dataplan_status",
+        description: "Queries broadband or cellular data plan status, usage in megabytes, monthly data limits, inbound/outbound bandwidth speeds, and maximum transfer sizes via wcmapi.dll / wcmapi.h.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            profileName: {
+              type: "string",
+              description: "Optional network profile name."
+            },
+            adapterGuid: {
+              type: "string",
+              description: "Optional network adapter interface GUID."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wcm_global_policies",
+        description: "Queries Windows Connection Manager global policies including minimize connections, domain network precedence, roaming restrictions, and power management policies via wcmapi.dll / wcmapi.h.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
 ];
 
@@ -6826,6 +6876,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🔍 [RFC 6455 WebSocket Frame Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wcm_profile_list") {
+    const res = await orch.getWcmProfileList();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📶 [Windows Connection Manager Profiles]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wcm_connection_cost") {
+    const res = await orch.getWcmConnectionCost(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💳 [Windows Connection Cost & Metered State]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wcm_dataplan_status") {
+    const res = await orch.getWcmDataplanStatus(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📊 [Windows Broadband / Dataplan Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wcm_global_policies") {
+    const res = await orch.getWcmGlobalPolicies();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [Windows Connection Manager Global Policies]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

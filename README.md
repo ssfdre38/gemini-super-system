@@ -88,6 +88,7 @@
   - [70. Windows Cabinet Compression & Extraction Subsystem](#70--windows-cabinet-compression--extraction-subsystem-fcih--fdih--cabinetdll)
   - [71. Windows WebAuthn & Platform Authenticator Subsystem](#71--windows-webauthn--platform-authenticator-subsystem-webauthnh--webauthndll)
   - [72. Windows Native RFC 6455 WebSocket Engine Subsystem](#72--windows-native-rfc-6455-websocket-engine-subsystem-websocketh--websocketdll)
+  - [73. Windows Connection Manager Subsystem](#73--windows-connection-manager-subsystem-wcmapih--wcmapidll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -962,6 +963,18 @@ Directly interfaces with Microsoft's unmanaged RFC 6455 WebSocket Protocol Compo
 - **Deep RFC 6455 Frame Parser & Payload Telemetry (`super_websocket_frame_inspect`)**: Parses raw binary/hex WebSocket frame streams according to `websocket.dll` buffer type specifications. Extracts FIN bits, RSV1-3 extension flags, opcodes (Continuation, Text, Binary, Close, Ping, Pong), control frame classifications, payload length structures (7-bit, 16-bit, 64-bit), masking keys, unmasked payload previews, and close status codes/reasons.
 - **196 Tools Milestone**: Reaches **196 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **57 comprehensive test suites (179/179 tests passing 100%)** and **53 environment health checks**.
 - **Native MCP Tools**: `super_websocket_status`, `super_websocket_handshake`, `super_websocket_frame_inspect`.
+
+---
+
+## 73. 📶 Windows Connection Manager Subsystem (`wcmapi.h` / `wcmapi.dll`)
+
+Directly interfaces with the Windows Connection Manager (WCM) API via native Win32 `wcmapi.dll` P/Invoke:
+- **Connection Profile & Interface Mapping (`super_wcm_profile_list`)**: Directly invokes `WcmGetProfileList` to enumerate all registered network profiles across network interfaces. Maps profile names, adapter interface GUIDs, and media types (`Ethernet`, `WLAN`, `MBN` / Cellular broadband).
+- **Network Connection Cost & Metered State (`super_wcm_connection_cost`)**: Invokes `WcmQueryProperty` with `wcm_intf_property_connection_cost` to inspect metered connection cost structures (`WCM_CONNECTION_COST_DATA`). Discovers cost levels (`Unrestricted`, `Fixed`, `Variable`, `Unknown`), cost source (`Default`, `User`, `Operator`, `GroupPolicy`), and real-time network cost flags (`overDataLimit`, `congested`, `roaming`, `approachingDataLimit`).
+- **Broadband & Cellular Dataplan Telemetry (`super_wcm_dataplan_status`)**: Invokes `WcmQueryProperty` with `wcm_intf_property_dataplan_status` to inspect carrier data plans (`WCM_DATAPLAN_STATUS`). Retrieves current data usage in megabytes, monthly data limit caps, inbound and outbound bandwidth in Kbps, and maximum single-transfer limits.
+- **Global Connection Manager Policies (`super_wcm_global_policies`)**: Queries machine-wide connection management policies via `WcmQueryProperty`: `minimizeConnections` (prevents multiple concurrent Wi-Fi/cellular connections), `domainPrecedence` (prioritizes domain-joined network connections), `roamingRestriction` (suppresses background transfers while roaming), and `powerManagement` (disables radios while on battery/standby).
+- **200 Tools Milestone**: Reaches **200 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **58 comprehensive test suites (183/183 tests passing 100%)** and **54 environment health checks**.
+- **Native MCP Tools**: `super_wcm_profile_list`, `super_wcm_connection_cost`, `super_wcm_dataplan_status`, `super_wcm_global_policies`.
 
 ---
 

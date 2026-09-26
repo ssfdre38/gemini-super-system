@@ -13859,6 +13859,301 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Phase 39: Windows Connection Manager (WCM) Subsystem (wcmapi.h / wcmapi.dll)
+
+        public enum WCM_PROPERTY {
+            wcm_global_property_domain_policy,
+            wcm_global_property_minimize_policy,
+            wcm_global_property_roaming_policy,
+            wcm_global_property_powermanagement_policy,
+            wcm_intf_property_connection_cost,
+            wcm_intf_property_dataplan_status,
+            wcm_intf_property_hotspot_profile,
+        }
+
+        public enum WCM_MEDIA_TYPE {
+            wcm_media_unknown,
+            wcm_media_ethernet,
+            wcm_media_wlan,
+            wcm_media_mbn,
+            wcm_media_invalid,
+            wcm_media_max
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct WCM_PROFILE_INFO {
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)]
+            public string strProfileName;
+            public Guid AdapterGUID;
+            public WCM_MEDIA_TYPE Media;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WCM_POLICY_VALUE {
+            public bool fValue;
+            public bool fIsGroupPolicy;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WCM_CONNECTION_COST_DATA {
+            public uint ConnectionCost;
+            public uint CostSource;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WCM_TIME_INTERVAL {
+            public ushort wYear;
+            public ushort wMonth;
+            public ushort wDay;
+            public ushort wHour;
+            public ushort wMinute;
+            public ushort wSecond;
+            public ushort wMilliseconds;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WCM_USAGE_DATA {
+            public uint UsageInMegabytes;
+            public long LastSyncTime;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WCM_BILLING_CYCLE_INFO {
+            public long StartDate;
+            public WCM_TIME_INTERVAL Duration;
+            public bool Reset;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WCM_DATAPLAN_STATUS {
+            public WCM_USAGE_DATA UsageData;
+            public uint DataLimitInMegabytes;
+            public uint InboundBandwidthInKbps;
+            public uint OutboundBandwidthInKbps;
+            public WCM_BILLING_CYCLE_INFO BillingCycle;
+            public uint MaxTransferSizeInMegabytes;
+            public uint Reserved;
+        }
+
+        [DllImport("wcmapi.dll")]
+        static extern uint WcmGetProfileList(IntPtr pReserved, out IntPtr ppProfileList);
+
+        [DllImport("wcmapi.dll")]
+        static extern void WcmFreeMemory(IntPtr pMemory);
+
+        [DllImport("wcmapi.dll", CharSet = CharSet.Unicode)]
+        static extern uint WcmQueryProperty(
+            IntPtr pInterface,
+            string strProfileName,
+            WCM_PROPERTY Property,
+            IntPtr pReserved,
+            out uint pdwDataSize,
+            out IntPtr ppData
+        );
+
+        static void WcmProfileListCmd() {
+            try {
+                IntPtr pProfiles = IntPtr.Zero;
+                uint res = WcmGetProfileList(IntPtr.Zero, out pProfiles);
+
+                var list = new List<Tuple<string, Guid, string>>();
+                if (res == 0 && pProfiles != IntPtr.Zero) {
+                    try {
+                        uint count = (uint)Marshal.ReadInt32(pProfiles);
+                        int itemSize = Marshal.SizeOf(typeof(WCM_PROFILE_INFO));
+                        IntPtr pArray = new IntPtr(pProfiles.ToInt64() + 8);
+                        for (uint i = 0; i < count; i++) {
+                            IntPtr pItem = new IntPtr(pArray.ToInt64() + (i * itemSize));
+                            var info = (WCM_PROFILE_INFO)Marshal.PtrToStructure(pItem, typeof(WCM_PROFILE_INFO));
+                            string mediaStr = info.Media.ToString().Replace("wcm_media_", "").ToUpperInvariant();
+                            list.Add(Tuple.Create(info.strProfileName ?? "", info.AdapterGUID, mediaStr));
+                        }
+                    } finally {
+                        WcmFreeMemory(pProfiles);
+                    }
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, \"resultCode\": \"0x" + res.ToString("X8") + "\", ");
+                sb.Append("\"totalProfiles\": " + list.Count + ", \"profiles\": [");
+                for (int i = 0; i < list.Count; i++) {
+                    if (i > 0) sb.Append(", ");
+                    sb.Append(string.Format(
+                        "{{\"profileName\": \"{0}\", \"adapterGuid\": \"{1}\", \"mediaType\": \"{2}\"}}",
+                        EscapeJson(list[i].Item1),
+                        list[i].Item2.ToString(),
+                        list[i].Item3
+                    ));
+                }
+                sb.Append("]}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WcmConnectionCostCmd(string profileName, string adapterGuidStr) {
+            try {
+                IntPtr pGuid = IntPtr.Zero;
+                Guid guid = Guid.Empty;
+                if (!string.IsNullOrEmpty(adapterGuidStr) && Guid.TryParse(adapterGuidStr, out guid)) {
+                    pGuid = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(Guid)));
+                    Marshal.StructureToPtr(guid, pGuid, false);
+                }
+
+                try {
+                    uint dataSize = 0;
+                    IntPtr pData = IntPtr.Zero;
+                    string prof = string.IsNullOrEmpty(profileName) ? null : profileName;
+                    uint res = WcmQueryProperty(pGuid, prof, WCM_PROPERTY.wcm_intf_property_connection_cost, IntPtr.Zero, out dataSize, out pData);
+
+                    uint costVal = 1;
+                    uint costSrc = 0;
+
+                    if (res == 0 && pData != IntPtr.Zero) {
+                        try {
+                            var costData = (WCM_CONNECTION_COST_DATA)Marshal.PtrToStructure(pData, typeof(WCM_CONNECTION_COST_DATA));
+                            costVal = costData.ConnectionCost;
+                            costSrc = costData.CostSource;
+                        } finally {
+                            WcmFreeMemory(pData);
+                        }
+                    }
+
+                    string costLevel = "Unrestricted";
+                    uint levelMask = (costVal & 0xFFFF);
+                    if (levelMask == 0x2) costLevel = "Fixed";
+                    else if (levelMask == 0x4) costLevel = "Variable";
+                    else if (levelMask == 0x0) costLevel = "Unknown";
+
+                    bool overDataLimit = (costVal & 0x10000) != 0;
+                    bool congested = (costVal & 0x20000) != 0;
+                    bool roaming = (costVal & 0x40000) != 0;
+                    bool approachingLimit = (costVal & 0x80000) != 0;
+
+                    string sourceStr = "Default";
+                    if (costSrc == 1) sourceStr = "GroupPolicy";
+                    else if (costSrc == 2) sourceStr = "User";
+                    else if (costSrc == 3) sourceStr = "Operator";
+
+                    bool isMetered = (costLevel != "Unrestricted");
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"profileName\": \"{0}\", \"adapterGuid\": \"{1}\", \"resultCode\": \"0x{2:X8}\", \"isMetered\": {3}, \"costLevel\": \"{4}\", \"costSource\": \"{5}\", \"flags\": {{\"overDataLimit\": {6}, \"congested\": {7}, \"roaming\": {8}, \"approachingDataLimit\": {9}}}}}",
+                        EscapeJson(profileName ?? ""),
+                        guid.ToString(),
+                        res,
+                        isMetered ? "true" : "false",
+                        costLevel,
+                        sourceStr,
+                        overDataLimit ? "true" : "false",
+                        congested ? "true" : "false",
+                        roaming ? "true" : "false",
+                        approachingLimit ? "true" : "false"
+                    ));
+                } finally {
+                    if (pGuid != IntPtr.Zero) Marshal.FreeHGlobal(pGuid);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WcmDataplanStatusCmd(string profileName, string adapterGuidStr) {
+            try {
+                IntPtr pGuid = IntPtr.Zero;
+                Guid guid = Guid.Empty;
+                if (!string.IsNullOrEmpty(adapterGuidStr) && Guid.TryParse(adapterGuidStr, out guid)) {
+                    pGuid = Marshal.AllocHGlobal(Marshal.SizeOf(typeof(Guid)));
+                    Marshal.StructureToPtr(guid, pGuid, false);
+                }
+
+                try {
+                    uint dataSize = 0;
+                    IntPtr pData = IntPtr.Zero;
+                    string prof = string.IsNullOrEmpty(profileName) ? null : profileName;
+                    uint res = WcmQueryProperty(pGuid, prof, WCM_PROPERTY.wcm_intf_property_dataplan_status, IntPtr.Zero, out dataSize, out pData);
+
+                    uint usageMb = 0;
+                    uint limitMb = 0;
+                    uint inBandwidthKbps = 0;
+                    uint outBandwidthKbps = 0;
+                    uint maxTransferMb = 0;
+
+                    if (res == 0 && pData != IntPtr.Zero) {
+                        try {
+                            var status = (WCM_DATAPLAN_STATUS)Marshal.PtrToStructure(pData, typeof(WCM_DATAPLAN_STATUS));
+                            usageMb = status.UsageData.UsageInMegabytes;
+                            limitMb = status.DataLimitInMegabytes;
+                            inBandwidthKbps = status.InboundBandwidthInKbps;
+                            outBandwidthKbps = status.OutboundBandwidthInKbps;
+                            maxTransferMb = status.MaxTransferSizeInMegabytes;
+                        } finally {
+                            WcmFreeMemory(pData);
+                        }
+                    }
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"profileName\": \"{0}\", \"adapterGuid\": \"{1}\", \"resultCode\": \"0x{2:X8}\", \"hasActiveDataplan\": {3}, \"usageMegabytes\": {4}, \"dataLimitMegabytes\": {5}, \"inboundBandwidthKbps\": {6}, \"outboundBandwidthKbps\": {7}, \"maxTransferSizeMegabytes\": {8}}}",
+                        EscapeJson(profileName ?? ""),
+                        guid.ToString(),
+                        res,
+                        (res == 0) ? "true" : "false",
+                        usageMb,
+                        limitMb,
+                        inBandwidthKbps,
+                        outBandwidthKbps,
+                        maxTransferMb
+                    ));
+                } finally {
+                    if (pGuid != IntPtr.Zero) Marshal.FreeHGlobal(pGuid);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WcmGlobalPoliciesCmd() {
+            try {
+                Func<WCM_PROPERTY, Tuple<bool, bool>> queryBoolPolicy = (prop) => {
+                    uint dataSize = 0;
+                    IntPtr pData = IntPtr.Zero;
+                    uint hr = WcmQueryProperty(IntPtr.Zero, null, prop, IntPtr.Zero, out dataSize, out pData);
+                    if (hr == 0 && pData != IntPtr.Zero) {
+                        try {
+                            var val = (WCM_POLICY_VALUE)Marshal.PtrToStructure(pData, typeof(WCM_POLICY_VALUE));
+                            return Tuple.Create(val.fValue, val.fIsGroupPolicy);
+                        } finally {
+                            WcmFreeMemory(pData);
+                        }
+                    }
+                    return Tuple.Create(false, false);
+                };
+
+                var minimize = queryBoolPolicy(WCM_PROPERTY.wcm_global_property_minimize_policy);
+                var domain = queryBoolPolicy(WCM_PROPERTY.wcm_global_property_domain_policy);
+                var roaming = queryBoolPolicy(WCM_PROPERTY.wcm_global_property_roaming_policy);
+                var power = queryBoolPolicy(WCM_PROPERTY.wcm_global_property_powermanagement_policy);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"apiAvailable\": true, \"policies\": {{\"minimizeConnections\": {{\"enabled\": {0}, \"isGroupPolicy\": {1}}}, \"domainPrecedence\": {{\"enabled\": {2}, \"isGroupPolicy\": {3}}}, \"roamingRestriction\": {{\"enabled\": {4}, \"isGroupPolicy\": {5}}}, \"powerManagement\": {{\"enabled\": {6}, \"isGroupPolicy\": {7}}}}}}}",
+                    minimize.Item1 ? "true" : "false",
+                    minimize.Item2 ? "true" : "false",
+                    domain.Item1 ? "true" : "false",
+                    domain.Item2 ? "true" : "false",
+                    roaming.Item1 ? "true" : "false",
+                    roaming.Item2 ? "true" : "false",
+                    power.Item1 ? "true" : "false",
+                    power.Item2 ? "true" : "false"
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -17138,6 +17433,18 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "websocket_frame_inspect" || cmd == "websocket-frame-inspect") {
                 string raw = args.Length >= 2 ? args[1] : "";
                 WebSocketFrameInspectCmd(raw);
+            } else if (cmd == "wcm_profile_list" || cmd == "wcm-profile-list") {
+                WcmProfileListCmd();
+            } else if (cmd == "wcm_connection_cost" || cmd == "wcm-connection-cost") {
+                string prof = args.Length >= 2 ? args[1] : "";
+                string guid = args.Length >= 3 ? args[2] : "";
+                WcmConnectionCostCmd(prof, guid);
+            } else if (cmd == "wcm_dataplan_status" || cmd == "wcm-dataplan-status") {
+                string prof = args.Length >= 2 ? args[1] : "";
+                string guid = args.Length >= 3 ? args[2] : "";
+                WcmDataplanStatusCmd(prof, guid);
+            } else if (cmd == "wcm_global_policies" || cmd == "wcm-global-policies") {
+                WcmGlobalPoliciesCmd();
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
