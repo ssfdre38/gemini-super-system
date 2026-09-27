@@ -4608,6 +4608,92 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_wlan_interfaces",
+        description: "Enumerates Windows Native Wifi wireless network interfaces (WlanEnumInterfaces via wlanapi.dll), reports operational state, radio state (software/hardware), live channel frequency, and active connection telemetry.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_wlan_networks",
+        description: "Scans and discovers available wireless networks (SSIDs) in air range via WlanGetAvailableNetworkList and WlanScan, reporting signal quality percentage, RSSI dBm, authentication algorithms (WPA2/WPA3/Open), and ciphers.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            interfaceGuid: {
+              type: "string",
+              description: "Target wireless interface GUID (if omitted, uses default adapter)."
+            },
+            scan: {
+              type: "boolean",
+              default: false,
+              description: "Whether to trigger an active 802.11 network scan probe before listing (default: false)."
+            },
+            includeAdhoc: {
+              type: "boolean",
+              default: false,
+              description: "Whether to include ad-hoc / independent networks (default: false)."
+            },
+            includeHidden: {
+              type: "boolean",
+              default: false,
+              description: "Whether to include hidden / non-beaconing network profiles (default: false)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wlan_profiles",
+        description: "Inspects, lists, or deletes stored Windows Native Wifi XML network connection profiles via WlanGetProfileList, WlanGetProfile, and WlanDeleteProfile, exposing saved security modes and connection policies.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            interfaceGuid: {
+              type: "string",
+              description: "Target wireless interface GUID (if omitted, uses default adapter)."
+            },
+            profileName: {
+              type: "string",
+              description: "Profile name to inspect or delete."
+            },
+            action: {
+              type: "string",
+              enum: ["list", "get", "delete"],
+              default: "list",
+              description: "Action to perform: 'list' (enumerate all profiles), 'get' (retrieve XML profile), or 'delete' (delete profile)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wlan_connection",
+        description: "Interrogates or actuates active wireless connection state via WlanQueryInterface, WlanConnect, and WlanDisconnect, reporting current SSID, BSSID MAC, PHY type (802.11ax/ac/n), Rx/Tx link rates, and security.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            interfaceGuid: {
+              type: "string",
+              description: "Target wireless interface GUID (if omitted, uses default adapter)."
+            },
+            action: {
+              type: "string",
+              enum: ["query", "connect", "disconnect"],
+              default: "query",
+              description: "Connection action: 'query' (inspect live connection), 'connect' (connect to profile), or 'disconnect' (disconnect interface)."
+            },
+            profileName: {
+              type: "string",
+              description: "Target profile name for connection (required when action is 'connect')."
+            },
+            ssid: {
+              type: "string",
+              description: "Optional SSID target."
+            }
+          }
+        }
       }
 ];
 
@@ -8133,6 +8219,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🔗 [Windows Software Device Interface Registration]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wlan_interfaces") {
+    const res = await orch.getWlanInterfaces();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📶 [Windows Native Wifi Interfaces]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wlan_networks") {
+    const res = await orch.getWlanNetworks(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📡 [Windows Native Wifi Available Networks]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wlan_profiles") {
+    const res = await orch.manageWlanProfiles(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📑 [Windows Native Wifi Profiles]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wlan_connection") {
+    const res = await orch.manageWlanConnection(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Native Wifi Connection State]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

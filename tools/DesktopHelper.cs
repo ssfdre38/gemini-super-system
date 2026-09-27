@@ -17928,6 +17928,617 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 85: Windows Native Wifi Subsystem (wlanapi.h / wlanapi.dll)
+
+        [DllImport("wlanapi.dll", SetLastError = true)]
+        public static extern uint WlanOpenHandle(
+            uint dwClientVersion,
+            IntPtr pReserved,
+            out uint pdwNegotiatedVersion,
+            out IntPtr phClientHandle
+        );
+
+        [DllImport("wlanapi.dll", SetLastError = true)]
+        public static extern uint WlanCloseHandle(
+            IntPtr hClientHandle,
+            IntPtr pReserved
+        );
+
+        [DllImport("wlanapi.dll", SetLastError = true)]
+        public static extern uint WlanEnumInterfaces(
+            IntPtr hClientHandle,
+            IntPtr pReserved,
+            out IntPtr ppInterfaceList
+        );
+
+        [DllImport("wlanapi.dll", SetLastError = true)]
+        public static extern uint WlanQueryInterface(
+            IntPtr hClientHandle,
+            ref Guid pInterfaceGuid,
+            int OpCode,
+            IntPtr pReserved,
+            out uint pdwDataSize,
+            out IntPtr ppData,
+            out int pWlanOpcodeValueType
+        );
+
+        [DllImport("wlanapi.dll", SetLastError = true)]
+        public static extern uint WlanScan(
+            IntPtr hClientHandle,
+            ref Guid pInterfaceGuid,
+            IntPtr pDot11Ssid,
+            IntPtr pIeData,
+            IntPtr pReserved
+        );
+
+        [DllImport("wlanapi.dll", SetLastError = true)]
+        public static extern uint WlanGetAvailableNetworkList(
+            IntPtr hClientHandle,
+            ref Guid pInterfaceGuid,
+            uint dwFlags,
+            IntPtr pReserved,
+            out IntPtr ppAvailableNetworkList
+        );
+
+        [DllImport("wlanapi.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern uint WlanGetProfileList(
+            IntPtr hClientHandle,
+            ref Guid pInterfaceGuid,
+            IntPtr pReserved,
+            out IntPtr ppProfileList
+        );
+
+        [DllImport("wlanapi.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern uint WlanGetProfile(
+            IntPtr hClientHandle,
+            ref Guid pInterfaceGuid,
+            string strProfileName,
+            IntPtr pReserved,
+            out IntPtr pstrProfileXml,
+            ref uint pdwFlags,
+            out uint pdwGrantedAccess
+        );
+
+        [DllImport("wlanapi.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        public static extern uint WlanDeleteProfile(
+            IntPtr hClientHandle,
+            ref Guid pInterfaceGuid,
+            string strProfileName,
+            IntPtr pReserved
+        );
+
+        [DllImport("wlanapi.dll", SetLastError = true)]
+        public static extern uint WlanDisconnect(
+            IntPtr hClientHandle,
+            ref Guid pInterfaceGuid,
+            IntPtr pReserved
+        );
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct WLAN_CONNECTION_PARAMETERS {
+            public int wlanConnectionMode;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string strProfile;
+            public IntPtr pDot11Ssid;
+            public IntPtr pDesiredBssidList;
+            public int dot11BssType;
+            public uint dwFlags;
+        }
+
+        [DllImport("wlanapi.dll", SetLastError = true)]
+        public static extern uint WlanConnect(
+            IntPtr hClientHandle,
+            ref Guid pInterfaceGuid,
+            ref WLAN_CONNECTION_PARAMETERS pConnectionParameters,
+            IntPtr pReserved
+        );
+
+        [DllImport("wlanapi.dll")]
+        public static extern void WlanFreeMemory(IntPtr pMemory);
+
+        static string FormatDot11Auth(uint auth) {
+            switch (auth) {
+                case 1: return "Open";
+                case 2: return "SharedKey";
+                case 3: return "WPA";
+                case 4: return "WPA_PSK";
+                case 5: return "WPA_NONE";
+                case 6: return "WPA2_Enterprise";
+                case 7: return "WPA2_Personal";
+                case 8: return "WPA3";
+                case 9: return "WPA3_Enterprise_192";
+                case 10: return "WPA3_SAE";
+                case 11: return "OWE";
+                default: return "Auth_" + auth;
+            }
+        }
+
+        static string FormatDot11Cipher(uint cipher) {
+            switch (cipher) {
+                case 0: return "None";
+                case 1: return "WEP40";
+                case 2: return "TKIP";
+                case 4: return "CCMP";
+                case 5: return "WEP104";
+                case 6: return "BIP";
+                case 8: return "GCMP";
+                case 9: return "GCMP_256";
+                case 10: return "CCMP_256";
+                case 256: return "WPA_UseGroup";
+                case 257: return "WEP";
+                default: return "Cipher_" + cipher;
+            }
+        }
+
+        static string FormatDot11Phy(uint phy) {
+            switch (phy) {
+                case 0: return "Unknown";
+                case 1: return "FHSS";
+                case 2: return "DSSS";
+                case 3: return "IR";
+                case 4: return "OFDM (802.11a)";
+                case 5: return "HRDSSS (802.11b)";
+                case 6: return "ERP (802.11g)";
+                case 7: return "HT (802.11n / Wi-Fi 4)";
+                case 8: return "VHT (802.11ac / Wi-Fi 5)";
+                case 9: return "DMG (802.11ad)";
+                case 10: return "HE (802.11ax / Wi-Fi 6)";
+                case 11: return "EHT (802.11be / Wi-Fi 7)";
+                default: return "PHY_" + phy;
+            }
+        }
+
+        static string FormatWlanState(int state) {
+            switch (state) {
+                case 0: return "not_ready";
+                case 1: return "connected";
+                case 2: return "ad_hoc_formed";
+                case 3: return "disconnecting";
+                case 4: return "disconnected";
+                case 5: return "associating";
+                case 6: return "discovering";
+                case 7: return "authenticating";
+                default: return "state_" + state;
+            }
+        }
+
+        static string FormatBssType(int bss) {
+            switch (bss) {
+                case 1: return "Infrastructure";
+                case 2: return "Independent";
+                case 3: return "Any";
+                default: return "BSS_" + bss;
+            }
+        }
+
+        static string ReadWlanSsid(IntPtr ptr) {
+            try {
+                uint len = (uint)Marshal.ReadInt32(ptr, 0);
+                if (len == 0) return "";
+                if (len > 32) len = 32;
+                byte[] bytes = new byte[len];
+                Marshal.Copy(new IntPtr(ptr.ToInt64() + 4), bytes, 0, (int)len);
+                return Encoding.UTF8.GetString(bytes);
+            } catch {
+                return "";
+            }
+        }
+
+        static string ReadMacAddress(IntPtr ptr) {
+            try {
+                return string.Format("{0:X2}:{1:X2}:{2:X2}:{3:X2}:{4:X2}:{5:X2}",
+                    Marshal.ReadByte(ptr, 0),
+                    Marshal.ReadByte(ptr, 1),
+                    Marshal.ReadByte(ptr, 2),
+                    Marshal.ReadByte(ptr, 3),
+                    Marshal.ReadByte(ptr, 4),
+                    Marshal.ReadByte(ptr, 5));
+            } catch {
+                return "00:00:00:00:00:00";
+            }
+        }
+
+        static void WlanInterfacesCmd() {
+            uint negVer = 0;
+            IntPtr hClient = IntPtr.Zero;
+            try {
+                uint res = WlanOpenHandle(2, IntPtr.Zero, out negVer, out hClient);
+                if (res != 0 || hClient == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"serviceActive\": false, \"errorCode\": {0}, \"negotiatedVersion\": {1}, \"interfaceCount\": 0, \"interfaces\": [], \"message\": \"WLAN AutoConfig service is inactive or stopped (error {0})\"}}", res, negVer));
+                    return;
+                }
+
+                IntPtr pList = IntPtr.Zero;
+                uint enumRes = WlanEnumInterfaces(hClient, IntPtr.Zero, out pList);
+                if (enumRes != 0 || pList == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"serviceActive\": true, \"errorCode\": {0}, \"negotiatedVersion\": {1}, \"interfaceCount\": 0, \"interfaces\": []}}", enumRes, negVer));
+                    return;
+                }
+
+                var ifaces = new List<string>();
+                try {
+                    uint numItems = (uint)Marshal.ReadInt32(pList, 0);
+                    for (int i = 0; i < numItems; i++) {
+                        IntPtr itemPtr = new IntPtr(pList.ToInt64() + 8 + i * 532);
+                        byte[] guidBytes = new byte[16];
+                        Marshal.Copy(itemPtr, guidBytes, 0, 16);
+                        Guid guid = new Guid(guidBytes);
+                        string desc = Marshal.PtrToStringUni(new IntPtr(itemPtr.ToInt64() + 16)) ?? "";
+                        int state = Marshal.ReadInt32(itemPtr, 16 + 512);
+
+                        // Query radio state
+                        string radioSoftware = "unknown";
+                        string radioHardware = "unknown";
+                        uint dataSize = 0;
+                        IntPtr pRadio = IntPtr.Zero;
+                        int valType = 0;
+                        if (WlanQueryInterface(hClient, ref guid, 4 /* radio_state */, IntPtr.Zero, out dataSize, out pRadio, out valType) == 0 && pRadio != IntPtr.Zero) {
+                            try {
+                                uint numPhys = (uint)Marshal.ReadInt32(pRadio, 0);
+                                if (numPhys > 0) {
+                                    int swRadio = Marshal.ReadInt32(pRadio, 8);
+                                    int hwRadio = Marshal.ReadInt32(pRadio, 12);
+                                    radioSoftware = swRadio == 1 ? "on" : (swRadio == 2 ? "off" : "unknown");
+                                    radioHardware = hwRadio == 1 ? "on" : (hwRadio == 2 ? "off" : "unknown");
+                                }
+                            } finally {
+                                WlanFreeMemory(pRadio);
+                            }
+                        }
+
+                        // Query current connection
+                        string connJson = "null";
+                        IntPtr pConn = IntPtr.Zero;
+                        if (WlanQueryInterface(hClient, ref guid, 7 /* current_connection */, IntPtr.Zero, out dataSize, out pConn, out valType) == 0 && pConn != IntPtr.Zero) {
+                            try {
+                                string profName = Marshal.PtrToStringUni(new IntPtr(pConn.ToInt64() + 8)) ?? "";
+                                string ssid = ReadWlanSsid(new IntPtr(pConn.ToInt64() + 520));
+                                int bssType = Marshal.ReadInt32(pConn, 556);
+                                string bssid = ReadMacAddress(new IntPtr(pConn.ToInt64() + 560));
+                                uint phyType = (uint)Marshal.ReadInt32(pConn, 568);
+                                uint signalQuality = (uint)Marshal.ReadInt32(pConn, 576);
+                                uint rxRate = (uint)Marshal.ReadInt32(pConn, 580);
+                                uint txRate = (uint)Marshal.ReadInt32(pConn, 584);
+                                bool secEnabled = Marshal.ReadInt32(pConn, 588) != 0;
+                                uint authAlgo = (uint)Marshal.ReadInt32(pConn, 596);
+                                uint cipherAlgo = (uint)Marshal.ReadInt32(pConn, 600);
+                                int rssi = ((int)signalQuality / 2) - 100;
+
+                                connJson = string.Format("{{\"profileName\": \"{0}\", \"ssid\": \"{1}\", \"bssType\": \"{2}\", \"bssid\": \"{3}\", \"phyType\": \"{4}\", \"signalQuality\": {5}, \"rssiDbm\": {6}, \"rxRateKbps\": {7}, \"txRateKbps\": {8}, \"securityEnabled\": {9}, \"authAlgorithm\": \"{10}\", \"cipherAlgorithm\": \"{11}\"}}",
+                                    EscapeJson(profName), EscapeJson(ssid), FormatBssType(bssType), bssid, FormatDot11Phy(phyType), signalQuality, rssi, rxRate, txRate, secEnabled ? "true" : "false", FormatDot11Auth(authAlgo), FormatDot11Cipher(cipherAlgo));
+                            } finally {
+                                WlanFreeMemory(pConn);
+                            }
+                        }
+
+                        // Query channel
+                        uint channel = 0;
+                        IntPtr pChan = IntPtr.Zero;
+                        if (WlanQueryInterface(hClient, ref guid, 8 /* channel_number */, IntPtr.Zero, out dataSize, out pChan, out valType) == 0 && pChan != IntPtr.Zero) {
+                            try {
+                                channel = (uint)Marshal.ReadInt32(pChan, 0);
+                            } finally {
+                                WlanFreeMemory(pChan);
+                            }
+                        }
+
+                        ifaces.Add(string.Format("{{\"guid\": \"{0}\", \"description\": \"{1}\", \"state\": \"{2}\", \"stateCode\": {3}, \"softwareRadio\": \"{4}\", \"hardwareRadio\": \"{5}\", \"channel\": {6}, \"connection\": {7}}}",
+                            guid.ToString("B"), EscapeJson(desc), FormatWlanState(state), state, radioSoftware, radioHardware, channel, connJson));
+                    }
+                } finally {
+                    WlanFreeMemory(pList);
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"serviceActive\": true, \"negotiatedVersion\": {0}, \"interfaceCount\": {1}, \"interfaces\": [{2}]}}",
+                    negVer, ifaces.Count, string.Join(", ", ifaces.ToArray())));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (hClient != IntPtr.Zero) {
+                    try { WlanCloseHandle(hClient, IntPtr.Zero); } catch {}
+                }
+            }
+        }
+
+        static void WlanNetworksCmd(string guidFilter, bool triggerScan, bool includeAdhoc, bool includeHidden) {
+            uint negVer = 0;
+            IntPtr hClient = IntPtr.Zero;
+            try {
+                uint res = WlanOpenHandle(2, IntPtr.Zero, out negVer, out hClient);
+                if (res != 0 || hClient == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"serviceActive\": false, \"errorCode\": {0}, \"networkCount\": 0, \"networks\": [], \"message\": \"WLAN AutoConfig service is inactive (error {0})\"}}", res));
+                    return;
+                }
+
+                IntPtr pIfList = IntPtr.Zero;
+                uint enumRes = WlanEnumInterfaces(hClient, IntPtr.Zero, out pIfList);
+                if (enumRes != 0 || pIfList == IntPtr.Zero) {
+                    Console.WriteLine("{\"success\": true, \"apiAvailable\": true, \"serviceActive\": true, \"networkCount\": 0, \"networks\": []}");
+                    return;
+                }
+
+                Guid targetGuid = Guid.Empty;
+                string ifaceDesc = "";
+                try {
+                    uint numIfaces = (uint)Marshal.ReadInt32(pIfList, 0);
+                    if (numIfaces == 0) {
+                        Console.WriteLine("{\"success\": true, \"apiAvailable\": true, \"serviceActive\": true, \"networkCount\": 0, \"networks\": [], \"message\": \"No physical WLAN adapters found\"}");
+                        return;
+                    }
+
+                    for (int i = 0; i < numIfaces; i++) {
+                        IntPtr itemPtr = new IntPtr(pIfList.ToInt64() + 8 + i * 532);
+                        byte[] gb = new byte[16];
+                        Marshal.Copy(itemPtr, gb, 0, 16);
+                        Guid candidate = new Guid(gb);
+                        string desc = Marshal.PtrToStringUni(new IntPtr(itemPtr.ToInt64() + 16)) ?? "";
+                        if (string.IsNullOrEmpty(guidFilter) || candidate.ToString("B").IndexOf(guidFilter, StringComparison.OrdinalIgnoreCase) >= 0 || desc.IndexOf(guidFilter, StringComparison.OrdinalIgnoreCase) >= 0) {
+                            targetGuid = candidate;
+                            ifaceDesc = desc;
+                            break;
+                        }
+                    }
+                    if (targetGuid == Guid.Empty && numIfaces > 0) {
+                        byte[] gb = new byte[16];
+                        Marshal.Copy(new IntPtr(pIfList.ToInt64() + 8), gb, 0, 16);
+                        targetGuid = new Guid(gb);
+                        ifaceDesc = Marshal.PtrToStringUni(new IntPtr(pIfList.ToInt64() + 24)) ?? "";
+                    }
+                } finally {
+                    WlanFreeMemory(pIfList);
+                }
+
+                if (triggerScan) {
+                    try {
+                        WlanScan(hClient, ref targetGuid, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+                        System.Threading.Thread.Sleep(500);
+                    } catch {}
+                }
+
+                uint flags = 0;
+                if (includeAdhoc) flags |= 0x1;
+                if (includeHidden) flags |= 0x2;
+
+                IntPtr pNetList = IntPtr.Zero;
+                uint netRes = WlanGetAvailableNetworkList(hClient, ref targetGuid, flags, IntPtr.Zero, out pNetList);
+                if (netRes != 0 || pNetList == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"serviceActive\": true, \"errorCode\": {0}, \"interfaceGuid\": \"{1}\", \"networkCount\": 0, \"networks\": []}}", netRes, targetGuid.ToString("B")));
+                    return;
+                }
+
+                var networks = new List<string>();
+                try {
+                    uint numItems = (uint)Marshal.ReadInt32(pNetList, 4); // offset 4 is dwNumberOfItems (offset 0 is dwTotalSize)
+                    for (int i = 0; i < numItems; i++) {
+                        IntPtr netPtr = new IntPtr(pNetList.ToInt64() + 8 + i * 628);
+                        string profName = Marshal.PtrToStringUni(netPtr) ?? "";
+                        string ssid = ReadWlanSsid(new IntPtr(netPtr.ToInt64() + 512));
+                        int bssType = Marshal.ReadInt32(netPtr, 548);
+                        uint numBssids = (uint)Marshal.ReadInt32(netPtr, 552);
+                        bool connectable = Marshal.ReadInt32(netPtr, 556) != 0;
+                        uint sigQuality = (uint)Marshal.ReadInt32(netPtr, 604);
+                        bool secEnabled = Marshal.ReadInt32(netPtr, 608) != 0;
+                        uint authAlgo = (uint)Marshal.ReadInt32(netPtr, 612);
+                        uint cipherAlgo = (uint)Marshal.ReadInt32(netPtr, 616);
+                        uint netFlags = (uint)Marshal.ReadInt32(netPtr, 620);
+                        bool isConnected = (netFlags & 0x1) != 0;
+                        bool hasProfile = (netFlags & 0x2) != 0;
+                        int rssi = ((int)sigQuality / 2) - 100;
+
+                        networks.Add(string.Format("{{\"ssid\": \"{0}\", \"profileName\": \"{1}\", \"bssType\": \"{2}\", \"signalQuality\": {3}, \"rssiDbm\": {4}, \"numberOfBssids\": {5}, \"connectable\": {6}, \"securityEnabled\": {7}, \"authAlgorithm\": \"{8}\", \"cipherAlgorithm\": \"{9}\", \"connected\": {10}, \"hasProfile\": {11}}}",
+                            EscapeJson(ssid), EscapeJson(profName), FormatBssType(bssType), sigQuality, rssi, numBssids, connectable ? "true" : "false", secEnabled ? "true" : "false", FormatDot11Auth(authAlgo), FormatDot11Cipher(cipherAlgo), isConnected ? "true" : "false", hasProfile ? "true" : "false"));
+                    }
+                } finally {
+                    WlanFreeMemory(pNetList);
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"serviceActive\": true, \"interfaceGuid\": \"{0}\", \"interfaceDescription\": \"{1}\", \"networkCount\": {2}, \"networks\": [{3}]}}",
+                    targetGuid.ToString("B"), EscapeJson(ifaceDesc), networks.Count, string.Join(", ", networks.ToArray())));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (hClient != IntPtr.Zero) {
+                    try { WlanCloseHandle(hClient, IntPtr.Zero); } catch {}
+                }
+            }
+        }
+
+        static void WlanProfilesCmd(string guidFilter, string profileName, string action) {
+            uint negVer = 0;
+            IntPtr hClient = IntPtr.Zero;
+            try {
+                uint res = WlanOpenHandle(2, IntPtr.Zero, out negVer, out hClient);
+                if (res != 0 || hClient == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"serviceActive\": false, \"errorCode\": {0}, \"profileCount\": 0, \"profiles\": [], \"message\": \"WLAN AutoConfig service is inactive\"}}", res));
+                    return;
+                }
+
+                IntPtr pIfList = IntPtr.Zero;
+                uint enumRes = WlanEnumInterfaces(hClient, IntPtr.Zero, out pIfList);
+                if (enumRes != 0 || pIfList == IntPtr.Zero) {
+                    Console.WriteLine("{\"success\": true, \"apiAvailable\": true, \"serviceActive\": true, \"profileCount\": 0, \"profiles\": []}");
+                    return;
+                }
+
+                Guid targetGuid = Guid.Empty;
+                try {
+                    uint numIfaces = (uint)Marshal.ReadInt32(pIfList, 0);
+                    if (numIfaces == 0) {
+                        Console.WriteLine("{\"success\": true, \"apiAvailable\": true, \"serviceActive\": true, \"profileCount\": 0, \"profiles\": [], \"message\": \"No physical WLAN adapters found\"}");
+                        return;
+                    }
+                    byte[] gb = new byte[16];
+                    Marshal.Copy(new IntPtr(pIfList.ToInt64() + 8), gb, 0, 16);
+                    targetGuid = new Guid(gb);
+                } finally {
+                    WlanFreeMemory(pIfList);
+                }
+
+                string act = (action ?? "list").Trim().ToLowerInvariant();
+
+                if (act == "get" && !string.IsNullOrEmpty(profileName)) {
+                    IntPtr pXml = IntPtr.Zero;
+                    uint flags = 0;
+                    uint access = 0;
+                    uint getRes = WlanGetProfile(hClient, ref targetGuid, profileName, IntPtr.Zero, out pXml, ref flags, out access);
+                    string xml = "";
+                    if (getRes == 0 && pXml != IntPtr.Zero) {
+                        try {
+                            xml = Marshal.PtrToStringUni(pXml) ?? "";
+                        } finally {
+                            WlanFreeMemory(pXml);
+                        }
+                    }
+
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"action\": \"get\", \"interfaceGuid\": \"{0}\", \"profileName\": \"{1}\", \"errorCode\": {2}, \"grantedAccess\": {3}, \"profileXml\": \"{4}\"}}",
+                        targetGuid.ToString("B"), EscapeJson(profileName), getRes, access, EscapeJson(xml)));
+                    return;
+                }
+
+                if (act == "delete" && !string.IsNullOrEmpty(profileName)) {
+                    uint delRes = WlanDeleteProfile(hClient, ref targetGuid, profileName, IntPtr.Zero);
+                    Console.WriteLine(string.Format("{{\"success\": {0}, \"apiAvailable\": true, \"action\": \"delete\", \"interfaceGuid\": \"{1}\", \"profileName\": \"{2}\", \"errorCode\": {3}}}",
+                        delRes == 0 ? "true" : "false", targetGuid.ToString("B"), EscapeJson(profileName), delRes));
+                    return;
+                }
+
+                // Default: list profiles
+                IntPtr pProfList = IntPtr.Zero;
+                uint listRes = WlanGetProfileList(hClient, ref targetGuid, IntPtr.Zero, out pProfList);
+                if (listRes != 0 || pProfList == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"action\": \"list\", \"interfaceGuid\": \"{0}\", \"profileCount\": 0, \"profiles\": [], \"errorCode\": {1}}}", targetGuid.ToString("B"), listRes));
+                    return;
+                }
+
+                var profiles = new List<string>();
+                try {
+                    uint numItems = (uint)Marshal.ReadInt32(pProfList, 4); // offset 4 is dwNumberOfItems
+                    for (int i = 0; i < numItems; i++) {
+                        IntPtr profPtr = new IntPtr(pProfList.ToInt64() + 8 + i * 516);
+                        string name = Marshal.PtrToStringUni(profPtr) ?? "";
+                        uint flags = (uint)Marshal.ReadInt32(profPtr, 512);
+                        profiles.Add(string.Format("{{\"profileName\": \"{0}\", \"flags\": {1}}}", EscapeJson(name), flags));
+                    }
+                } finally {
+                    WlanFreeMemory(pProfList);
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"action\": \"list\", \"interfaceGuid\": \"{0}\", \"profileCount\": {1}, \"profiles\": [{2}]}}",
+                    targetGuid.ToString("B"), profiles.Count, string.Join(", ", profiles.ToArray())));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (hClient != IntPtr.Zero) {
+                    try { WlanCloseHandle(hClient, IntPtr.Zero); } catch {}
+                }
+            }
+        }
+
+        static void WlanConnectionCmd(string guidFilter, string action, string profileName, string ssid) {
+            uint negVer = 0;
+            IntPtr hClient = IntPtr.Zero;
+            try {
+                uint res = WlanOpenHandle(2, IntPtr.Zero, out negVer, out hClient);
+                if (res != 0 || hClient == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"serviceActive\": false, \"errorCode\": {0}, \"connected\": false, \"message\": \"WLAN AutoConfig service is inactive\"}}", res));
+                    return;
+                }
+
+                IntPtr pIfList = IntPtr.Zero;
+                uint enumRes = WlanEnumInterfaces(hClient, IntPtr.Zero, out pIfList);
+                if (enumRes != 0 || pIfList == IntPtr.Zero) {
+                    Console.WriteLine("{\"success\": true, \"apiAvailable\": true, \"connected\": false, \"message\": \"No wireless interfaces available\"}");
+                    return;
+                }
+
+                Guid targetGuid = Guid.Empty;
+                try {
+                    uint numIfaces = (uint)Marshal.ReadInt32(pIfList, 0);
+                    if (numIfaces == 0) {
+                        Console.WriteLine("{\"success\": true, \"apiAvailable\": true, \"connected\": false, \"message\": \"No physical WLAN adapters found\"}");
+                        return;
+                    }
+                    byte[] gb = new byte[16];
+                    Marshal.Copy(new IntPtr(pIfList.ToInt64() + 8), gb, 0, 16);
+                    targetGuid = new Guid(gb);
+                } finally {
+                    WlanFreeMemory(pIfList);
+                }
+
+                string act = (action ?? "query").Trim().ToLowerInvariant();
+
+                if (act == "disconnect") {
+                    uint disRes = WlanDisconnect(hClient, ref targetGuid, IntPtr.Zero);
+                    Console.WriteLine(string.Format("{{\"success\": {0}, \"apiAvailable\": true, \"action\": \"disconnect\", \"interfaceGuid\": \"{1}\", \"errorCode\": {2}}}",
+                        disRes == 0 ? "true" : "false", targetGuid.ToString("B"), disRes));
+                    return;
+                }
+
+                if (act == "connect" && !string.IsNullOrEmpty(profileName)) {
+                    WLAN_CONNECTION_PARAMETERS cp = new WLAN_CONNECTION_PARAMETERS();
+                    cp.wlanConnectionMode = 0; // profile
+                    cp.strProfile = profileName;
+                    cp.pDot11Ssid = IntPtr.Zero;
+                    cp.pDesiredBssidList = IntPtr.Zero;
+                    cp.dot11BssType = 1; // infrastructure
+                    cp.dwFlags = 0;
+
+                    uint connRes = WlanConnect(hClient, ref targetGuid, ref cp, IntPtr.Zero);
+                    Console.WriteLine(string.Format("{{\"success\": {0}, \"apiAvailable\": true, \"action\": \"connect\", \"interfaceGuid\": \"{1}\", \"profileName\": \"{2}\", \"errorCode\": {3}}}",
+                        connRes == 0 ? "true" : "false", targetGuid.ToString("B"), EscapeJson(profileName), connRes));
+                    return;
+                }
+
+                // Default: query current connection
+                uint dataSize = 0;
+                IntPtr pConn = IntPtr.Zero;
+                int valType = 0;
+                uint qRes = WlanQueryInterface(hClient, ref targetGuid, 7 /* current_connection */, IntPtr.Zero, out dataSize, out pConn, out valType);
+
+                if (qRes != 0 || pConn == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"connected\": false, \"action\": \"query\", \"interfaceGuid\": \"{0}\", \"errorCode\": {1}, \"status\": \"Not connected\"}}",
+                        targetGuid.ToString("B"), qRes));
+                    return;
+                }
+
+                try {
+                    int connState = Marshal.ReadInt32(pConn, 0);
+                    int connMode = Marshal.ReadInt32(pConn, 4);
+                    string profName = Marshal.PtrToStringUni(new IntPtr(pConn.ToInt64() + 8)) ?? "";
+                    string connSsid = ReadWlanSsid(new IntPtr(pConn.ToInt64() + 520));
+                    int bssType = Marshal.ReadInt32(pConn, 556);
+                    string bssid = ReadMacAddress(new IntPtr(pConn.ToInt64() + 560));
+                    uint phyType = (uint)Marshal.ReadInt32(pConn, 568);
+                    uint signalQuality = (uint)Marshal.ReadInt32(pConn, 576);
+                    uint rxRate = (uint)Marshal.ReadInt32(pConn, 580);
+                    uint txRate = (uint)Marshal.ReadInt32(pConn, 584);
+                    bool secEnabled = Marshal.ReadInt32(pConn, 588) != 0;
+                    uint authAlgo = (uint)Marshal.ReadInt32(pConn, 596);
+                    uint cipherAlgo = (uint)Marshal.ReadInt32(pConn, 600);
+                    int rssi = ((int)signalQuality / 2) - 100;
+
+                    uint chan = 0;
+                    IntPtr pChan = IntPtr.Zero;
+                    if (WlanQueryInterface(hClient, ref targetGuid, 8 /* channel_number */, IntPtr.Zero, out dataSize, out pChan, out valType) == 0 && pChan != IntPtr.Zero) {
+                        try { chan = (uint)Marshal.ReadInt32(pChan, 0); } finally { WlanFreeMemory(pChan); }
+                    }
+
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"connected\": true, \"action\": \"query\", \"interfaceGuid\": \"{0}\", \"state\": \"{1}\", \"profileName\": \"{2}\", \"ssid\": \"{3}\", \"bssType\": \"{4}\", \"bssid\": \"{5}\", \"phyType\": \"{6}\", \"signalQuality\": {7}, \"rssiDbm\": {8}, \"rxRateKbps\": {9}, \"txRateKbps\": {10}, \"channel\": {11}, \"securityEnabled\": {12}, \"authAlgorithm\": \"{13}\", \"cipherAlgorithm\": \"{14}\"}}",
+                        targetGuid.ToString("B"), FormatWlanState(connState), EscapeJson(profName), EscapeJson(connSsid), FormatBssType(bssType), bssid, FormatDot11Phy(phyType), signalQuality, rssi, rxRate, txRate, chan, secEnabled ? "true" : "false", FormatDot11Auth(authAlgo), FormatDot11Cipher(cipherAlgo)));
+                } finally {
+                    WlanFreeMemory(pConn);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (hClient != IntPtr.Zero) {
+                    try { WlanCloseHandle(hClient, IntPtr.Zero); } catch {}
+                }
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -21377,6 +21988,25 @@ namespace GeminiSuperDesktop {
                 string refStr = args.Length >= 3 ? args[2] : "";
                 bool enabled = args.Length >= 4 ? (args[3].ToLowerInvariant() == "true" || args[3] == "1") : true;
                 SwDeviceInterfaceCmd(guidStr, refStr, enabled);
+            } else if (cmd == "wlan_interfaces" || cmd == "wlan-interfaces" || cmd == "wifi_interfaces") {
+                WlanInterfacesCmd();
+            } else if (cmd == "wlan_networks" || cmd == "wlan-networks" || cmd == "wifi_networks") {
+                string guid = args.Length >= 2 ? args[1] : "";
+                bool scan = args.Length >= 3 && (args[2].ToLowerInvariant() == "true" || args[2] == "1");
+                bool adhoc = args.Length >= 4 && (args[3].ToLowerInvariant() == "true" || args[3] == "1");
+                bool hidden = args.Length >= 5 && (args[4].ToLowerInvariant() == "true" || args[4] == "1");
+                WlanNetworksCmd(guid, scan, adhoc, hidden);
+            } else if (cmd == "wlan_profiles" || cmd == "wlan-profiles" || cmd == "wifi_profiles") {
+                string guid = args.Length >= 2 ? args[1] : "";
+                string profile = args.Length >= 3 ? args[2] : "";
+                string act = args.Length >= 4 ? args[3] : "list";
+                WlanProfilesCmd(guid, profile, act);
+            } else if (cmd == "wlan_connection" || cmd == "wlan-connection" || cmd == "wifi_connection") {
+                string guid = args.Length >= 2 ? args[1] : "";
+                string act = args.Length >= 3 ? args[2] : "query";
+                string profile = args.Length >= 4 ? args[3] : "";
+                string ssid = args.Length >= 5 ? args[4] : "";
+                WlanConnectionCmd(guid, act, profile, ssid);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

@@ -100,6 +100,7 @@
   - [82. Trusted Platform Module Base Services (TBS) Subsystem](#82-️-trusted-platform-module-base-services-tbs-subsystem-tbsh--tbsdll)
   - [83. Windows XInput Game Controller Subsystem](#83--windows-xinput-game-controller-subsystem-xinputh--xinput1_4dll)
   - [84. Windows Software Device Management Subsystem](#84--windows-software-device-management-subsystem-swdeviceh--cfgmgr32dll)
+  - [85. Windows Native Wifi Subsystem](#85--windows-native-wifi-subsystem-wlanapih--wlanapidll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1118,6 +1119,18 @@ Directly manages the lifecycle, hardware/compatible identifiers, interface class
 - **Device Interface Registration & State Actuation (`super_swdevice_interface`)**: Registers device interface class GUIDs for software devices via `SwDeviceInterfaceRegister` and actuates their live operational state via `SwDeviceInterfaceSetState`. Enables virtual devices to dynamically publish or withdraw DirectShow, WASAPI audio, HID, serial, or custom driver interfaces into the Windows subsystem.
 - **244 Tools Milestone**: Reaches **244 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **69 comprehensive test suites** and **65 environment health checks**.
 - **Native MCP Tools**: `super_swdevice_info`, `super_swdevice_create`, `super_swdevice_lifecycle`, `super_swdevice_interface`.
+
+---
+
+## 85. 📶 Windows Native Wifi Subsystem (`wlanapi.h` / `wlanapi.dll`)
+
+Directly manages wireless adapters, 802.11 active scanning, radio hardware states, network discovery, connection profiles, and link parameters via the Microsoft Windows Native Wifi API (`wlanapi.dll`):
+- **Wireless Adapter & Interface Telemetry (`super_wlan_interfaces`)**: Discovers and enumerates installed wireless network adapters via `WlanOpenHandle` and `WlanEnumInterfaces`. Queries live operational interface states (`not_ready`, `connected`, `ad_hoc_formed`, `disconnecting`, `disconnected`, `associating`, `discovering`, `authenticating`), software and hardware radio state switches (`WlanQueryInterface` opcode 4), operating channel frequencies (opcode 8), and active connection telemetry (opcode 7).
+- **802.11 Air Range Discovery & Active Probing (`super_wlan_networks`)**: Scans and discovers available wireless networks (SSIDs) in physical RF air range via `WlanGetAvailableNetworkList` and active `WlanScan` probing. Decodes SSID strings, BSS types (Infrastructure vs Ad-hoc), signal quality percentages (0-100%), approximate RSSI decibels (`dBm`), advertising BSSID counts, connection flags, authentication modes (`Open`, `WPA2_Personal`, `WPA3_SAE`, `OWE`), and cipher suites (`CCMP`, `GCMP`, `TKIP`).
+- **WLAN XML Profile Architecture & Security Policies (`super_wlan_profiles`)**: Inspects, enumerates, or deletes stored Windows XML network connection profiles via `WlanGetProfileList`, `WlanGetProfile`, and `WlanDeleteProfile`. Exposes full IEEE 802.11 network configuration XML definitions including SSID names, authentication modes, encryption types, and connection policies without external scripts.
+- **Connection Lifecycle & Channel Actuation (`super_wlan_connection`)**: Interrogates or actuates active wireless connection state via `WlanQueryInterface`, `WlanConnect`, and `WlanDisconnect`. Queries active SSID, BSSID MAC address, PHY modulation type (`802.11be` Wi-Fi 7, `802.11ax` Wi-Fi 6, `802.11ac` Wi-Fi 5, `802.11n`), Rx/Tx link rates in Kbps, and channel numbers.
+- **248 Tools Milestone**: Reaches **248 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **70 comprehensive test suites** and **66 environment health checks**.
+- **Native MCP Tools**: `super_wlan_interfaces`, `super_wlan_networks`, `super_wlan_profiles`, `super_wlan_connection`.
 
 ---
 

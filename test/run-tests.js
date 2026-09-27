@@ -4919,10 +4919,60 @@ async function run() {
     assert.strictEqual(res.enabled, true);
   });
 
-  it("All 244 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 70: Windows Native Wifi Subsystem (wlanapi.h / wlanapi.dll)
+  console.log("\n\x1b[1m[Suite 70: Windows Native Wifi Subsystem]\x1b[0m");
+
+  await itAsync("getWlanInterfaces enumerates wireless adapters, radio states, and active connection", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWlanInterfaces();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWlanInterfaces failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.interfaceCount === "number");
+    assert(Array.isArray(res.interfaces));
+  });
+
+  await itAsync("getWlanNetworks discovers available wireless networks or probes gracefully", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWlanNetworks({ scan: false });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWlanNetworks failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.networkCount === "number");
+    assert(Array.isArray(res.networks));
+  });
+
+  await itAsync("manageWlanProfiles inspects, lists, or queries stored WLAN XML connection profiles", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.manageWlanProfiles({ action: "list" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "manageWlanProfiles failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.profileCount === "number");
+    assert(Array.isArray(res.profiles));
+  });
+
+  await itAsync("manageWlanConnection interrogates active connection parameters and channel metrics", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.manageWlanConnection({ action: "query" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "manageWlanConnection failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.connected === "boolean");
+  });
+
+  it("All 248 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 244);
+    assert.strictEqual(SYSTEM_TOOLS.length, 248);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -5100,6 +5150,10 @@ async function run() {
     assert(toolNames.includes("super_swdevice_create"));
     assert(toolNames.includes("super_swdevice_lifecycle"));
     assert(toolNames.includes("super_swdevice_interface"));
+    assert(toolNames.includes("super_wlan_interfaces"));
+    assert(toolNames.includes("super_wlan_networks"));
+    assert(toolNames.includes("super_wlan_profiles"));
+    assert(toolNames.includes("super_wlan_connection"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
