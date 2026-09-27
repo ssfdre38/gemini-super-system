@@ -1524,6 +1524,7 @@ async function run() {
       assert(fs.existsSync(testWavPath));
       assert(res.fileSize > 1000);
       assert.strictEqual(typeof res.path, "string");
+      try { fs.unlinkSync(testWavPath); } catch {}
     } else {
       // In headless environments without SAPI voices
       assert(res.isHeadless || Boolean(process.env.CI));
@@ -1533,49 +1534,41 @@ async function run() {
   await itAsync("inspectAudioFile parses RIFF WAV header, channels, sample rate, and audio telemetry", async () => {
     const { getKernelBridge } = require("../lib/kernel-bridge.js");
     const kb = getKernelBridge();
-    const testWavPath = path.resolve(__dirname, "temp_tts_test.wav");
+    const testWavPath = path.resolve(__dirname, "temp_inspect_test.wav");
+    try { if (fs.existsSync(testWavPath)) fs.unlinkSync(testWavPath); } catch {}
 
-    if (fs.existsSync(testWavPath)) {
-      const inspectRes = await kb.inspectAudioFile({ filePath: testWavPath });
-      assert(inspectRes !== null && typeof inspectRes === "object");
-      assert.strictEqual(inspectRes.success, true);
-      assert.strictEqual(inspectRes.format, "PCM");
-      assert(inspectRes.sampleRate >= 8000);
-      assert(inspectRes.channels >= 1);
-      assert(inspectRes.durationSeconds > 0);
-      fs.unlinkSync(testWavPath);
-    } else {
-      // Create a minimal 44-byte test WAV to test parser
-      const sampleRate = 22050;
-      const numChannels = 1;
-      const bitsPerSample = 16;
-      const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
-      const blockAlign = numChannels * (bitsPerSample / 8);
-      const dataSize = 1000;
-      const buffer = Buffer.alloc(44 + dataSize);
+    // Create a minimal standard 16-bit PCM WAV to test parser hermetically
+    const sampleRate = 22050;
+    const numChannels = 1;
+    const bitsPerSample = 16;
+    const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+    const blockAlign = numChannels * (bitsPerSample / 8);
+    const dataSize = 1000;
+    const buffer = Buffer.alloc(44 + dataSize);
 
-      buffer.write("RIFF", 0);
-      buffer.writeUInt32LE(36 + dataSize, 4);
-      buffer.write("WAVE", 8);
-      buffer.write("fmt ", 12);
-      buffer.writeUInt32LE(16, 16);
-      buffer.writeUInt16LE(1, 20); // PCM
-      buffer.writeUInt16LE(numChannels, 22);
-      buffer.writeUInt32LE(sampleRate, 24);
-      buffer.writeUInt32LE(byteRate, 28);
-      buffer.writeUInt16LE(blockAlign, 32);
-      buffer.writeUInt16LE(bitsPerSample, 34);
-      buffer.write("data", 36);
-      buffer.writeUInt32LE(dataSize, 40);
+    buffer.write("RIFF", 0);
+    buffer.writeUInt32LE(36 + dataSize, 4);
+    buffer.write("WAVE", 8);
+    buffer.write("fmt ", 12);
+    buffer.writeUInt32LE(16, 16);
+    buffer.writeUInt16LE(1, 20); // PCM
+    buffer.writeUInt16LE(numChannels, 22);
+    buffer.writeUInt32LE(sampleRate, 24);
+    buffer.writeUInt32LE(byteRate, 28);
+    buffer.writeUInt16LE(blockAlign, 32);
+    buffer.writeUInt16LE(bitsPerSample, 34);
+    buffer.write("data", 36);
+    buffer.writeUInt32LE(dataSize, 40);
 
-      fs.writeFileSync(testWavPath, buffer);
-      const inspectRes = await kb.inspectAudioFile({ filePath: testWavPath });
-      assert(inspectRes !== null && typeof inspectRes === "object");
-      assert.strictEqual(inspectRes.success, true);
-      assert.strictEqual(inspectRes.channels, 1);
-      assert.strictEqual(inspectRes.sampleRate, 22050);
-      fs.unlinkSync(testWavPath);
-    }
+    fs.writeFileSync(testWavPath, buffer);
+    const inspectRes = await kb.inspectAudioFile({ filePath: testWavPath });
+    assert(inspectRes !== null && typeof inspectRes === "object");
+    assert.strictEqual(inspectRes.success, true);
+    assert.strictEqual(inspectRes.format, "PCM");
+    assert.strictEqual(inspectRes.channels, 1);
+    assert.strictEqual(inspectRes.sampleRate, 22050);
+    assert(inspectRes.durationSeconds > 0);
+    try { fs.unlinkSync(testWavPath); } catch {}
   });
 
   await itAsync("playAudioSequence plays structured musical sequence or preset with fallback", async () => {

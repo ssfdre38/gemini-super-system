@@ -17184,7 +17184,7 @@ namespace GeminiSuperDesktop {
                 }
 
                 FileInfo fi = new FileInfo(fullPath);
-                using (var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var fs = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                 using (var br = new BinaryReader(fs)) {
                     byte[] riff = br.ReadBytes(4);
                     if (Encoding.ASCII.GetString(riff) != "RIFF") {
@@ -17393,7 +17393,10 @@ namespace GeminiSuperDesktop {
                 stream.Open(outPath, 3 /* SSFMCreateForWrite */, false);
                 voice.AudioOutputStream = stream;
                 voice.Speak(text);
-                stream.Close();
+                try { stream.Close(); } catch {}
+                try { voice.AudioOutputStream = null; } catch {}
+                try { System.Runtime.InteropServices.Marshal.ReleaseComObject(stream); } catch {}
+                try { System.Runtime.InteropServices.Marshal.ReleaseComObject(voice); } catch {}
 
                 FileInfo fi = new FileInfo(outPath);
                 Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
