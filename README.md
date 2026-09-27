@@ -91,6 +91,7 @@
   - [73. Windows Connection Manager Subsystem](#73--windows-connection-manager-subsystem-wcmapih--wcmapidll)
   - [74. Windows Power, Shutdown & System Initiation Subsystem](#74--windows-power-shutdown--system-initiation-subsystem-initiateshutdownh--reasonh--advapi32dll)
   - [75. Windows HTTP Services (WinHTTP) Subsystem](#75--windows-http-services-winhttp-subsystem-winhttph--winhttpdll)
+  - [76. Windows Internet (WinINet) Subsystem](#76--windows-internet-wininet-subsystem-winineth--wininetdll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1001,6 +1002,18 @@ Directly interfaces with the native Windows HTTP Services (WinHTTP) stack via ba
 - **Web Proxy Auto-Discovery (WPAD) Resolution (`super_winhttp_autoproxy_resolve`)**: Probes corporate and network proxy bypass topologies for any target endpoint using native WPAD (`WinHttpGetProxyForUrl`) via DHCP options and DNS 'wpad' A-records (`WINHTTP_AUTO_DETECT_TYPE_DHCP | WINHTTP_AUTO_DETECT_TYPE_DNS_A`).
 - **208 Tools Milestone**: Reaches **208 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **60 comprehensive test suites (191/191 tests passing 100%)** and **56 environment health checks**.
 - **Native MCP Tools**: `super_winhttp_proxy_config`, `super_winhttp_session_status`, `super_winhttp_url_crack`, `super_winhttp_autoproxy_resolve`.
+
+---
+
+## 76. 🌐 Windows Internet (WinINet) Subsystem (`wininet.h` / `wininet.dll`)
+
+Directly interfaces with the Windows Internet (WinINet) protocol and cache stack via native `wininet.dll` P/Invoke:
+- **Connected State & Interface Detection (`super_wininet_connected_state`)**: Invokes `InternetGetConnectedStateExW` to inspect local system Internet connectivity, active connection profile/adapter name (e.g. `LAN Connection`), and interface bitmasks: `INTERNET_CONNECTION_LAN`, `MODEM`, `PROXY`, `MODEM_BUSY`, `RAS_INSTALLED`, and `OFFLINE`.
+- **Target Reachability & Latency Probing (`super_wininet_check_connection`)**: Directly measures network reachability and HTTP socket round-trip time in milliseconds to any destination endpoint via `InternetCheckConnectionW`, with optional `FLAG_ICC_FORCE_CONNECTION` to bypass cached socket states.
+- **System URL Cache Enumeration (`super_wininet_cache_entries`)**: Enumerate Windows Internet cache entries (temporary internet files, visited history, cookies, cached downloads) via `FindFirstUrlCacheEntryW` and `FindNextUrlCacheEntryW`. Dynamic buffer resizing extracts source URLs, local file paths, file extensions, cache entry types (`NORMAL`, `COOKIE`, `URLHISTORY`, `STICKY`), sample size in bytes, and hit/use counts.
+- **Session Options & Concurrency Limits (`super_wininet_session_options`)**: Opens an unmediated WinINet session (`InternetOpenW`) and queries socket transport limits via `InternetQueryOptionW`: connect, send, receive, data send, and data receive timeouts in milliseconds, max connections per server (HTTP/1.1 and HTTP/1.0), and security flags.
+- **212 Tools Milestone**: Reaches **212 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **61 comprehensive test suites (195/195 tests passing 100%)** and **57 environment health checks**.
+- **Native MCP Tools**: `super_wininet_connected_state`, `super_wininet_check_connection`, `super_wininet_cache_entries`, `super_wininet_session_options`.
 
 ---
 

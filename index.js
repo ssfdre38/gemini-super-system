@@ -4038,6 +4038,61 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_wininet_connected_state",
+        description: "Queries local Windows Internet (WinINet) connectivity state, active connection profile/adapter name, and connection flags (LAN, Modem, Proxy, RAS) via InternetGetConnectedStateExW.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_wininet_check_connection",
+        description: "Directly probes and measures network reachability and HTTP socket round-trip latency to a specified target URL via InternetCheckConnectionW.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            url: {
+              type: "string",
+              description: "Target URL to probe. Defaults to https://www.microsoft.com."
+            },
+            forceCheck: {
+              type: "boolean",
+              description: "Force fresh socket connection bypassing local caches. Defaults to false."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wininet_cache_entries",
+        description: "Enumerates Windows Internet URL cache entries (visited pages, cookies, history, downloads) and retrieves cache metadata and hit counts via FindFirstUrlCacheEntryW / FindNextUrlCacheEntryW.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            pattern: {
+              type: "string",
+              description: "Optional URL search pattern filter (e.g., 'Visited:*' or 'Cookie:*'). Defaults to all entries."
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of cache entries to enumerate. Defaults to 15 (max 100)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wininet_session_options",
+        description: "Opens a native WinINet session and queries socket timeouts (connect, send, receive), connection concurrency limits per server, and security flags via InternetOpenW and InternetQueryOptionW.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            userAgent: {
+              type: "string",
+              description: "Custom User-Agent string for the session. Defaults to GeminiSuperSystem/1.0."
+            }
+          }
+        }
       }
 ];
 
@@ -7131,6 +7186,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🔄 [Windows WinHTTP AutoProxy (WPAD) Resolution Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wininet_connected_state") {
+    const res = await orch.getWinInetConnectedState();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🌐 [Windows WinINet Connected State Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wininet_check_connection") {
+    const res = await orch.checkWinInetConnection(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows WinINet Connection Probe Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wininet_cache_entries") {
+    const res = await orch.getWinInetCacheEntries(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📂 [Windows WinINet URL Cache Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wininet_session_options") {
+    const res = await orch.getWinInetSessionOptions(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📡 [Windows WinINet Session Options Telemetry]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

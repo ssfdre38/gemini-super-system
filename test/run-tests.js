@@ -4353,10 +4353,75 @@ async function run() {
     assert(typeof res.probeResultCode === "number");
   });
 
-  it("All 208 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 61: Windows Internet (WinINet) Subsystem (wininet.h / wininet.dll)
+  console.log("\n\x1b[1m[Suite 61: Windows Internet (WinINet) Subsystem]\x1b[0m");
+
+  await itAsync("getWinInetConnectedState queries Internet connection, adapter name, and network flags", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWinInetConnectedState();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWinInetConnectedState failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.connected === "boolean");
+    assert(typeof res.connectionName === "string");
+    assert(typeof res.rawFlags === "string");
+    assert(typeof res.flags === "object");
+    assert(typeof res.flags.lan === "boolean");
+  });
+
+  await itAsync("checkWinInetConnection tests live network reachability and socket response latency", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.checkWinInetConnection({ url: "https://www.microsoft.com", force: true });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "checkWinInetConnection failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.reachable === "boolean");
+    assert(typeof res.targetUrl === "string");
+    assert(typeof res.latencyMs === "number");
+    assert(typeof res.forceCheck === "boolean");
+  });
+
+  await itAsync("getWinInetCacheEntries enumerates URL cache items, hit rates, and sizes", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWinInetCacheEntries({ limit: 5 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWinInetCacheEntries failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.count === "number");
+    assert(typeof res.limit === "number");
+    assert(Array.isArray(res.entries));
+    if (res.entries.length > 0) {
+      assert(typeof res.entries[0].sourceUrl === "string");
+      assert(typeof res.entries[0].cacheType === "string");
+      assert(typeof res.entries[0].hitRate === "number");
+    }
+  });
+
+  await itAsync("getWinInetSessionOptions inspects transport timeouts and connection limits", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWinInetSessionOptions({ userAgent: "GeminiTestAgent/1.0" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWinInetSessionOptions failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert.strictEqual(res.userAgent, "GeminiTestAgent/1.0");
+    assert(typeof res.timeouts === "object");
+    assert(typeof res.timeouts.connectMs === "number");
+    assert(typeof res.connectionLimits === "object");
+    assert(typeof res.securityFlagsRaw === "string");
+  });
+
+  it("All 212 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 208);
+    assert.strictEqual(SYSTEM_TOOLS.length, 212);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -4498,6 +4563,10 @@ async function run() {
     assert(toolNames.includes("super_winhttp_session_status"));
     assert(toolNames.includes("super_winhttp_url_crack"));
     assert(toolNames.includes("super_winhttp_autoproxy_resolve"));
+    assert(toolNames.includes("super_wininet_connected_state"));
+    assert(toolNames.includes("super_wininet_check_connection"));
+    assert(toolNames.includes("super_wininet_cache_entries"));
+    assert(toolNames.includes("super_wininet_session_options"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

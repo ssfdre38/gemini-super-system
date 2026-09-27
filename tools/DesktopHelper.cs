@@ -14861,6 +14861,277 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 76: Windows Internet (WinINet) Subsystem (wininet.h / wininet.dll)
+
+        const uint INTERNET_CONNECTION_MODEM      = 0x01;
+        const uint INTERNET_CONNECTION_LAN        = 0x02;
+        const uint INTERNET_CONNECTION_PROXY      = 0x04;
+        const uint INTERNET_CONNECTION_MODEM_BUSY = 0x08;
+        const uint INTERNET_RAS_INSTALLED         = 0x10;
+        const uint INTERNET_CONNECTION_OFFLINE    = 0x20;
+        const uint INTERNET_CONNECTION_CONFIGURED = 0x40;
+
+        const uint FLAG_ICC_FORCE_CONNECTION      = 0x01;
+
+        const uint INTERNET_OPTION_CONNECT_TIMEOUT          = 2;
+        const uint INTERNET_OPTION_SEND_TIMEOUT             = 5;
+        const uint INTERNET_OPTION_RECEIVE_TIMEOUT          = 6;
+        const uint INTERNET_OPTION_DATA_SEND_TIMEOUT        = 7;
+        const uint INTERNET_OPTION_DATA_RECEIVE_TIMEOUT     = 8;
+        const uint INTERNET_OPTION_SECURITY_FLAGS           = 31;
+        const uint INTERNET_OPTION_MAX_CONNS_PER_SERVER     = 73;
+        const uint INTERNET_OPTION_MAX_CONNS_PER_1_0_SERVER = 74;
+
+        [DllImport("wininet.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool InternetGetConnectedStateExW(
+            out uint lpdwFlags,
+            StringBuilder lpConnectionName,
+            int dwNameLen,
+            uint dwReserved
+        );
+
+        [DllImport("wininet.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool InternetCheckConnectionW(
+            string lpszUrl,
+            uint dwFlags,
+            uint dwReserved
+        );
+
+        [DllImport("wininet.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern IntPtr InternetOpenW(
+            string lpszAgent,
+            uint dwAccessType,
+            string lpszProxy,
+            string lpszProxyBypass,
+            uint dwFlags
+        );
+
+        [DllImport("wininet.dll", SetLastError = true)]
+        static extern bool InternetQueryOptionW(
+            IntPtr hInternet,
+            uint dwOption,
+            out uint lpBuffer,
+            ref uint lpdwBufferLength
+        );
+
+        [DllImport("wininet.dll", SetLastError = true)]
+        static extern bool InternetCloseHandle(IntPtr hInternet);
+
+        [DllImport("wininet.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern IntPtr FindFirstUrlCacheEntryW(
+            string lpszUrlSearchPattern,
+            IntPtr lpFirstCacheEntryInfo,
+            ref uint lpdwFirstCacheEntryInfoBufferSize
+        );
+
+        [DllImport("wininet.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool FindNextUrlCacheEntryW(
+            IntPtr hEnumHandle,
+            IntPtr lpNextCacheEntryInfo,
+            ref uint lpdwNextCacheEntryInfoBufferSize
+        );
+
+        [DllImport("wininet.dll", SetLastError = true)]
+        static extern bool FindCloseUrlCache(IntPtr hEnumHandle);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        struct INTERNET_CACHE_ENTRY_INFO {
+            public uint dwStructSize;
+            public IntPtr lpszSourceUrlName;
+            public IntPtr lpszLocalFileName;
+            public uint CacheEntryType;
+            public uint dwUseCount;
+            public uint dwHitRate;
+            public uint dwSizeLow;
+            public uint dwSizeHigh;
+            public System.Runtime.InteropServices.ComTypes.FILETIME LastModifiedTime;
+            public System.Runtime.InteropServices.ComTypes.FILETIME ExpireTime;
+            public System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
+            public System.Runtime.InteropServices.ComTypes.FILETIME LastSyncTime;
+            public IntPtr lpHeaderInfo;
+            public uint dwHeaderInfoSize;
+            public IntPtr lpszFileExtension;
+            public uint dwReserved;
+        }
+
+        static void WinInetConnectedStateCmd() {
+            try {
+                uint flags = 0;
+                var sbConn = new StringBuilder(512);
+                bool connected = InternetGetConnectedStateExW(out flags, sbConn, sbConn.Capacity, 0);
+
+                bool modem = (flags & INTERNET_CONNECTION_MODEM) != 0;
+                bool lan = (flags & INTERNET_CONNECTION_LAN) != 0;
+                bool proxy = (flags & INTERNET_CONNECTION_PROXY) != 0;
+                bool modemBusy = (flags & INTERNET_CONNECTION_MODEM_BUSY) != 0;
+                bool ras = (flags & INTERNET_RAS_INSTALLED) != 0;
+                bool offline = (flags & INTERNET_CONNECTION_OFFLINE) != 0;
+                bool configured = (flags & INTERNET_CONNECTION_CONFIGURED) != 0;
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"connected\": {0}, ", connected ? "true" : "false"));
+                sb.Append(string.Format("\"connectionName\": \"{0}\", ", EscapeJson(sbConn.ToString())));
+                sb.Append(string.Format("\"rawFlags\": \"0x{0:X8}\", ", flags));
+                sb.Append(string.Format("\"flags\": {{\"lan\": {0}, \"modem\": {1}, \"proxy\": {2}, \"rasInstalled\": {3}, \"offline\": {4}, \"configured\": {5}, \"modemBusy\": {6}}}",
+                    lan ? "true" : "false", modem ? "true" : "false", proxy ? "true" : "false", ras ? "true" : "false", offline ? "true" : "false", configured ? "true" : "false", modemBusy ? "true" : "false"));
+                sb.Append("}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WinInetCheckConnectionCmd(string rawUrl, bool forceCheck) {
+            try {
+                string url = string.IsNullOrEmpty(rawUrl) ? "https://www.microsoft.com" : rawUrl;
+                uint flags = forceCheck ? FLAG_ICC_FORCE_CONNECTION : 0;
+
+                var sw = Stopwatch.StartNew();
+                bool reachable = InternetCheckConnectionW(url, flags, 0);
+                sw.Stop();
+                int err = Marshal.GetLastWin32Error();
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"apiAvailable\": true, \"reachable\": {0}, \"targetUrl\": \"{1}\", \"latencyMs\": {2}, \"forceCheck\": {3}, \"win32ErrorCode\": {4}}}",
+                    reachable ? "true" : "false", EscapeJson(url), sw.ElapsedMilliseconds, forceCheck ? "true" : "false", reachable ? 0 : err
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WinInetCacheEntriesCmd(string pattern, int maxLimit) {
+            IntPtr pBuf = IntPtr.Zero;
+            IntPtr hEnum = IntPtr.Zero;
+            try {
+                int limit = maxLimit > 0 ? maxLimit : 15;
+                if (limit > 100) limit = 100;
+                string pat = string.IsNullOrEmpty(pattern) ? null : pattern;
+
+                uint bufferSize = 0;
+                FindFirstUrlCacheEntryW(pat, IntPtr.Zero, ref bufferSize);
+                if (bufferSize == 0) bufferSize = 8192;
+
+                pBuf = Marshal.AllocHGlobal((int)bufferSize);
+                hEnum = FindFirstUrlCacheEntryW(pat, pBuf, ref bufferSize);
+                if (hEnum == IntPtr.Zero && Marshal.GetLastWin32Error() == 122) {
+                    Marshal.FreeHGlobal(pBuf);
+                    pBuf = Marshal.AllocHGlobal((int)bufferSize);
+                    hEnum = FindFirstUrlCacheEntryW(pat, pBuf, ref bufferSize);
+                }
+
+                int count = 0;
+                ulong totalSize = 0;
+                var sbEntries = new StringBuilder();
+
+                while (hEnum != IntPtr.Zero && count < limit) {
+                    var entry = (INTERNET_CACHE_ENTRY_INFO)Marshal.PtrToStructure(pBuf, typeof(INTERNET_CACHE_ENTRY_INFO));
+                    string srcUrl = entry.lpszSourceUrlName != IntPtr.Zero ? Marshal.PtrToStringUni(entry.lpszSourceUrlName) : "";
+                    string localFile = entry.lpszLocalFileName != IntPtr.Zero ? Marshal.PtrToStringUni(entry.lpszLocalFileName) : "";
+                    string ext = entry.lpszFileExtension != IntPtr.Zero ? Marshal.PtrToStringUni(entry.lpszFileExtension) : "";
+                    ulong size = ((ulong)entry.dwSizeHigh << 32) | entry.dwSizeLow;
+                    totalSize += size;
+
+                    string entryTypeStr = "NORMAL";
+                    if ((entry.CacheEntryType & 0x100000) != 0) entryTypeStr = "COOKIE";
+                    else if ((entry.CacheEntryType & 0x200000) != 0) entryTypeStr = "URLHISTORY";
+                    else if ((entry.CacheEntryType & 0x04) != 0) entryTypeStr = "STICKY";
+
+                    if (count > 0) sbEntries.Append(", ");
+                    sbEntries.Append("{");
+                    sbEntries.Append(string.Format("\"sourceUrl\": \"{0}\", ", EscapeJson(srcUrl)));
+                    sbEntries.Append(string.Format("\"localFileName\": \"{0}\", ", EscapeJson(localFile)));
+                    sbEntries.Append(string.Format("\"fileExtension\": \"{0}\", ", EscapeJson(ext)));
+                    sbEntries.Append(string.Format("\"cacheType\": \"{0}\", ", entryTypeStr));
+                    sbEntries.Append(string.Format("\"cacheTypeRaw\": \"0x{0:X}\", ", entry.CacheEntryType));
+                    sbEntries.Append(string.Format("\"sizeBytes\": {0}, ", size));
+                    sbEntries.Append(string.Format("\"hitRate\": {0}, ", entry.dwHitRate));
+                    sbEntries.Append(string.Format("\"useCount\": {0}", entry.dwUseCount));
+                    sbEntries.Append("}");
+                    count++;
+
+                    bool nextOk = FindNextUrlCacheEntryW(hEnum, pBuf, ref bufferSize);
+                    if (!nextOk) {
+                        int err = Marshal.GetLastWin32Error();
+                        if (err == 122) {
+                            Marshal.FreeHGlobal(pBuf);
+                            pBuf = Marshal.AllocHGlobal((int)bufferSize);
+                            nextOk = FindNextUrlCacheEntryW(hEnum, pBuf, ref bufferSize);
+                        }
+                        if (!nextOk) break;
+                    }
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"apiAvailable\": true, \"pattern\": \"{0}\", \"count\": {1}, \"limit\": {2}, \"totalSampleSizeBytes\": {3}, \"entries\": [{4}]}}",
+                    EscapeJson(pat ?? "*"), count, limit, totalSize, sbEntries.ToString()
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (hEnum != IntPtr.Zero) FindCloseUrlCache(hEnum);
+                if (pBuf != IntPtr.Zero) Marshal.FreeHGlobal(pBuf);
+            }
+        }
+
+        static void WinInetSessionOptionsCmd(string customAgent) {
+            try {
+                string userAgent = string.IsNullOrEmpty(customAgent) ? "GeminiSuperSystem/1.0" : customAgent;
+                IntPtr hSession = InternetOpenW(userAgent, 0, null, null, 0);
+
+                if (hSession == IntPtr.Zero) {
+                    int err = Marshal.GetLastWin32Error();
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"InternetOpenW failed with error {0}\"}}", err));
+                    return;
+                }
+
+                try {
+                    uint connTimeout = 0, len = 4;
+                    InternetQueryOptionW(hSession, INTERNET_OPTION_CONNECT_TIMEOUT, out connTimeout, ref len);
+
+                    uint sendTimeout = 0; len = 4;
+                    InternetQueryOptionW(hSession, INTERNET_OPTION_SEND_TIMEOUT, out sendTimeout, ref len);
+
+                    uint recvTimeout = 0; len = 4;
+                    InternetQueryOptionW(hSession, INTERNET_OPTION_RECEIVE_TIMEOUT, out recvTimeout, ref len);
+
+                    uint dataSendTimeout = 0; len = 4;
+                    InternetQueryOptionW(hSession, INTERNET_OPTION_DATA_SEND_TIMEOUT, out dataSendTimeout, ref len);
+
+                    uint dataRecvTimeout = 0; len = 4;
+                    InternetQueryOptionW(hSession, INTERNET_OPTION_DATA_RECEIVE_TIMEOUT, out dataRecvTimeout, ref len);
+
+                    uint maxConns = 0; len = 4;
+                    InternetQueryOptionW(hSession, INTERNET_OPTION_MAX_CONNS_PER_SERVER, out maxConns, ref len);
+
+                    uint maxConns10 = 0; len = 4;
+                    InternetQueryOptionW(hSession, INTERNET_OPTION_MAX_CONNS_PER_1_0_SERVER, out maxConns10, ref len);
+
+                    uint secFlags = 0; len = 4;
+                    InternetQueryOptionW(hSession, INTERNET_OPTION_SECURITY_FLAGS, out secFlags, ref len);
+
+                    var sb = new StringBuilder();
+                    sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                    sb.Append(string.Format("\"userAgent\": \"{0}\", ", EscapeJson(userAgent)));
+                    sb.Append(string.Format("\"timeouts\": {{\"connectMs\": {0}, \"sendMs\": {1}, \"receiveMs\": {2}, \"dataSendMs\": {3}, \"dataReceiveMs\": {4}}}, ",
+                        connTimeout, sendTimeout, recvTimeout, dataSendTimeout, dataRecvTimeout));
+                    sb.Append(string.Format("\"connectionLimits\": {{\"maxConnectionsPerServer\": {0}, \"maxConnectionsPer1_0Server\": {1}}}, ",
+                        maxConns, maxConns10));
+                    sb.Append(string.Format("\"securityFlagsRaw\": \"0x{0:X8}\"}}", secFlags));
+
+                    Console.WriteLine(sb.ToString());
+                } finally {
+                    InternetCloseHandle(hSession);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -18178,6 +18449,20 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "winhttp_autoproxy_resolve" || cmd == "winhttp-autoproxy-resolve") {
                 string url = args.Length >= 2 ? args[1] : "";
                 WinHttpAutoProxyResolveCmd(url);
+            } else if (cmd == "wininet_connected_state" || cmd == "wininet-connected-state") {
+                WinInetConnectedStateCmd();
+            } else if (cmd == "wininet_check_connection" || cmd == "wininet-check-connection") {
+                string url = args.Length >= 2 ? args[1] : "";
+                bool force = args.Length >= 3 && (args[2].ToLowerInvariant() == "true" || args[2] == "1");
+                WinInetCheckConnectionCmd(url, force);
+            } else if (cmd == "wininet_cache_entries" || cmd == "wininet-cache-entries") {
+                string pattern = args.Length >= 2 ? args[1] : "";
+                int limit = 15;
+                if (args.Length >= 3) int.TryParse(args[2], out limit);
+                WinInetCacheEntriesCmd(pattern, limit);
+            } else if (cmd == "wininet_session_options" || cmd == "wininet-session-options") {
+                string agent = args.Length >= 2 ? args[1] : "";
+                WinInetSessionOptionsCmd(agent);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
