@@ -4283,6 +4283,123 @@ const SYSTEM_TOOLS = [
           type: "object",
           properties: {}
         }
+      },
+      {
+        name: "super_mag_fullscreen_transform",
+        description: "Queries or configures the full-screen magnification factor and viewport coordinate offsets via the native Windows Magnification API (MagGetFullscreenTransform, MagSetFullscreenTransform).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              description: "Action to perform: 'get' (query active transform), 'set' (apply new magnification), or 'reset' (restore 1.0x normal zoom). Defaults to 'get'.",
+              enum: ["get", "set", "reset"]
+            },
+            magLevel: {
+              type: "number",
+              description: "Magnification scaling factor (e.g., 1.0 for normal, 1.5, 2.0 for 2x zoom). Used when action='set'."
+            },
+            xOffset: {
+              type: "integer",
+              description: "Viewport X offset in screen coordinates. Used when action='set'."
+            },
+            yOffset: {
+              type: "integer",
+              description: "Viewport Y offset in screen coordinates. Used when action='set'."
+            }
+          }
+        }
+      },
+      {
+        name: "super_mag_color_effect",
+        description: "Queries, applies, or resets real-time display color matrix transformations across the screen via MagSetFullscreenColorEffect and MagGetFullscreenColorEffect (supporting identity, color inversion, grayscale, high contrast, deuteranopia, protanopia, and custom 5x5 color matrices).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              description: "Action to perform: 'get' (query active matrix), 'set' (apply preset or custom matrix), or 'reset' (restore standard colors). Defaults to 'get'.",
+              enum: ["get", "set", "reset"]
+            },
+            preset: {
+              type: "string",
+              description: "Color matrix preset to apply: 'identity', 'invert', 'grayscale', 'high_contrast', 'deuteranopia', 'protanopia', or 'custom'.",
+              enum: ["identity", "invert", "grayscale", "high_contrast", "deuteranopia", "protanopia", "custom"]
+            },
+            matrix: {
+              type: "array",
+              description: "25-element array of floating-point numbers representing the 5x5 RGBAW color transformation matrix for custom preset.",
+              items: {
+                type: "number"
+              }
+            }
+          }
+        }
+      },
+      {
+        name: "super_mag_input_transform",
+        description: "Queries, configures, or resets pen, touch, and pointer input coordinate scaling translation rectangles during full-screen magnification via MagGetInputTransform and MagSetInputTransform.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              description: "Action to perform: 'get' (query current translation), 'set' (apply input transformation), or 'reset' (disable input translation). Defaults to 'get'.",
+              enum: ["get", "set", "reset"]
+            },
+            enabled: {
+              type: "boolean",
+              description: "Whether input coordinate scaling transformation is enabled."
+            },
+            sourceRect: {
+              type: "object",
+              description: "Source coordinate bounding box {left, top, right, bottom}.",
+              properties: {
+                left: { type: "integer" },
+                top: { type: "integer" },
+                right: { type: "integer" },
+                bottom: { type: "integer" }
+              }
+            },
+            destRect: {
+              type: "object",
+              description: "Destination coordinate bounding box {left, top, right, bottom}.",
+              properties: {
+                left: { type: "integer" },
+                top: { type: "integer" },
+                right: { type: "integer" },
+                bottom: { type: "integer" }
+              }
+            }
+          }
+        }
+      },
+      {
+        name: "super_mag_cursor_and_filter",
+        description: "Controls system cursor visibility during magnification (MagShowSystemCursor) and inspects or configures window inclusion/exclusion filter lists for magnifier windows (MagGetWindowFilterList, MagSetWindowFilterList).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              description: "Action to perform: 'get' (query cursor & filter state), 'set' (configure cursor or window filter), or 'filter' (set filter mode for HWND). Defaults to 'get'.",
+              enum: ["get", "set", "filter"]
+            },
+            showCursor: {
+              type: "boolean",
+              description: "Whether the system cursor is visible during magnification."
+            },
+            hwnd: {
+              type: "string",
+              description: "Target window handle in hex (e.g. '0x1002A') or decimal to query or apply filtering to."
+            },
+            mode: {
+              type: "string",
+              description: "Filter mode: 'exclude' (MW_FILTERMODE_EXCLUDE = 0) or 'include' (MW_FILTERMODE_INCLUDE = 1). Defaults to 'exclude'.",
+              enum: ["exclude", "include"]
+            }
+          }
+        }
       }
 ];
 
@@ -7616,6 +7733,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🛡️ [Windows Security Center Store & Deep Link URIs]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_mag_fullscreen_transform") {
+    const res = await orch.getMagFullscreenTransform(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔍 [Windows Full-Screen Magnification Transform]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_mag_color_effect") {
+    const res = await orch.getMagColorEffect(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎨 [Windows Magnification Display Color Effect Matrix]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_mag_input_transform") {
+    const res = await orch.getMagInputTransform(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🖱️ [Windows Magnification Input Coordinate Translation]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_mag_cursor_and_filter") {
+    const res = await orch.getMagCursorAndFilter(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `👁️ [Windows Magnifier Cursor & Window Filter State]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

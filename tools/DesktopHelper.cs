@@ -16390,6 +16390,397 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 81: Windows Magnification API Subsystem (magnification.h / magnification.dll)
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MAGCOLOREFFECT {
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 25)]
+            public float[] transform;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MAGRECT {
+            public int left;
+            public int top;
+            public int right;
+            public int bottom;
+        }
+
+        const uint MW_FILTERMODE_EXCLUDE = 0;
+        const uint MW_FILTERMODE_INCLUDE = 1;
+
+        [DllImport("magnification.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
+        public static extern bool MagInitialize();
+
+        [DllImport("magnification.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
+        public static extern bool MagUninitialize();
+
+        [DllImport("magnification.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
+        public static extern bool MagGetFullscreenTransform(out float pMagLevel, out int pxOffset, out int pyOffset);
+
+        [DllImport("magnification.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
+        public static extern bool MagSetFullscreenTransform(float magLevel, int xOffset, int yOffset);
+
+        [DllImport("magnification.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
+        public static extern bool MagGetFullscreenColorEffect(out MAGCOLOREFFECT pEffect);
+
+        [DllImport("magnification.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
+        public static extern bool MagSetFullscreenColorEffect(ref MAGCOLOREFFECT pEffect);
+
+        [DllImport("magnification.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
+        public static extern bool MagGetInputTransform(out bool pfEnabled, out MAGRECT pRectSource, out MAGRECT pRectDest);
+
+        [DllImport("magnification.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
+        public static extern bool MagSetInputTransform(bool fEnabled, ref MAGRECT pRectSource, ref MAGRECT pRectDest);
+
+        [DllImport("magnification.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
+        public static extern bool MagShowSystemCursor(bool fShowCursor);
+
+        [DllImport("magnification.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
+        public static extern int MagGetWindowFilterList(IntPtr hwnd, out uint pdwFilterMode, int count, [In, Out] IntPtr[] pHWND);
+
+        [DllImport("magnification.dll", SetLastError = true, CallingConvention = CallingConvention.Winapi)]
+        public static extern bool MagSetWindowFilterList(IntPtr hwnd, uint dwFilterMode, int count, IntPtr[] pHWND);
+
+        static bool IsIdentityMatrix(float[] m) {
+            if (m == null || m.Length != 25) return false;
+            for (int i = 0; i < 25; i++) {
+                int row = i / 5;
+                int col = i % 5;
+                float expected = (row == col) ? 1.0f : 0.0f;
+                if (Math.Abs(m[i] - expected) > 0.0001f) return false;
+            }
+            return true;
+        }
+
+        static float[] GetPresetMatrix(string preset) {
+            string p = (preset ?? "identity").Trim().ToLowerInvariant();
+            if (p == "invert") {
+                return new float[] {
+                    -1.0f,  0.0f,  0.0f, 0.0f, 0.0f,
+                     0.0f, -1.0f,  0.0f, 0.0f, 0.0f,
+                     0.0f,  0.0f, -1.0f, 0.0f, 0.0f,
+                     0.0f,  0.0f,  0.0f, 1.0f, 0.0f,
+                     1.0f,  1.0f,  1.0f, 0.0f, 1.0f
+                };
+            } else if (p == "grayscale" || p == "greyscale") {
+                return new float[] {
+                    0.299f, 0.299f, 0.299f, 0.0f, 0.0f,
+                    0.587f, 0.587f, 0.587f, 0.0f, 0.0f,
+                    0.114f, 0.114f, 0.114f, 0.0f, 0.0f,
+                    0.0f,   0.0f,   0.0f,   1.0f, 0.0f,
+                    0.0f,   0.0f,   0.0f,   0.0f, 1.0f
+                };
+            } else if (p == "high_contrast" || p == "highcontrast") {
+                return new float[] {
+                    1.5f,  0.0f,  0.0f,  0.0f, 0.0f,
+                    0.0f,  1.5f,  0.0f,  0.0f, 0.0f,
+                    0.0f,  0.0f,  1.5f,  0.0f, 0.0f,
+                    0.0f,  0.0f,  0.0f,  1.0f, 0.0f,
+                   -0.2f, -0.2f, -0.2f,  0.0f, 1.0f
+                };
+            } else if (p == "deuteranopia") {
+                return new float[] {
+                    0.625f, 0.700f, 0.0f, 0.0f, 0.0f,
+                    0.375f, 0.300f, 0.0f, 0.0f, 0.0f,
+                    0.0f,   0.0f,   1.0f, 0.0f, 0.0f,
+                    0.0f,   0.0f,   0.0f, 1.0f, 0.0f,
+                    0.0f,   0.0f,   0.0f, 0.0f, 1.0f
+                };
+            } else if (p == "protanopia") {
+                return new float[] {
+                    0.567f, 0.558f, 0.0f, 0.0f, 0.0f,
+                    0.433f, 0.442f, 0.0f, 0.0f, 0.0f,
+                    0.0f,   0.0f,   1.0f, 0.0f, 0.0f,
+                    0.0f,   0.0f,   0.0f, 1.0f, 0.0f,
+                    0.0f,   0.0f,   0.0f, 0.0f, 1.0f
+                };
+            }
+            return new float[] {
+                1.0f, 0.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 1.0f, 0.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 1.0f, 0.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, 1.0f, 0.0f,
+                0.0f, 0.0f, 0.0f, 0.0f, 1.0f
+            };
+        }
+
+        static void MagTransformCmd(string action, string magStr, string xStr, string yStr) {
+            try {
+                string act = (action ?? "get").Trim().ToLowerInvariant();
+                bool initOk = false;
+                try {
+                    initOk = MagInitialize();
+                } catch {
+                    initOk = false;
+                }
+
+                if (!initOk) {
+                    Console.WriteLine("{\"success\": false, \"apiAvailable\": false, \"error\": \"MagInitialize failed\"}");
+                    return;
+                }
+
+                bool setSuccess = true;
+                if (act == "set") {
+                    float mag = 1.0f;
+                    int x = 0, y = 0;
+                    if (!string.IsNullOrEmpty(magStr)) float.TryParse(magStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out mag);
+                    if (!string.IsNullOrEmpty(xStr)) int.TryParse(xStr, out x);
+                    if (!string.IsNullOrEmpty(yStr)) int.TryParse(yStr, out y);
+                    setSuccess = MagSetFullscreenTransform(mag, x, y);
+                } else if (act == "reset") {
+                    setSuccess = MagSetFullscreenTransform(1.0f, 0, 0);
+                }
+
+                float curMag = 1.0f;
+                int curX = 0, curY = 0;
+                bool getOk = MagGetFullscreenTransform(out curMag, out curX, out curY);
+
+                MagUninitialize();
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"action\": \"{0}\", ", EscapeJson(act)));
+                sb.Append(string.Format("\"operationSuccess\": {0}, ", setSuccess ? "true" : "false"));
+                sb.Append(string.Format("\"magLevel\": {0}, ", curMag.ToString("0.0##", System.Globalization.CultureInfo.InvariantCulture)));
+                sb.Append(string.Format("\"xOffset\": {0}, ", curX));
+                sb.Append(string.Format("\"yOffset\": {0}, ", curY));
+                sb.Append(string.Format("\"isMagnified\": {0}}}", (curMag > 1.001f || curMag < 0.999f) ? "true" : "false"));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void MagColorEffectCmd(string action, string presetOrMatrix) {
+            try {
+                string act = (action ?? "get").Trim().ToLowerInvariant();
+                bool initOk = false;
+                try {
+                    initOk = MagInitialize();
+                } catch {
+                    initOk = false;
+                }
+
+                if (!initOk) {
+                    Console.WriteLine("{\"success\": false, \"apiAvailable\": false, \"error\": \"MagInitialize failed\"}");
+                    return;
+                }
+
+                bool opSuccess = true;
+                string appliedPreset = null;
+
+                if (act == "set" || act == "apply") {
+                    float[] matrix = null;
+                    if (!string.IsNullOrEmpty(presetOrMatrix) && presetOrMatrix.Contains(",")) {
+                        string[] parts = presetOrMatrix.Split(new char[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (parts.Length == 25) {
+                            matrix = new float[25];
+                            for (int i = 0; i < 25; i++) {
+                                float.TryParse(parts[i], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out matrix[i]);
+                            }
+                            appliedPreset = "custom";
+                        }
+                    }
+                    if (matrix == null) {
+                        matrix = GetPresetMatrix(presetOrMatrix);
+                        appliedPreset = (presetOrMatrix ?? "identity").Trim().ToLowerInvariant();
+                    }
+
+                    var effect = new MAGCOLOREFFECT();
+                    effect.transform = matrix;
+                    opSuccess = MagSetFullscreenColorEffect(ref effect);
+                } else if (act == "reset") {
+                    var effect = new MAGCOLOREFFECT();
+                    effect.transform = GetPresetMatrix("identity");
+                    opSuccess = MagSetFullscreenColorEffect(ref effect);
+                    appliedPreset = "identity";
+                }
+
+                var curEffect = new MAGCOLOREFFECT();
+                bool getOk = MagGetFullscreenColorEffect(out curEffect);
+
+                MagUninitialize();
+
+                float[] activeMatrix = (curEffect.transform != null && curEffect.transform.Length == 25) 
+                    ? curEffect.transform 
+                    : GetPresetMatrix("identity");
+
+                bool isIdent = IsIdentityMatrix(activeMatrix);
+
+                var matrixStrs = new List<string>();
+                for (int i = 0; i < 25; i++) {
+                    matrixStrs.Add(activeMatrix[i].ToString("0.0###", System.Globalization.CultureInfo.InvariantCulture));
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"action\": \"{0}\", ", EscapeJson(act)));
+                sb.Append(string.Format("\"operationSuccess\": {0}, ", opSuccess ? "true" : "false"));
+                sb.Append(string.Format("\"preset\": \"{0}\", ", EscapeJson(appliedPreset ?? (isIdent ? "identity" : "custom"))));
+                sb.Append(string.Format("\"isIdentity\": {0}, ", isIdent ? "true" : "false"));
+                sb.Append("\"matrix\": [");
+                sb.Append(string.Join(", ", matrixStrs.ToArray()));
+                sb.Append("]}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void MagInputTransformCmd(string action, string enabledStr, string srcRectStr, string dstRectStr) {
+            try {
+                string act = (action ?? "get").Trim().ToLowerInvariant();
+                bool initOk = false;
+                try {
+                    initOk = MagInitialize();
+                } catch {
+                    initOk = false;
+                }
+
+                if (!initOk) {
+                    Console.WriteLine("{\"success\": false, \"apiAvailable\": false, \"error\": \"MagInitialize failed\"}");
+                    return;
+                }
+
+                bool opSuccess = true;
+                if (act == "set") {
+                    bool enabled = false;
+                    if (!string.IsNullOrEmpty(enabledStr)) bool.TryParse(enabledStr, out enabled);
+                    var src = new MAGRECT();
+                    var dst = new MAGRECT();
+                    if (!string.IsNullOrEmpty(srcRectStr) && srcRectStr.Contains(",")) {
+                        string[] sp = srcRectStr.Split(new char[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (sp.Length >= 4) {
+                            int.TryParse(sp[0], out src.left);
+                            int.TryParse(sp[1], out src.top);
+                            int.TryParse(sp[2], out src.right);
+                            int.TryParse(sp[3], out src.bottom);
+                        }
+                    }
+                    if (!string.IsNullOrEmpty(dstRectStr) && dstRectStr.Contains(",")) {
+                        string[] dp = dstRectStr.Split(new char[] { ',', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                        if (dp.Length >= 4) {
+                            int.TryParse(dp[0], out dst.left);
+                            int.TryParse(dp[1], out dst.top);
+                            int.TryParse(dp[2], out dst.right);
+                            int.TryParse(dp[3], out dst.bottom);
+                        }
+                    }
+                    opSuccess = MagSetInputTransform(enabled, ref src, ref dst);
+                } else if (act == "reset") {
+                    var zeroRect = new MAGRECT();
+                    opSuccess = MagSetInputTransform(false, ref zeroRect, ref zeroRect);
+                }
+
+                bool curEnabled = false;
+                var curSrc = new MAGRECT();
+                var curDst = new MAGRECT();
+                bool getOk = MagGetInputTransform(out curEnabled, out curSrc, out curDst);
+
+                MagUninitialize();
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"action\": \"{0}\", ", EscapeJson(act)));
+                sb.Append(string.Format("\"operationSuccess\": {0}, ", opSuccess ? "true" : "false"));
+                sb.Append(string.Format("\"enabled\": {0}, ", curEnabled ? "true" : "false"));
+                sb.Append(string.Format("\"sourceRect\": {{\"left\": {0}, \"top\": {1}, \"right\": {2}, \"bottom\": {3}}}, ", curSrc.left, curSrc.top, curSrc.right, curSrc.bottom));
+                sb.Append(string.Format("\"destRect\": {{\"left\": {0}, \"top\": {1}, \"right\": {2}, \"bottom\": {3}}}}}", curDst.left, curDst.top, curDst.right, curDst.bottom));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void MagCursorAndFilterCmd(string action, string showCursorStr, string hwndStr, string modeStr) {
+            try {
+                string act = (action ?? "get").Trim().ToLowerInvariant();
+                bool initOk = false;
+                try {
+                    initOk = MagInitialize();
+                } catch {
+                    initOk = false;
+                }
+
+                if (!initOk) {
+                    Console.WriteLine("{\"success\": false, \"apiAvailable\": false, \"error\": \"MagInitialize failed\"}");
+                    return;
+                }
+
+                bool cursorOpSuccess = true;
+                bool showCursor = true;
+                if (!string.IsNullOrEmpty(showCursorStr)) {
+                    bool.TryParse(showCursorStr, out showCursor);
+                    cursorOpSuccess = MagShowSystemCursor(showCursor);
+                } else {
+                    cursorOpSuccess = MagShowSystemCursor(true);
+                }
+
+                IntPtr targetHwnd = IntPtr.Zero;
+                if (!string.IsNullOrEmpty(hwndStr)) {
+                    long hVal = 0;
+                    if (hwndStr.StartsWith("0x", StringComparison.OrdinalIgnoreCase)) {
+                        long.TryParse(hwndStr.Substring(2), System.Globalization.NumberStyles.HexNumber, null, out hVal);
+                    } else {
+                        long.TryParse(hwndStr, out hVal);
+                    }
+                    if (hVal != 0) targetHwnd = new IntPtr(hVal);
+                }
+
+                uint filterMode = MW_FILTERMODE_EXCLUDE;
+                int count = 0;
+                var windowList = new List<string>();
+
+                if (targetHwnd != IntPtr.Zero) {
+                    if (act == "set" || act == "filter") {
+                        if (!string.IsNullOrEmpty(modeStr) && modeStr.Trim().ToLowerInvariant() == "include") {
+                            filterMode = MW_FILTERMODE_INCLUDE;
+                        }
+                        MagSetWindowFilterList(targetHwnd, filterMode, 0, new IntPtr[0]);
+                    }
+
+                    int queryCount = MagGetWindowFilterList(targetHwnd, out filterMode, 0, null);
+                    if (queryCount > 0) {
+                        var hwnds = new IntPtr[queryCount];
+                        int got = MagGetWindowFilterList(targetHwnd, out filterMode, queryCount, hwnds);
+                        if (got > 0) {
+                            count = got;
+                            for (int i = 0; i < got; i++) {
+                                var titleSb = new StringBuilder(256);
+                                GetWindowText(hwnds[i], titleSb, 256);
+                                windowList.Add(string.Format("{{\"hwnd\": \"0x{0:X}\", \"title\": \"{1}\"}}", hwnds[i].ToInt64(), EscapeJson(titleSb.ToString())));
+                            }
+                        }
+                    }
+                }
+
+                MagUninitialize();
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"action\": \"{0}\", ", EscapeJson(act)));
+                sb.Append(string.Format("\"cursorOperationSuccess\": {0}, ", cursorOpSuccess ? "true" : "false"));
+                sb.Append(string.Format("\"systemCursorVisible\": {0}, ", showCursor ? "true" : "false"));
+                sb.Append(string.Format("\"targetHwnd\": \"0x{0:X}\", ", targetHwnd.ToInt64()));
+                sb.Append(string.Format("\"filterMode\": \"{0}\", ", filterMode == MW_FILTERMODE_INCLUDE ? "include" : "exclude"));
+                sb.Append(string.Format("\"filterModeCode\": {0}, ", filterMode));
+                sb.Append(string.Format("\"filteredWindowCount\": {0}, ", count));
+                sb.Append("\"filteredWindows\": [");
+                sb.Append(string.Join(", ", windowList.ToArray()));
+                sb.Append("]}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -19772,6 +20163,28 @@ namespace GeminiSuperDesktop {
                 WscStatusCmd();
             } else if (cmd == "wsc_store_uri" || cmd == "security_center_store_uri" || cmd == "wsc-store-uri") {
                 WscStoreUriCmd();
+            } else if (cmd == "mag_transform" || cmd == "magnification_transform" || cmd == "mag-transform") {
+                string act = args.Length >= 2 ? args[1] : "get";
+                string mag = args.Length >= 3 ? args[2] : null;
+                string x = args.Length >= 4 ? args[3] : null;
+                string y = args.Length >= 5 ? args[4] : null;
+                MagTransformCmd(act, mag, x, y);
+            } else if (cmd == "mag_color" || cmd == "magnification_color" || cmd == "mag-color") {
+                string act = args.Length >= 2 ? args[1] : "get";
+                string preset = args.Length >= 3 ? args[2] : null;
+                MagColorEffectCmd(act, preset);
+            } else if (cmd == "mag_input_transform" || cmd == "magnification_input" || cmd == "mag-input-transform") {
+                string act = args.Length >= 2 ? args[1] : "get";
+                string en = args.Length >= 3 ? args[2] : null;
+                string src = args.Length >= 4 ? args[3] : null;
+                string dst = args.Length >= 5 ? args[4] : null;
+                MagInputTransformCmd(act, en, src, dst);
+            } else if (cmd == "mag_cursor_and_filter" || cmd == "magnification_filter" || cmd == "mag-filter") {
+                string act = args.Length >= 2 ? args[1] : "get";
+                string cursor = args.Length >= 3 ? args[2] : null;
+                string hwnd = args.Length >= 4 ? args[3] : null;
+                string mode = args.Length >= 5 ? args[4] : null;
+                MagCursorAndFilterCmd(act, cursor, hwnd, mode);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

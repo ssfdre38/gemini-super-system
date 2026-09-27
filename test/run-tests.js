@@ -4667,10 +4667,68 @@ async function run() {
     assert(typeof res.storeCatalogUri === "string" && res.storeCatalogUri.startsWith("ms-windows-store://"));
   });
 
-  it("All 228 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 66: Windows Magnification API Subsystem (magnification.h / magnification.dll)
+  console.log("\n\x1b[1m[Suite 66: Windows Magnification API Subsystem]\x1b[0m");
+
+  await itAsync("getMagFullscreenTransform queries full-screen magnification level and offsets", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getMagFullscreenTransform({ action: "get" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getMagFullscreenTransform failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.magLevel === "number");
+    assert(typeof res.xOffset === "number");
+    assert(typeof res.yOffset === "number");
+    assert(typeof res.isMagnified === "boolean");
+  });
+
+  await itAsync("getMagColorEffect inspects real-time color transformation matrix and presets", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getMagColorEffect({ action: "get" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getMagColorEffect failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.preset === "string");
+    assert(typeof res.isIdentity === "boolean");
+    assert(Array.isArray(res.matrix));
+    assert.strictEqual(res.matrix.length, 25);
+  });
+
+  await itAsync("getMagInputTransform inspects input coordinate scaling translation rectangles", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getMagInputTransform({ action: "get" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getMagInputTransform failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.enabled === "boolean");
+    assert(res.sourceRect !== null && typeof res.sourceRect === "object");
+    assert(res.destRect !== null && typeof res.destRect === "object");
+  });
+
+  await itAsync("getMagCursorAndFilter queries system cursor visibility and window filter lists", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getMagCursorAndFilter({ action: "get" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getMagCursorAndFilter failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.cursorOperationSuccess === "boolean");
+    assert(typeof res.systemCursorVisible === "boolean");
+    assert(typeof res.filterMode === "string");
+    assert(Array.isArray(res.filteredWindows));
+  });
+
+  it("All 232 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 228);
+    assert.strictEqual(SYSTEM_TOOLS.length, 232);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -4832,6 +4890,10 @@ async function run() {
     assert(toolNames.includes("super_security_center_products"));
     assert(toolNames.includes("super_security_center_status"));
     assert(toolNames.includes("super_security_center_store_uri"));
+    assert(toolNames.includes("super_mag_fullscreen_transform"));
+    assert(toolNames.includes("super_mag_color_effect"));
+    assert(toolNames.includes("super_mag_input_transform"));
+    assert(toolNames.includes("super_mag_cursor_and_filter"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

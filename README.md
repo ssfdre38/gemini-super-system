@@ -96,6 +96,7 @@
   - [78. Windows Update Agent (WUA) & Servicing Subsystem](#78--windows-update-agent-wua--servicing-subsystem-wuapih--wuerrorh)
   - [79. Windows Color System (WCS) Subsystem](#79--windows-color-system-wcs-subsystem-icmh--mscmsdll)
   - [80. Windows Security Center (WSC) Subsystem](#80-️-windows-security-center-wsc-subsystem-wscapih--wscapidll--rootsecuritycenter2)
+  - [81. Windows Magnification API Subsystem](#81--windows-magnification-api-subsystem-magnificationh--magnificationdll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1066,6 +1067,18 @@ Directly interfaces with the Windows Security Center API and the unified `root\S
 - **AntiMalware Deep Links & Store Acquisition URIs (`super_security_center_store_uri`)**: Retrieves registered antimalware acquisition endpoints via `WscGetAntiMalwareUri` and resolves Windows Security deep-link protocols (`windowsdefender://providers/`) and Store URIs.
 - **228 Tools Milestone**: Reaches **228 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **65 comprehensive test suites** and **61 environment health checks**.
 - **Native MCP Tools**: `super_security_center_health`, `super_security_center_products`, `super_security_center_status`, `super_security_center_store_uri`.
+
+---
+
+## 81. 🔍 Windows Magnification API Subsystem (`magnification.h` / `magnification.dll`)
+
+Directly interfaces with the Windows Magnification architecture and hardware display accessibility transform pipeline via `magnification.dll`:
+- **Full-Screen Magnification & Viewport Offsets (`super_mag_fullscreen_transform`)**: Queries and applies full-screen display magnification scaling factors (e.g. 1.0x normal, 1.5x, 2.0x zoom) and coordinate offsets via `MagGetFullscreenTransform` and `MagSetFullscreenTransform`.
+- **Real-Time Display Color Matrix Transformations (`super_mag_color_effect`)**: Queries, applies, and resets 5x5 RGBAW color transformation matrices directly on the display hardware via `MagGetFullscreenColorEffect` and `MagSetFullscreenColorEffect`. Supports presets including Identity, Color Inversion, Grayscale (NTSC luminance), High Contrast, Deuteranopia (green-blindness), Protanopia (red-blindness), and custom 25-element matrices.
+- **Input Coordinate Translation Rectangles (`super_mag_input_transform`)**: Queries and configures pen, touch, and pointer input coordinate translation and scaling bounding boxes during magnification via `MagGetInputTransform` and `MagSetInputTransform`.
+- **System Cursor Visibility & Window Filtering (`super_mag_cursor_and_filter`)**: Controls system cursor visibility during magnification via `MagShowSystemCursor` and queries or configures window inclusion/exclusion filtering (`MW_FILTERMODE_EXCLUDE`, `MW_FILTERMODE_INCLUDE`) via `MagGetWindowFilterList` and `MagSetWindowFilterList` to exclude transparent HUDs, overlays, or private dialogs.
+- **232 Tools Milestone**: Reaches **232 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **66 comprehensive test suites** and **62 environment health checks**.
+- **Native MCP Tools**: `super_mag_fullscreen_transform`, `super_mag_color_effect`, `super_mag_input_transform`, `super_mag_cursor_and_filter`.
 
 ---
 
