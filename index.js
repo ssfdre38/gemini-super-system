@@ -4093,6 +4093,56 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_winsat_experience_index",
+        description: "Queries Windows System Assessment Tool (WinSAT) Windows Experience Index (WEI) rating and component scores (Memory, CPU, Disk, D3D, Graphics) via CQueryWinSAT COM.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_winsat_datastore_reports",
+        description: "Discovers and audits historical benchmark XML report files in %WINDIR%\\Performance\\WinSAT\\DataStore, filtering by component (Formal, Cpu, Disk, Dwm).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              description: "Optional component filter string (e.g. 'Formal', 'Cpu', 'Disk', 'Dwm'). Defaults to all XML reports."
+            }
+          }
+        }
+      },
+      {
+        name: "super_winsat_run_assessment",
+        description: "Formats, dry-runs, or actuates an assessment benchmark via winsat.exe (cpu, mem, disk, dwm, formal, features). Defaults to safe dry-run mode unless live=true.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            subsystem: {
+              type: "string",
+              description: "Assessment subsystem to benchmark: 'cpu', 'mem', 'disk', 'dwm', 'formal', 'features', 'media'. Defaults to 'cpu'."
+            },
+            live: {
+              type: "boolean",
+              description: "Must be explicitly set to true to execute live benchmark workload. Defaults to false (dry-run)."
+            },
+            extraFlags: {
+              type: "string",
+              description: "Optional additional flags to append to winsat.exe (e.g. '-v', '-restart clean')."
+            }
+          }
+        }
+      },
+      {
+        name: "super_winsat_hardware_assessment",
+        description: "Aggregates WinSAT assessment metrics, processor topology, memory size, storage metrics, and XML reports into a unified hardware evaluation report.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
 ];
 
@@ -7234,6 +7284,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `📡 [Windows WinINet Session Options Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_winsat_experience_index") {
+    const res = await orch.getWinSatExperienceIndex();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📊 [Windows WinSAT Experience Index Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_winsat_datastore_reports") {
+    const res = await orch.getWinSatDatastoreReports(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📁 [Windows WinSAT DataStore Reports Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_winsat_run_assessment") {
+    const res = await orch.runWinSatAssessment(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows WinSAT Assessment Execution Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_winsat_hardware_assessment") {
+    const res = await orch.getWinSatHardwareAssessment();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💻 [Windows WinSAT Unified Hardware Assessment Telemetry]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

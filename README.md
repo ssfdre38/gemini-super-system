@@ -92,6 +92,7 @@
   - [74. Windows Power, Shutdown & System Initiation Subsystem](#74--windows-power-shutdown--system-initiation-subsystem-initiateshutdownh--reasonh--advapi32dll)
   - [75. Windows HTTP Services (WinHTTP) Subsystem](#75--windows-http-services-winhttp-subsystem-winhttph--winhttpdll)
   - [76. Windows Internet (WinINet) Subsystem](#76--windows-internet-wininet-subsystem-winineth--wininetdll)
+  - [77. Windows System Assessment Tool (WinSAT) Subsystem](#77--windows-system-assessment-tool-winsat-subsystem-winsatcominterfaceih--winsatexe)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1014,6 +1015,18 @@ Directly interfaces with the Windows Internet (WinINet) protocol and cache stack
 - **Session Options & Concurrency Limits (`super_wininet_session_options`)**: Opens an unmediated WinINet session (`InternetOpenW`) and queries socket transport limits via `InternetQueryOptionW`: connect, send, receive, data send, and data receive timeouts in milliseconds, max connections per server (HTTP/1.1 and HTTP/1.0), and security flags.
 - **212 Tools Milestone**: Reaches **212 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **61 comprehensive test suites (195/195 tests passing 100%)** and **57 environment health checks**.
 - **Native MCP Tools**: `super_wininet_connected_state`, `super_wininet_check_connection`, `super_wininet_cache_entries`, `super_wininet_session_options`.
+
+---
+
+## 77. 📊 Windows System Assessment Tool (WinSAT) Subsystem (`winsatcominterfacei.h` / `winsat.exe`)
+
+Directly interfaces with the Windows System Assessment Tool (WinSAT) and Windows Experience Index (WEI) infrastructure via native Win32 COM `CQueryWinSAT` and `winsat.exe`:
+- **Windows Experience Index Telemetry (`super_winsat_experience_index`)**: Directly instantiates the native WinSAT COM query engine (`CLSID_CQueryWinSAT` = `F3BDFAD3-F276-49E9-9B17-C474F48F0764`, `IQueryRecentWinSATAssessment`, `IProvideWinSATResultsInfo`) to retrieve the system overall performance rating (1.0 to 9.9), assessment state flags (`VALID`, `INCOHERENT_WITH_HARDWARE`, `NOT_AVAILABLE`, `INVALID`), and five component sub-scores: Memory (RAM), Processor (CPU), Primary Hard Disk, Gaming Graphics (D3D), and Desktop Graphics.
+- **Historical Benchmark DataStore Auditing (`super_winsat_datastore_reports`)**: Audits `%WINDIR%\Performance\WinSAT\DataStore` for XML benchmark documents. Filters reports by subsystem (`Formal`, `Cpu`, `Memory`, `Disk`, `Dwm`), extracting report creation timestamps, file sizes, and benchmark history.
+- **Benchmark Workload Execution & Dry-Run Guardrails (`super_winsat_run_assessment`)**: Formats, validates, dry-runs, or actuates assessment workloads via `winsat.exe` for targeted hardware evaluation (`cpu`, `mem`, `disk`, `dwm`, `formal`, `features`, `media`). Defaults to non-destructive dry-run validation mode for agent stability unless explicitly confirmed by the operator (`live: true`).
+- **Unified Hardware Assessment Profile (`super_winsat_hardware_assessment`)**: Combines WinSAT scores, multi-core processor topology, physical RAM capacity, storage volume free space, and DataStore report metrics into a unified hardware evaluation report.
+- **216 Tools Milestone**: Reaches **216 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **62 comprehensive test suites (199/199 tests passing 100%)** and **58 environment health checks**.
+- **Native MCP Tools**: `super_winsat_experience_index`, `super_winsat_datastore_reports`, `super_winsat_run_assessment`, `super_winsat_hardware_assessment`.
 
 ---
 

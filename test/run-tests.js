@@ -4418,10 +4418,70 @@ async function run() {
     assert(typeof res.securityFlagsRaw === "string");
   });
 
-  it("All 212 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 62: Windows System Assessment Tool (WinSAT) Subsystem (winsatcominterfacei.h / winsat.exe)
+  console.log("\n\x1b[1m[Suite 62: Windows System Assessment Tool (WinSAT) Subsystem]\x1b[0m");
+
+  await itAsync("getWinSatExperienceIndex queries Windows Experience Index rating and components via CQueryWinSAT COM", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWinSatExperienceIndex();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWinSatExperienceIndex failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.systemRating === "number");
+    assert(typeof res.state === "string");
+    assert(typeof res.components === "object");
+    assert(res.components.memory && res.components.cpu && res.components.disk);
+    assert(typeof res.components.cpu.description === "string");
+    assert(typeof res.components.memory.description === "string");
+  });
+
+  await itAsync("getWinSatDatastoreReports audits historical WinSAT XML reports in DataStore directory", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWinSatDatastoreReports();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWinSatDatastoreReports failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.dataStoreExists === "boolean");
+    assert(typeof res.totalReports === "number");
+    assert(Array.isArray(res.reports));
+  });
+
+  await itAsync("runWinSatAssessment dry-runs benchmark workload safely by default", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.runWinSatAssessment({ subsystem: "cpu", live: false });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "runWinSatAssessment failed: " + JSON.stringify(res));
+    assert.strictEqual(res.dryRun, true);
+    assert.strictEqual(res.validated, true);
+    assert.strictEqual(res.subsystem, "cpu");
+    assert(typeof res.commandLine === "string");
+  });
+
+  await itAsync("getWinSatHardwareAssessment aggregates processor, memory, and storage metrics", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWinSatHardwareAssessment();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWinSatHardwareAssessment failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.processor === "object");
+    assert(typeof res.processor.logicalCores === "number");
+    assert(typeof res.memory === "object");
+    assert(typeof res.storage === "object");
+    assert(typeof res.dataStoreReportsCount === "number");
+  });
+
+  it("All 216 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 212);
+    assert.strictEqual(SYSTEM_TOOLS.length, 216);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -4567,6 +4627,10 @@ async function run() {
     assert(toolNames.includes("super_wininet_check_connection"));
     assert(toolNames.includes("super_wininet_cache_entries"));
     assert(toolNames.includes("super_wininet_session_options"));
+    assert(toolNames.includes("super_winsat_experience_index"));
+    assert(toolNames.includes("super_winsat_datastore_reports"));
+    assert(toolNames.includes("super_winsat_run_assessment"));
+    assert(toolNames.includes("super_winsat_hardware_assessment"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

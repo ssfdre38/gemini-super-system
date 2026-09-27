@@ -15132,6 +15132,254 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 77: Windows System Assessment Tool (WinSAT) Subsystem (winsatcominterfacei.h / winsat.exe)
+
+        [ComImport]
+        [Guid("F8AD5D1F-3B47-4BDC-9375-7C6B1DA4ECA7")]
+        [InterfaceType(ComInterfaceType.InterfaceIsDual)]
+        interface IQueryRecentWinSATAssessment {
+            void get_XML([MarshalAs(UnmanagedType.BStr)] string xPath, [MarshalAs(UnmanagedType.BStr)] string namespaces, out IntPtr ppDomNodeList);
+            [return: MarshalAs(UnmanagedType.Interface)]
+            IProvideWinSATResultsInfo get_Info();
+        }
+
+        [ComImport]
+        [Guid("F8334D5D-568E-4075-875F-9DF341506640")]
+        [InterfaceType(ComInterfaceType.InterfaceIsDual)]
+        interface IProvideWinSATResultsInfo {
+            [return: MarshalAs(UnmanagedType.Interface)]
+            IProvideWinSATAssessmentInfo GetAssessmentInfo(int assessment);
+            int get_AssessmentState();
+            void get_AssessmentDateTime(out IntPtr pFileTime);
+            float get_SystemRating();
+            [return: MarshalAs(UnmanagedType.BStr)]
+            string get_RatingStateDesc();
+        }
+
+        [ComImport]
+        [Guid("0CD1C380-52D3-4678-AC6F-E929E480BE9E")]
+        [InterfaceType(ComInterfaceType.InterfaceIsDual)]
+        interface IProvideWinSATAssessmentInfo {
+            float get_Score();
+            [return: MarshalAs(UnmanagedType.BStr)]
+            string get_Title();
+            [return: MarshalAs(UnmanagedType.BStr)]
+            string get_Description();
+        }
+
+        static void WinSatExperienceIndexCmd() {
+            try {
+                Type t = Type.GetTypeFromCLSID(new Guid("F3BDFAD3-F276-49E9-9B17-C474F48F0764"));
+                if (t == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"WinSAT CQueryWinSAT COM class not found\"}");
+                    return;
+                }
+
+                object inst = Activator.CreateInstance(t);
+                if (inst == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Failed to instantiate CQueryWinSAT COM object\"}");
+                    return;
+                }
+
+                var query = (IQueryRecentWinSATAssessment)inst;
+                var info = query.get_Info();
+                if (info == null) {
+                    Console.WriteLine("{\"success\": true, \"apiAvailable\": true, \"hasAssessment\": false, \"systemRating\": 0.0, \"state\": \"NOT_AVAILABLE\", \"stateCode\": 3, \"description\": \"No assessment present\"}");
+                    return;
+                }
+
+                float systemRating = 0;
+                try { systemRating = info.get_SystemRating(); } catch {}
+
+                int stateCode = 0;
+                try { stateCode = info.get_AssessmentState(); } catch {}
+
+                string stateDesc = "";
+                try { stateDesc = info.get_RatingStateDesc() ?? ""; } catch {}
+
+                string stateStr = "UNKNOWN";
+                switch (stateCode) {
+                    case 1: stateStr = "VALID"; break;
+                    case 2: stateStr = "INCOHERENT_WITH_HARDWARE"; break;
+                    case 3: stateStr = "NOT_AVAILABLE"; break;
+                    case 4: stateStr = "INVALID"; break;
+                }
+
+                var compKeys = new string[] { "memory", "cpu", "disk", "d3d", "graphics" };
+                var sbComps = new StringBuilder();
+
+                for (int i = 0; i <= 4; i++) {
+                    string title = "";
+                    float score = 0;
+                    string desc = "";
+                    try {
+                        var sub = info.GetAssessmentInfo(i);
+                        if (sub != null) {
+                            title = sub.get_Title() ?? "";
+                            score = sub.get_Score();
+                            desc = sub.get_Description() ?? "";
+                        }
+                    } catch {}
+
+                    if (i > 0) sbComps.Append(", ");
+                    sbComps.Append(string.Format("\"{0}\": {{\"title\": \"{1}\", \"score\": {2}, \"description\": \"{3}\"}}",
+                        compKeys[i], EscapeJson(title), score.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture), EscapeJson(desc)));
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, \"hasAssessment\": true, ");
+                sb.Append(string.Format("\"systemRating\": {0}, ", systemRating.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)));
+                sb.Append(string.Format("\"state\": \"{0}\", \"stateCode\": {1}, ", stateStr, stateCode));
+                sb.Append(string.Format("\"description\": \"{0}\", ", EscapeJson(stateDesc)));
+                sb.Append(string.Format("\"components\": {{{0}}}}}", sbComps.ToString()));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WinSatDatastoreReportsCmd(string filter) {
+            try {
+                string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                string dataStore = Path.Combine(winDir, "Performance\\WinSAT\\DataStore");
+
+                if (!Directory.Exists(dataStore)) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"dataStoreExists\": false, \"dataStorePath\": \"{0}\", \"totalReports\": 0, \"reports\": []}}", EscapeJson(dataStore)));
+                    return;
+                }
+
+                string pattern = "*.xml";
+                if (!string.IsNullOrEmpty(filter)) {
+                    pattern = "*" + filter + "*.xml";
+                }
+
+                var files = Directory.GetFiles(dataStore, pattern);
+                var sbReports = new StringBuilder();
+                int count = 0;
+
+                foreach (var f in files) {
+                    try {
+                        var fi = new FileInfo(f);
+                        if (count > 0) sbReports.Append(", ");
+                        sbReports.Append("{");
+                        sbReports.Append(string.Format("\"fileName\": \"{0}\", ", EscapeJson(fi.Name)));
+                        sbReports.Append(string.Format("\"sizeBytes\": {0}, ", fi.Length));
+                        sbReports.Append(string.Format("\"creationTime\": \"{0:O}\", ", fi.CreationTimeUtc));
+                        sbReports.Append(string.Format("\"lastWriteTime\": \"{0:O}\"", fi.LastWriteTimeUtc));
+                        sbReports.Append("}");
+                        count++;
+                    } catch {}
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"apiAvailable\": true, \"dataStoreExists\": true, \"dataStorePath\": \"{0}\", \"filter\": \"{1}\", \"totalReports\": {2}, \"reports\": [{3}]}}",
+                    EscapeJson(dataStore), EscapeJson(pattern), count, sbReports.ToString()
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WinSatRunAssessmentCmd(string subsystem, bool live, string extraFlags) {
+            try {
+                string sub = string.IsNullOrEmpty(subsystem) ? "cpu" : subsystem.ToLowerInvariant().Trim();
+                var validSubs = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+                    "cpu", "mem", "disk", "dwm", "formal", "features", "media", "mfmedia", "dwmformal", "cpuformal", "memformal", "graphicsformal", "diskformal"
+                };
+
+                if (!validSubs.Contains(sub)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Invalid WinSAT assessment subsystem '{0}'. Valid options: cpu, mem, disk, dwm, formal, features, media\"}}", EscapeJson(sub)));
+                    return;
+                }
+
+                string winsatExe = Path.Combine(Environment.SystemDirectory, "winsat.exe");
+                bool exeExists = File.Exists(winsatExe);
+
+                string cmdLine = string.Format("\"{0}\" {1} {2}", winsatExe, sub, extraFlags ?? "").Trim();
+
+                if (!live) {
+                    // Safe Dry-Run Mode
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"apiAvailable\": {0}, \"dryRun\": true, \"validated\": true, \"subsystem\": \"{1}\", \"executable\": \"{2}\", \"commandLine\": \"{3}\", \"message\": \"Dry-run validated successfully. Set live=true to actuate benchmark workload.\"}}",
+                        exeExists ? "true" : "false", EscapeJson(sub), EscapeJson(winsatExe), EscapeJson(cmdLine)
+                    ));
+                    return;
+                }
+
+                // Live Execution
+                var psi = new ProcessStartInfo();
+                psi.FileName = winsatExe;
+                psi.Arguments = string.Format("{0} {1}", sub, extraFlags ?? "").Trim();
+                psi.UseShellExecute = false;
+                psi.RedirectStandardOutput = true;
+                psi.RedirectStandardError = true;
+                psi.CreateNoWindow = true;
+
+                var sw = Stopwatch.StartNew();
+                using (var proc = Process.Start(psi)) {
+                    string stdout = proc.StandardOutput.ReadToEnd();
+                    string stderr = proc.StandardError.ReadToEnd();
+                    proc.WaitForExit(120000); // 2 minute timeout
+                    sw.Stop();
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"apiAvailable\": true, \"dryRun\": false, \"executed\": true, \"subsystem\": \"{0}\", \"exitCode\": {1}, \"durationMs\": {2}, \"stdoutSnippet\": \"{3}\", \"stderrSnippet\": \"{4}\"}}",
+                        EscapeJson(sub), proc.ExitCode, sw.ElapsedMilliseconds, EscapeJson(stdout.Length > 500 ? stdout.Substring(0, 500) + "..." : stdout), EscapeJson(stderr)
+                    ));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WinSatHardwareAssessmentCmd() {
+            try {
+                Type t = Type.GetTypeFromCLSID(new Guid("F3BDFAD3-F276-49E9-9B17-C474F48F0764"));
+                var query = t != null ? (IQueryRecentWinSATAssessment)Activator.CreateInstance(t) : null;
+                var info = query != null ? query.get_Info() : null;
+
+                float systemRating = 0;
+                string stateDesc = "Unrated";
+                string memDesc = "";
+                string cpuDesc = Environment.GetEnvironmentVariable("PROCESSOR_IDENTIFIER") ?? "";
+                string diskDesc = "";
+
+                if (info != null) {
+                    try { systemRating = info.get_SystemRating(); } catch {}
+                    try { stateDesc = info.get_RatingStateDesc() ?? "Unrated"; } catch {}
+                    try {
+                        var mem = info.GetAssessmentInfo(0);
+                        if (mem != null) memDesc = mem.get_Description();
+                        var cpu = info.GetAssessmentInfo(1);
+                        if (cpu != null) cpuDesc = cpu.get_Description();
+                        var disk = info.GetAssessmentInfo(2);
+                        if (disk != null) diskDesc = disk.get_Description();
+                    } catch {}
+                }
+
+                int procCount = Environment.ProcessorCount;
+                string winDir = Environment.GetFolderPath(Environment.SpecialFolder.Windows);
+                string dataStore = Path.Combine(winDir, "Performance\\WinSAT\\DataStore");
+                int reportsCount = Directory.Exists(dataStore) ? Directory.GetFiles(dataStore, "*.xml").Length : 0;
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"systemRating\": {0}, ", systemRating.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)));
+                sb.Append(string.Format("\"ratingDescription\": \"{0}\", ", EscapeJson(stateDesc)));
+                sb.Append(string.Format("\"processor\": {{\"description\": \"{0}\", \"logicalCores\": {1}}}, ", EscapeJson(cpuDesc), procCount));
+                sb.Append(string.Format("\"memory\": {{\"description\": \"{0}\"}}, ", EscapeJson(memDesc)));
+                sb.Append(string.Format("\"storage\": {{\"description\": \"{0}\"}}, ", EscapeJson(diskDesc)));
+                sb.Append(string.Format("\"dataStoreReportsCount\": {0}}}", reportsCount));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -18463,6 +18711,18 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "wininet_session_options" || cmd == "wininet-session-options") {
                 string agent = args.Length >= 2 ? args[1] : "";
                 WinInetSessionOptionsCmd(agent);
+            } else if (cmd == "winsat_experience_index" || cmd == "winsat-experience-index") {
+                WinSatExperienceIndexCmd();
+            } else if (cmd == "winsat_datastore_reports" || cmd == "winsat-datastore-reports") {
+                string filter = args.Length >= 2 ? args[1] : "";
+                WinSatDatastoreReportsCmd(filter);
+            } else if (cmd == "winsat_run_assessment" || cmd == "winsat-run-assessment") {
+                string sub = args.Length >= 2 ? args[1] : "cpu";
+                bool live = args.Length >= 3 && (args[2].ToLowerInvariant() == "live" || args[2].ToLowerInvariant() == "true");
+                string extra = args.Length >= 4 ? args[3] : "";
+                WinSatRunAssessmentCmd(sub, live, extra);
+            } else if (cmd == "winsat_hardware_assessment" || cmd == "winsat-hardware-assessment") {
+                WinSatHardwareAssessmentCmd();
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
