@@ -103,6 +103,7 @@
   - [85. Windows Native Wifi Subsystem](#85--windows-native-wifi-subsystem-wlanapih--wlanapidll)
   - [86. Windows Sensor and Location Platform Subsystem](#86--windows-sensor-and-location-platform-subsystem-sensorsapih--sensorsh--sensorsapidll)
   - [87. Windows DirectX Graphics Infrastructure (DXGI) Subsystem](#87--windows-directx-graphics-infrastructure-dxgi-subsystem-dxgih--dxgi1_2h--dxgi1_3h--dxgidll)
+  - [88. Windows Delivery Optimization (DO) Subsystem](#88--windows-delivery-optimization-do-subsystem-deliveryoptimizationh--deliveryoptimizationdll--dosvc)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1158,6 +1159,15 @@ Directly interfaces with Microsoft's bare-metal DirectX Graphics Infrastructure 
 - **GPU Video Memory Budget & Usage (`super_dxgi_video_memory_budget`)**: Queries live video memory budget limits and real-time usage via `IDXGIAdapter3::QueryVideoMemoryInfo`. Analyzes GPU local memory segments (dedicated high-speed VRAM) and non-local segments (system RAM over PCIe), calculating total budgets, active usage, available reservation headroom, and utilization percentages.
 - **256 Tools Milestone**: Reaches **256 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **72 comprehensive test suites** and **68 environment health checks**.
 - **Native MCP Tools**: `super_dxgi_adapters`, `super_dxgi_outputs`, `super_dxgi_display_modes`, `super_dxgi_video_memory_budget`.
+
+### 88. 📦 Windows Delivery Optimization (DO) Subsystem (`deliveryoptimization.h` / `DeliveryOptimization.dll` / `dosvc`)
+Directly interfaces with Microsoft's cloud-assisted, peer-to-peer Windows Delivery Optimization subsystem via native COM (`CLSID {5b99fa76-721c-423c-adac-56d03c8a8007}` / `IDOManager` / `IDODownload`):
+- **Service & Engine Telemetry (`super_do_status`)**: Inspects the background `dosvc` Windows service state, tests `IDOManager` COM activation readiness, probes the system cache folder (`%SystemRoot%\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache`), calculates cache footprint (file counts, size in Bytes and MB), and audits active Group Policy and MDM settings (`DODownloadMode`, `DOMaxCacheSize`, `DOMinDiskSizeAllowedToPeer`, etc.).
+- **Download Job Enumeration (`super_do_jobs`)**: Traverses active and recent downloads using `IDOManager::EnumDownloads` with state filtering (`all`, `created`, `transferring`, `transferred`, `finalized`, `aborted`, `paused`). Reports download IDs, remote URIs, local destination paths, display names, transfer states, byte totals, transferred byte counts, real-time completion percentages, and HRESULT error codes.
+- **Sovereign Content Delivery (`super_do_download`)**: Creates and dispatches downloads through `IDOManager::CreateDownload`. Supports configurable source URIs, target local disk paths, display names, interactive foreground priority flags, and immediate or deferred execution (`Start`). Leverages Windows P2P peer caching, LAN multicasting, and cost-aware cellular throttling natively.
+- **Lifecycle & Queue Control (`super_do_manage_job`)**: Manages individual jobs by GUID or URI identifier, orchestrating live execution through `IDODownload` lifecycle methods: query status (`status`), suspend download (`pause`), resume/start transfer (`resume`), abort and discard (`abort`), or finalize downloaded assets (`finalize`).
+- **260 Tools Milestone**: Reaches **260 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **73 comprehensive test suites** and **69 environment health checks**.
+- **Native MCP Tools**: `super_do_status`, `super_do_jobs`, `super_do_download`, `super_do_manage_job`.
 
 ---
 

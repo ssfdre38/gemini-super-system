@@ -4821,6 +4821,81 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_do_status",
+        description: "Queries Windows Delivery Optimization (dosvc) service status, IDOManager COM engine state, local cache directory metrics, and group policy configurations.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_do_jobs",
+        description: "Enumerates active, paused, transferred, or finalized Windows Delivery Optimization downloads via IDOManager::EnumDownloads. Reports job IDs, source URIs, destination local paths, transfer progress, byte counts, error codes, and priority flags.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              enum: ["all", "created", "transferring", "transferred", "finalized", "aborted", "paused"],
+              default: "all",
+              description: "Optional filter by Delivery Optimization download state."
+            }
+          }
+        }
+      },
+      {
+        name: "super_do_download",
+        description: "Creates and optionally initiates a high-performance background or foreground download using the native Windows Delivery Optimization service (IDOManager::CreateDownload). Features P2P cloud peer sharing, cost-policy enforcement, and bandwidth throttling.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            uri: {
+              type: "string",
+              description: "HTTP or HTTPS URL of the file to download."
+            },
+            localPath: {
+              type: "string",
+              description: "Target local filesystem path where the file will be downloaded."
+            },
+            displayName: {
+              type: "string",
+              description: "Optional descriptive display name for the download job."
+            },
+            foregroundPriority: {
+              type: "boolean",
+              default: true,
+              description: "Whether to download with foreground interactive priority (fastest) vs background throttling."
+            },
+            start: {
+              type: "boolean",
+              default: true,
+              description: "Whether to immediately start the download job upon creation."
+            }
+          },
+          required: ["uri"]
+        }
+      },
+      {
+        name: "super_do_manage_job",
+        description: "Inspects status or manages the lifecycle (pause, resume, abort, finalize) of an active or existing Windows Delivery Optimization download job.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            jobId: {
+              type: "string",
+              description: "GUID identifier of the Delivery Optimization download job."
+            },
+            action: {
+              type: "string",
+              enum: ["status", "pause", "resume", "abort", "finalize"],
+              default: "status",
+              description: "Management action to perform on the download job."
+            }
+          },
+          required: ["jobId"]
+        }
       }
 ];
 
@@ -8490,6 +8565,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `💾 [DXGI GPU Video Memory Budget & Usage]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_do_status") {
+    const res = await orch.getDoStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📦 [Delivery Optimization (DO) Status]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_do_jobs") {
+    const res = await orch.getDoJobs(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📥 [Delivery Optimization Jobs]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_do_download") {
+    const res = await orch.createDoDownload(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🚀 [Delivery Optimization Download]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_do_manage_job") {
+    const res = await orch.manageDoJob(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚙️ [Delivery Optimization Job Management]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

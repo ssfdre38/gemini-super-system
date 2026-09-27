@@ -5127,10 +5127,98 @@ async function run() {
     }
   });
 
-  it("All 256 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 73: Windows Delivery Optimization (DO) Subsystem (deliveryoptimization.h / dosvc)
+  console.log("\x1b[1m[Suite 73: Windows Delivery Optimization (DO) Subsystem]\x1b[0m");
+
+  await itAsync("getDoStatus queries dosvc service status, COM IDOManager availability, and cache metrics", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getDoStatus();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getDoStatus failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable !== false, true);
+    assert(typeof res.service === "object" && res.service !== null);
+    assert.strictEqual(res.service.name, "dosvc");
+    assert(typeof res.service.status === "string");
+    assert(typeof res.com === "object" && res.com !== null);
+    assert.strictEqual(res.com.available, true);
+    assert(typeof res.cache === "object" && res.cache !== null);
+    assert(typeof res.cache.exists === "boolean");
+    assert(typeof res.cache.fileCount === "number");
+    assert(typeof res.cache.sizeMb === "number");
+    assert(typeof res.policies === "object" && res.policies !== null);
+  });
+
+  await itAsync("getDoJobs enumerates active and completed Delivery Optimization jobs", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getDoJobs({ filter: "all" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getDoJobs failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable !== false, true);
+    assert.strictEqual(res.filter, "all");
+    assert(typeof res.totalJobs === "number");
+    assert(Array.isArray(res.jobs));
+    if (res.totalJobs > 0) {
+      const j = res.jobs[0];
+      assert(typeof j.jobId === "string");
+      assert(typeof j.state === "string");
+      assert(typeof j.bytesTotal === "number");
+      assert(typeof j.bytesTransferred === "number");
+      assert(typeof j.progressPercent === "number");
+      assert(typeof j.errorCode === "string");
+    }
+  });
+
+  await itAsync("createDoDownload and manageDoJob manage the lifecycle of a DO download job", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const os = require("os");
+    const path = require("path");
+
+    // 1. Create a job without starting
+    const targetFile = path.join(os.tmpdir(), "do_test_suite73.tmp");
+    const createRes = await kb.createDoDownload({
+      uri: "https://example.com/test_suite73.bin",
+      localPath: targetFile,
+      displayName: "Suite 73 DO Test",
+      foregroundPriority: true,
+      start: false
+    });
+
+    assert(createRes !== null && typeof createRes === "object");
+    assert.strictEqual(createRes.success, true, "createDoDownload failed: " + JSON.stringify(createRes));
+    assert(typeof createRes.jobId === "string" && createRes.jobId.length > 0);
+    assert.strictEqual(createRes.started, false);
+    assert.strictEqual(createRes.state, "Created");
+
+    // 2. Query status via manageDoJob
+    const statusRes = await kb.manageDoJob({
+      jobId: createRes.jobId,
+      action: "status"
+    });
+    assert(statusRes !== null && typeof statusRes === "object");
+    assert.strictEqual(statusRes.success, true);
+    assert.strictEqual(statusRes.action, "status");
+    assert.strictEqual(statusRes.state, "Created");
+
+    // 3. Abort the job to clean up
+    const abortRes = await kb.manageDoJob({
+      jobId: createRes.jobId,
+      action: "abort"
+    });
+    assert(abortRes !== null && typeof abortRes === "object");
+    assert.strictEqual(abortRes.success, true);
+    assert.strictEqual(abortRes.action, "abort");
+    assert.strictEqual(abortRes.state, "Aborted");
+  });
+
+  it("All 260 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 256);
+    assert.strictEqual(SYSTEM_TOOLS.length, 260);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -5320,6 +5408,10 @@ async function run() {
     assert(toolNames.includes("super_dxgi_outputs"));
     assert(toolNames.includes("super_dxgi_display_modes"));
     assert(toolNames.includes("super_dxgi_video_memory_budget"));
+    assert(toolNames.includes("super_do_status"));
+    assert(toolNames.includes("super_do_jobs"));
+    assert(toolNames.includes("super_do_download"));
+    assert(toolNames.includes("super_do_manage_job"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

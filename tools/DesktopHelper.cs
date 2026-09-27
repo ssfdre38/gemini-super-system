@@ -19679,6 +19679,443 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 88: Windows Delivery Optimization Subsystem (deliveryoptimization.h / DeliveryOptimization.dll / dosvc)
+
+        public enum DODownloadProperty {
+            Id = 0,
+            Uri = 1,
+            ContentId = 2,
+            DisplayName = 3,
+            LocalPath = 4,
+            HttpCustomHeaders = 5,
+            CostPolicy = 6,
+            SecurityFlags = 7,
+            CallbackFreqPercent = 8,
+            CallbackFreqSeconds = 9,
+            NoProgressTimeoutSeconds = 10,
+            ForegroundPriority = 11,
+            BlockingMode = 12
+        }
+
+        public enum DODownloadState {
+            Created = 0,
+            Transferring = 1,
+            Transferred = 2,
+            Finalized = 3,
+            Aborted = 4,
+            Paused = 5
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct DO_DOWNLOAD_STATUS {
+            public ulong BytesTotal;
+            public ulong BytesTransferred;
+            public DODownloadState State;
+            public int Error;
+            public int ExtendedError;
+        }
+
+        [ComImport]
+        [Guid("FBBD7FC0-C147-4727-A38D-827EF071EE77")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IDODownload_COM {
+            [PreserveSig]
+            int Start(IntPtr ranges);
+            [PreserveSig]
+            int Pause();
+            [PreserveSig]
+            int Abort();
+            [PreserveSig]
+            int Finalize();
+            [PreserveSig]
+            int GetStatus(out DO_DOWNLOAD_STATUS status);
+            [PreserveSig]
+            int GetProperty(DODownloadProperty propId, out object propVal);
+            [PreserveSig]
+            int SetProperty(DODownloadProperty propId, [In, MarshalAs(UnmanagedType.Struct)] ref object propVal);
+        }
+
+        [ComImport]
+        [Guid("00000100-0000-0000-C000-000000000046")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IEnumUnknown_DO {
+            [PreserveSig]
+            int Next(uint celt, [Out, MarshalAs(UnmanagedType.IUnknown)] out object rgelt, out uint pceltFetched);
+            [PreserveSig]
+            int Skip(uint celt);
+            [PreserveSig]
+            int Reset();
+            [PreserveSig]
+            int Clone(out IEnumUnknown_DO ppenum);
+        }
+
+        [ComImport]
+        [Guid("400E2D4A-1431-4C1A-A748-39CA472CFDB1")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IDOManager_COM {
+            [PreserveSig]
+            int CreateDownload(out IDODownload_COM download);
+            [PreserveSig]
+            int EnumDownloads(IntPtr category, out IEnumUnknown_DO ppEnum);
+        }
+
+        static readonly Guid CLSID_DeliveryOptimization = new Guid("5b99fa76-721c-423c-adac-56d03c8a8007");
+
+        [DllImport("ole32.dll")]
+        static extern int CoInitializeSecurity(IntPtr pSecDesc, int cAuthSvc, IntPtr asAuthSvc, IntPtr pReserved1, uint dwAuthnLevel, uint dwImpLevel, IntPtr pAuthInfo, uint dwCapabilities, IntPtr pReserved3);
+
+        static bool _doSecurityInitialized = false;
+        static void EnsureDoSecurity() {
+            if (_doSecurityInitialized) return;
+            try {
+                CoInitializeSecurity(IntPtr.Zero, -1, IntPtr.Zero, IntPtr.Zero, 0, 3, IntPtr.Zero, 0, IntPtr.Zero);
+            } catch {}
+            _doSecurityInitialized = true;
+        }
+
+        static IDOManager_COM GetDOManager() {
+            EnsureDoSecurity();
+            Type t = Type.GetTypeFromCLSID(CLSID_DeliveryOptimization);
+            if (t == null) return null;
+            object obj = Activator.CreateInstance(t);
+            return obj as IDOManager_COM;
+        }
+
+        static string FormatDOState(DODownloadState state) {
+            switch (state) {
+                case DODownloadState.Created: return "Created";
+                case DODownloadState.Transferring: return "Transferring";
+                case DODownloadState.Transferred: return "Transferred";
+                case DODownloadState.Finalized: return "Finalized";
+                case DODownloadState.Aborted: return "Aborted";
+                case DODownloadState.Paused: return "Paused";
+                default: return state.ToString();
+            }
+        }
+
+        static void DoStatusCmd() {
+            try {
+                string svcStatus = "Unknown";
+                string svcDisplayName = "Delivery Optimization";
+                try {
+                    using (var sc = new ServiceController("dosvc")) {
+                        svcStatus = sc.Status.ToString();
+                        svcDisplayName = sc.DisplayName;
+                    }
+                } catch (Exception ex) {
+                    svcStatus = "Error: " + ex.Message;
+                }
+
+                bool comAvailable = false;
+                string comError = "";
+                try {
+                    var mgr = GetDOManager();
+                    if (mgr != null) {
+                        comAvailable = true;
+                        Marshal.ReleaseComObject(mgr);
+                    }
+                } catch (Exception ex) {
+                    comError = ex.Message;
+                }
+
+                string basePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), @"ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization");
+                string cachePath = Path.Combine(basePath, "Cache");
+                bool cacheExists = Directory.Exists(cachePath);
+                int cacheFileCount = 0;
+                long cacheSizeBytes = 0;
+
+                if (cacheExists) {
+                    try {
+                        var di = new DirectoryInfo(cachePath);
+                        var files = di.GetFiles("*", SearchOption.AllDirectories);
+                        cacheFileCount = files.Length;
+                        foreach (var f in files) cacheSizeBytes += f.Length;
+                    } catch {}
+                }
+                double cacheSizeMb = Math.Round((double)cacheSizeBytes / (1024.0 * 1024.0), 2);
+
+                var policies = new List<string>();
+                try {
+                    using (var rk = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\DeliveryOptimization")) {
+                        if (rk != null) {
+                            foreach (var valName in rk.GetValueNames()) {
+                                var val = rk.GetValue(valName);
+                                policies.Add(string.Format("\"{0}\": \"{1}\"", EscapeJson(valName), EscapeJson(val != null ? val.ToString() : "")));
+                            }
+                        }
+                    }
+                } catch {}
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"service\": {{\"name\": \"dosvc\", \"displayName\": \"{0}\", \"status\": \"{1}\"}}, \"com\": {{\"available\": {2}, \"clsid\": \"{3}\", \"error\": \"{4}\"}}, \"cache\": {{\"path\": \"{5}\", \"exists\": {6}, \"fileCount\": {7}, \"sizeBytes\": {8}, \"sizeMb\": {9}}}, \"policies\": {{{10}}}}}",
+                    EscapeJson(svcDisplayName),
+                    EscapeJson(svcStatus),
+                    comAvailable ? "true" : "false",
+                    CLSID_DeliveryOptimization.ToString(),
+                    EscapeJson(comError),
+                    EscapeJson(cachePath),
+                    cacheExists ? "true" : "false",
+                    cacheFileCount,
+                    cacheSizeBytes,
+                    cacheSizeMb,
+                    string.Join(",", policies.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DoJobsCmd(string filter) {
+            try {
+                var mgr = GetDOManager();
+                if (mgr == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Failed to create DeliveryOptimization COM Manager\"}");
+                    return;
+                }
+
+                var jobs = new List<string>();
+                IEnumUnknown_DO pEnum;
+                int hr = mgr.EnumDownloads(IntPtr.Zero, out pEnum);
+                if (hr == 0 && pEnum != null) {
+                    uint fetched;
+                    object item;
+                    while (pEnum.Next(1, out item, out fetched) == 0 && fetched > 0 && item != null) {
+                        var dl = item as IDODownload_COM;
+                        if (dl != null) {
+                            try {
+                                DO_DOWNLOAD_STATUS st;
+                                dl.GetStatus(out st);
+
+                                string stateStr = FormatDOState(st.State);
+                                if (!string.IsNullOrEmpty(filter) && !string.Equals(filter, "all", StringComparison.OrdinalIgnoreCase)) {
+                                    if (!string.Equals(filter, stateStr, StringComparison.OrdinalIgnoreCase)) {
+                                        continue;
+                                    }
+                                }
+
+                                object idObj = null, uriObj = null, pathObj = null, nameObj = null, fgObj = null;
+                                dl.GetProperty(DODownloadProperty.Id, out idObj);
+                                dl.GetProperty(DODownloadProperty.Uri, out uriObj);
+                                dl.GetProperty(DODownloadProperty.LocalPath, out pathObj);
+                                dl.GetProperty(DODownloadProperty.DisplayName, out nameObj);
+                                dl.GetProperty(DODownloadProperty.ForegroundPriority, out fgObj);
+
+                                double pct = st.BytesTotal > 0 ? Math.Round((double)st.BytesTransferred / st.BytesTotal * 100.0, 2) : 0.0;
+                                bool isFg = fgObj is bool ? (bool)fgObj : false;
+
+                                jobs.Add(string.Format(
+                                    "{{\"jobId\": \"{0}\", \"uri\": \"{1}\", \"localPath\": \"{2}\", \"displayName\": \"{3}\", \"state\": \"{4}\", \"bytesTotal\": {5}, \"bytesTransferred\": {6}, \"progressPercent\": {7}, \"errorCode\": \"0x{8:X8}\", \"foregroundPriority\": {9}}}",
+                                    EscapeJson(idObj != null ? idObj.ToString() : ""),
+                                    EscapeJson(uriObj != null ? uriObj.ToString() : ""),
+                                    EscapeJson(pathObj != null ? pathObj.ToString() : ""),
+                                    EscapeJson(nameObj != null ? nameObj.ToString() : ""),
+                                    stateStr,
+                                    st.BytesTotal,
+                                    st.BytesTransferred,
+                                    pct,
+                                    (uint)st.Error,
+                                    isFg ? "true" : "false"
+                                ));
+                            } finally {
+                                Marshal.ReleaseComObject(dl);
+                            }
+                        } else {
+                            Marshal.ReleaseComObject(item);
+                        }
+                    }
+                    Marshal.ReleaseComObject(pEnum);
+                }
+                Marshal.ReleaseComObject(mgr);
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"filter\": \"{0}\", \"totalJobs\": {1}, \"jobs\": [{2}]}}",
+                    EscapeJson(filter ?? "all"), jobs.Count, string.Join(",", jobs.ToArray())));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DoDownloadCmd(string uri, string localPath, string displayName, bool fg, bool start) {
+            try {
+                if (string.IsNullOrEmpty(uri)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"URI parameter is required\"}");
+                    return;
+                }
+
+                if (string.IsNullOrEmpty(localPath)) {
+                    string filename = "download_" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".tmp";
+                    try {
+                        Uri u = new Uri(uri);
+                        string seg = Path.GetFileName(u.LocalPath);
+                        if (!string.IsNullOrEmpty(seg)) filename = seg;
+                    } catch {}
+                    localPath = Path.Combine(Path.GetTempPath(), filename);
+                }
+
+                string dir = Path.GetDirectoryName(localPath);
+                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir)) {
+                    Directory.CreateDirectory(dir);
+                }
+
+                var mgr = GetDOManager();
+                if (mgr == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Failed to create DeliveryOptimization COM Manager\"}");
+                    return;
+                }
+
+                IDODownload_COM dl;
+                int hr = mgr.CreateDownload(out dl);
+                if (hr != 0 || dl == null) {
+                    Marshal.ReleaseComObject(mgr);
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"CreateDownload failed with HRESULT 0x{0:X8}\"}}", (uint)hr));
+                    return;
+                }
+
+                try {
+                    object uriVal = uri;
+                    int hrUri = dl.SetProperty(DODownloadProperty.Uri, ref uriVal);
+                    if (hrUri != 0) {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"SetProperty Uri failed with HRESULT 0x{0:X8}\"}}", (uint)hrUri));
+                        return;
+                    }
+
+                    object pathVal = localPath;
+                    int hrPath = dl.SetProperty(DODownloadProperty.LocalPath, ref pathVal);
+                    if (hrPath != 0) {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"SetProperty LocalPath failed with HRESULT 0x{0:X8}\"}}", (uint)hrPath));
+                        return;
+                    }
+
+                    if (!string.IsNullOrEmpty(displayName)) {
+                        object nameVal = displayName;
+                        dl.SetProperty(DODownloadProperty.DisplayName, ref nameVal);
+                    }
+
+                    object fgVal = fg;
+                    dl.SetProperty(DODownloadProperty.ForegroundPriority, ref fgVal);
+
+                    object idVal;
+                    dl.GetProperty(DODownloadProperty.Id, out idVal);
+                    string jobId = idVal != null ? idVal.ToString() : "";
+
+                    int startHr = 0;
+                    if (start) {
+                        startHr = dl.Start(IntPtr.Zero);
+                    }
+
+                    DO_DOWNLOAD_STATUS st;
+                    dl.GetStatus(out st);
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"jobId\": \"{0}\", \"uri\": \"{1}\", \"localPath\": \"{2}\", \"displayName\": \"{3}\", \"foregroundPriority\": {4}, \"started\": {5}, \"startHResult\": \"0x{6:X8}\", \"state\": \"{7}\", \"bytesTotal\": {8}, \"bytesTransferred\": {9}, \"errorCode\": \"0x{10:X8}\"}}",
+                        EscapeJson(jobId),
+                        EscapeJson(uri),
+                        EscapeJson(localPath),
+                        EscapeJson(displayName ?? ""),
+                        fg ? "true" : "false",
+                        start ? "true" : "false",
+                        (uint)startHr,
+                        FormatDOState(st.State),
+                        st.BytesTotal,
+                        st.BytesTransferred,
+                        (uint)st.Error
+                    ));
+                } finally {
+                    Marshal.ReleaseComObject(dl);
+                    Marshal.ReleaseComObject(mgr);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DoManageJobCmd(string jobId, string action) {
+            try {
+                if (string.IsNullOrEmpty(jobId)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"jobId parameter is required\"}");
+                    return;
+                }
+
+                var mgr = GetDOManager();
+                if (mgr == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Failed to create DeliveryOptimization COM Manager\"}");
+                    return;
+                }
+
+                string act = (action ?? "status").ToLowerInvariant();
+                IDODownload_COM targetDl = null;
+                IEnumUnknown_DO pEnum;
+                int hr = mgr.EnumDownloads(IntPtr.Zero, out pEnum);
+                if (hr == 0 && pEnum != null) {
+                    uint fetched;
+                    object item;
+                    while (pEnum.Next(1, out item, out fetched) == 0 && fetched > 0 && item != null) {
+                        var dl = item as IDODownload_COM;
+                        if (dl != null) {
+                            object idObj;
+                            dl.GetProperty(DODownloadProperty.Id, out idObj);
+                            string currentId = idObj != null ? idObj.ToString() : "";
+                            if (string.Equals(currentId, jobId, StringComparison.OrdinalIgnoreCase) ||
+                                currentId.IndexOf(jobId, StringComparison.OrdinalIgnoreCase) >= 0) {
+                                targetDl = dl;
+                                break;
+                            }
+                            Marshal.ReleaseComObject(dl);
+                        } else {
+                            Marshal.ReleaseComObject(item);
+                        }
+                    }
+                    Marshal.ReleaseComObject(pEnum);
+                }
+
+                if (targetDl == null) {
+                    Marshal.ReleaseComObject(mgr);
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Download job with ID '{0}' not found\"}}", EscapeJson(jobId)));
+                    return;
+                }
+
+                try {
+                    int actionHr = 0;
+                    if (act == "pause") {
+                        actionHr = targetDl.Pause();
+                    } else if (act == "resume" || act == "start") {
+                        actionHr = targetDl.Start(IntPtr.Zero);
+                    } else if (act == "abort" || act == "cancel") {
+                        actionHr = targetDl.Abort();
+                    } else if (act == "finalize") {
+                        actionHr = targetDl.Finalize();
+                    }
+
+                    DO_DOWNLOAD_STATUS st;
+                    targetDl.GetStatus(out st);
+
+                    object idObj, uriObj, pathObj;
+                    targetDl.GetProperty(DODownloadProperty.Id, out idObj);
+                    targetDl.GetProperty(DODownloadProperty.Uri, out uriObj);
+                    targetDl.GetProperty(DODownloadProperty.LocalPath, out pathObj);
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"jobId\": \"{0}\", \"action\": \"{1}\", \"actionHResult\": \"0x{2:X8}\", \"state\": \"{3}\", \"bytesTotal\": {4}, \"bytesTransferred\": {5}, \"errorCode\": \"0x{6:X8}\", \"uri\": \"{7}\", \"localPath\": \"{8}\"}}",
+                        EscapeJson(idObj != null ? idObj.ToString() : jobId),
+                        EscapeJson(act),
+                        (uint)actionHr,
+                        FormatDOState(st.State),
+                        st.BytesTotal,
+                        st.BytesTransferred,
+                        (uint)st.Error,
+                        EscapeJson(uriObj != null ? uriObj.ToString() : ""),
+                        EscapeJson(pathObj != null ? pathObj.ToString() : "")
+                    ));
+                } finally {
+                    Marshal.ReleaseComObject(targetDl);
+                    Marshal.ReleaseComObject(mgr);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -23180,6 +23617,24 @@ namespace GeminiSuperDesktop {
                 int adapterIdx = -1;
                 if (args.Length >= 2) int.TryParse(args[1], out adapterIdx);
                 DxgiVideoMemoryBudgetCmd(adapterIdx);
+            } else if (cmd == "do_status" || cmd == "do-status") {
+                DoStatusCmd();
+            } else if (cmd == "do_jobs" || cmd == "do-jobs") {
+                string filter = args.Length >= 2 ? args[1] : "all";
+                DoJobsCmd(filter);
+            } else if (cmd == "do_download" || cmd == "do-download") {
+                string uri = args.Length >= 2 ? args[1] : "";
+                string localPath = args.Length >= 3 ? args[2] : "";
+                string displayName = args.Length >= 4 ? args[3] : "";
+                bool fg = true;
+                if (args.Length >= 5) bool.TryParse(args[4], out fg);
+                bool start = true;
+                if (args.Length >= 6) bool.TryParse(args[5], out start);
+                DoDownloadCmd(uri, localPath, displayName, fg, start);
+            } else if (cmd == "do_manage_job" || cmd == "do-manage-job") {
+                string jobId = args.Length >= 2 ? args[1] : "";
+                string action = args.Length >= 3 ? args[2] : "status";
+                DoManageJobCmd(jobId, action);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
