@@ -17548,6 +17548,386 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 84: Windows Software Device Management Subsystem (swdevice.h / cfgmgr32.dll)
+
+        public delegate void SwDeviceCreateCallback(
+            IntPtr hSwDevice,
+            int CreateResult,
+            IntPtr pContext,
+            IntPtr pszDeviceInstanceId);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct SW_DEVICE_CREATE_INFO {
+            public uint cbSize;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string pszInstanceId;
+            public IntPtr pszzHardwareIds;
+            public IntPtr pszzCompatibleIds;
+            public IntPtr pContainerId;
+            public uint CapabilityFlags;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string pszDeviceDescription;
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string pszDeviceLocation;
+            public IntPtr pSecurityDescriptor;
+        }
+
+        const uint SWDeviceCapabilitiesNone = 0x00000000;
+        const uint SWDeviceCapabilitiesRemovable = 0x00000001;
+        const uint SWDeviceCapabilitiesSilentInstall = 0x00000002;
+        const uint SWDeviceCapabilitiesNoDisplayInUI = 0x00000004;
+        const uint SWDeviceCapabilitiesDriverRequired = 0x00000008;
+
+        const int SWDeviceLifetimeHandle = 0;
+        const int SWDeviceLifetimeParentPresent = 1;
+        const int SWDeviceLifetimeMax = 2;
+
+        [DllImport("cfgmgr32.dll", EntryPoint = "SwDeviceCreate", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern int SwDeviceCreate(
+            string pszEnumeratorName,
+            string pszParentDeviceInstance,
+            ref SW_DEVICE_CREATE_INFO pCreateInfo,
+            uint cPropertyCount,
+            IntPtr pProperties,
+            SwDeviceCreateCallback pCallback,
+            IntPtr pContext,
+            out IntPtr phSwDevice);
+
+        [DllImport("cfgmgr32.dll", EntryPoint = "SwDeviceClose", SetLastError = true)]
+        static extern void SwDeviceClose(IntPtr hSwDevice);
+
+        [DllImport("cfgmgr32.dll", EntryPoint = "SwDeviceSetLifetime", SetLastError = true)]
+        static extern int SwDeviceSetLifetime(IntPtr hSwDevice, int Lifetime);
+
+        [DllImport("cfgmgr32.dll", EntryPoint = "SwDeviceGetLifetime", SetLastError = true)]
+        static extern int SwDeviceGetLifetime(IntPtr hSwDevice, out int pLifetime);
+
+        [DllImport("cfgmgr32.dll", EntryPoint = "SwDeviceInterfaceRegister", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern int SwDeviceInterfaceRegister(
+            IntPtr hSwDevice,
+            ref Guid pInterfaceClassGuid,
+            string pszReferenceString,
+            uint cPropertyCount,
+            IntPtr pProperties,
+            bool fEnabled,
+            out IntPtr ppszDeviceInterfaceId);
+
+        [DllImport("cfgmgr32.dll", EntryPoint = "SwDeviceInterfaceSetState", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern int SwDeviceInterfaceSetState(
+            IntPtr hSwDevice,
+            string pszDeviceInterfaceId,
+            bool fEnabled);
+
+        [DllImport("cfgmgr32.dll", EntryPoint = "SwMemFree")]
+        static extern void SwMemFree(IntPtr pMem);
+
+        static IntPtr CreateMultiString(string[] strings) {
+            if (strings == null || strings.Length == 0) return IntPtr.Zero;
+            var sb = new StringBuilder();
+            foreach (var s in strings) {
+                if (!string.IsNullOrEmpty(s)) {
+                    sb.Append(s);
+                    sb.Append('\0');
+                }
+            }
+            sb.Append('\0');
+            byte[] bytes = Encoding.Unicode.GetBytes(sb.ToString());
+            IntPtr p = Marshal.AllocHGlobal(bytes.Length);
+            Marshal.Copy(bytes, 0, p, bytes.Length);
+            return p;
+        }
+
+        static void SwDeviceInfoCmd(string filter) {
+            try {
+                var swdDevices = new List<Dictionary<string, string>>();
+
+                uint flags = DIGCF_ALLCLASSES | DIGCF_PRESENT;
+                IntPtr devInfo = SetupDiGetClassDevs(IntPtr.Zero, null, IntPtr.Zero, flags);
+                if (devInfo != (IntPtr)(-1)) {
+                    try {
+                        SP_DEVINFO_DATA data = new SP_DEVINFO_DATA();
+                        data.cbSize = (uint)Marshal.SizeOf(data);
+                        uint idx = 0;
+                        string f = (filter ?? "").Trim().ToLowerInvariant();
+
+                        while (SetupDiEnumDeviceInfo(devInfo, idx, ref data)) {
+                            StringBuilder idSb = new StringBuilder(512);
+                            uint reqId;
+                            SetupDiGetDeviceInstanceId(devInfo, ref data, idSb, (uint)idSb.Capacity, out reqId);
+                            string instId = idSb.ToString();
+
+                            if (instId.StartsWith("SWD\\", StringComparison.OrdinalIgnoreCase)) {
+                                string desc = GetDeviceProperty(devInfo, ref data, SPDRP_DEVICEDESC);
+                                string friendly = GetDeviceProperty(devInfo, ref data, SPDRP_FRIENDLYNAME);
+                                string cls = GetDeviceProperty(devInfo, ref data, SPDRP_CLASS);
+
+                                if (string.IsNullOrEmpty(f) ||
+                                    instId.ToLowerInvariant().Contains(f) ||
+                                    (desc != null && desc.ToLowerInvariant().Contains(f)) ||
+                                    (friendly != null && friendly.ToLowerInvariant().Contains(f))) {
+                                    var dict = new Dictionary<string, string>();
+                                    dict["instanceId"] = instId;
+                                    dict["description"] = desc ?? "";
+                                    dict["friendlyName"] = friendly ?? "";
+                                    dict["deviceClass"] = cls ?? "";
+                                    swdDevices.Add(dict);
+                                }
+                            }
+                            idx++;
+                            if (swdDevices.Count >= 100) break;
+                        }
+                    } finally {
+                        SetupDiDestroyDeviceInfoList(devInfo);
+                    }
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append("\"enumerator\": \"SWD\", ");
+                sb.Append("\"defaultParent\": \"HTREE\\\\ROOT\\\\0\", ");
+                sb.AppendFormat("\"totalDiscovered\": {0}, ", swdDevices.Count);
+                sb.Append("\"devices\": [");
+                for (int i = 0; i < swdDevices.Count; i++) {
+                    if (i > 0) sb.Append(", ");
+                    sb.AppendFormat("{{\"instanceId\": \"{0}\", \"description\": \"{1}\", \"friendlyName\": \"{2}\", \"deviceClass\": \"{3}\"}}",
+                        EscapeJson(swdDevices[i]["instanceId"]),
+                        EscapeJson(swdDevices[i]["description"]),
+                        EscapeJson(swdDevices[i]["friendlyName"]),
+                        EscapeJson(swdDevices[i]["deviceClass"]));
+                }
+                sb.Append("]}");
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void SwDeviceCreateCmd(string instanceId, string desc, string hwIdsStr, string capsStr, bool probeOnly) {
+            IntPtr hSwDevice = IntPtr.Zero;
+            IntPtr pHwIds = IntPtr.Zero;
+            try {
+                if (string.IsNullOrEmpty(instanceId)) instanceId = "GeminiVirtualDevice_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                if (string.IsNullOrEmpty(desc)) desc = "Gemini Sovereign Virtual Software Device";
+
+                string[] hwIds = !string.IsNullOrEmpty(hwIdsStr)
+                    ? hwIdsStr.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                    : new string[] { "SWD\\GeminiVirtualDevice", "SWD\\SovereignActuator" };
+
+                pHwIds = CreateMultiString(hwIds);
+
+                uint caps = SWDeviceCapabilitiesNone;
+                if (!string.IsNullOrEmpty(capsStr)) {
+                    string c = capsStr.ToLowerInvariant();
+                    if (c.Contains("removable")) caps |= SWDeviceCapabilitiesRemovable;
+                    if (c.Contains("silent")) caps |= SWDeviceCapabilitiesSilentInstall;
+                    if (c.Contains("nodisplay")) caps |= SWDeviceCapabilitiesNoDisplayInUI;
+                    if (c.Contains("driver")) caps |= SWDeviceCapabilitiesDriverRequired;
+                } else {
+                    caps = SWDeviceCapabilitiesRemovable | SWDeviceCapabilitiesSilentInstall;
+                }
+
+                SW_DEVICE_CREATE_INFO info = new SW_DEVICE_CREATE_INFO();
+                info.cbSize = (uint)Marshal.SizeOf(info);
+                info.pszInstanceId = instanceId;
+                info.pszzHardwareIds = pHwIds;
+                info.pszzCompatibleIds = IntPtr.Zero;
+                info.pContainerId = IntPtr.Zero;
+                info.CapabilityFlags = caps;
+                info.pszDeviceDescription = desc;
+                info.pszDeviceLocation = "Gemini Super System Root";
+                info.pSecurityDescriptor = IntPtr.Zero;
+
+                var evt = new System.Threading.ManualResetEvent(false);
+                int cbResult = -1;
+                string createdId = "";
+
+                SwDeviceCreateCallback cb = (hDev, createRes, ctx, pId) => {
+                    cbResult = createRes;
+                    if (pId != IntPtr.Zero) createdId = Marshal.PtrToStringUni(pId);
+                    evt.Set();
+                };
+
+                int hr = SwDeviceCreate("Gemini", null, ref info, 0, IntPtr.Zero, cb, IntPtr.Zero, out hSwDevice);
+
+                bool signaled = false;
+                if (hr == 0 && hSwDevice != IntPtr.Zero) {
+                    signaled = evt.WaitOne(3000);
+                }
+
+                bool created = (hr == 0 && (cbResult == 0 || signaled));
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.AppendFormat("\"hresult\": \"0x{0:X8}\", ", hr);
+                sb.AppendFormat("\"cbSize\": {0}, ", info.cbSize);
+                sb.AppendFormat("\"deviceCreated\": {0}, ", created ? "true" : "false");
+                sb.AppendFormat("\"callbackResult\": \"0x{0:X8}\", ", cbResult);
+                sb.AppendFormat("\"instanceId\": \"{0}\", ", EscapeJson(!string.IsNullOrEmpty(createdId) ? createdId : instanceId));
+                sb.AppendFormat("\"description\": \"{0}\", ", EscapeJson(desc));
+                sb.AppendFormat("\"capabilities\": {0}, ", caps);
+                sb.AppendFormat("\"probeOnly\": {0}", probeOnly ? "true" : "false");
+                sb.Append("}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (pHwIds != IntPtr.Zero) Marshal.FreeHGlobal(pHwIds);
+                if (hSwDevice != IntPtr.Zero && probeOnly) {
+                    try { SwDeviceClose(hSwDevice); } catch {}
+                }
+            }
+        }
+
+        static void SwDeviceLifecycleCmd(string action, string instanceId, string lifetimeStr) {
+            IntPtr hSwDevice = IntPtr.Zero;
+            IntPtr pHwIds = IntPtr.Zero;
+            try {
+                if (string.IsNullOrEmpty(instanceId)) instanceId = "GeminiLifecycleProbe_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                string[] hwIds = new string[] { "SWD\\GeminiLifecycleProbe" };
+                pHwIds = CreateMultiString(hwIds);
+
+                SW_DEVICE_CREATE_INFO info = new SW_DEVICE_CREATE_INFO();
+                info.cbSize = (uint)Marshal.SizeOf(info);
+                info.pszInstanceId = instanceId;
+                info.pszzHardwareIds = pHwIds;
+                info.pszzCompatibleIds = IntPtr.Zero;
+                info.pContainerId = IntPtr.Zero;
+                info.CapabilityFlags = SWDeviceCapabilitiesRemovable | SWDeviceCapabilitiesSilentInstall;
+                info.pszDeviceDescription = "Gemini Lifecycle Probe Device";
+                info.pszDeviceLocation = "Root";
+                info.pSecurityDescriptor = IntPtr.Zero;
+
+                var evt = new System.Threading.ManualResetEvent(false);
+                int cbResult = -1;
+                SwDeviceCreateCallback cb = (hDev, createRes, ctx, pId) => {
+                    cbResult = createRes;
+                    evt.Set();
+                };
+
+                int hr = SwDeviceCreate("Gemini", null, ref info, 0, IntPtr.Zero, cb, IntPtr.Zero, out hSwDevice);
+                if (hr == 0 && hSwDevice != IntPtr.Zero) {
+                    evt.WaitOne(2000);
+                }
+
+                if (hSwDevice == IntPtr.Zero || hr != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"deviceActive\": false, \"hresult\": \"0x{0:X8}\", \"lifetime\": \"Handle\", \"lifetimeCode\": 0, \"action\": \"{1}\", \"instanceId\": \"{2}\", \"status\": \"SwDeviceCreate completed with code 0x{0:X8}\"}}", hr, EscapeJson(action), EscapeJson(instanceId)));
+                    return;
+                }
+
+                int currentLifetime = -1;
+                int getHr = SwDeviceGetLifetime(hSwDevice, out currentLifetime);
+
+                int setHr = 0;
+                int targetLifetime = currentLifetime;
+                if (action == "set" || !string.IsNullOrEmpty(lifetimeStr)) {
+                    if (lifetimeStr == "parent" || lifetimeStr == "1" || lifetimeStr == "parentPresent") {
+                        targetLifetime = SWDeviceLifetimeParentPresent;
+                    } else {
+                        targetLifetime = SWDeviceLifetimeHandle;
+                    }
+                    setHr = SwDeviceSetLifetime(hSwDevice, targetLifetime);
+                    SwDeviceGetLifetime(hSwDevice, out currentLifetime);
+                }
+
+                string lifetimeName = "Handle";
+                if (currentLifetime == SWDeviceLifetimeParentPresent) lifetimeName = "ParentPresent";
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.AppendFormat("\"hresult\": \"0x{0:X8}\", ", getHr);
+                sb.AppendFormat("\"lifetimeCode\": {0}, ", currentLifetime);
+                sb.AppendFormat("\"lifetime\": \"{0}\", ", lifetimeName);
+                sb.AppendFormat("\"setHresult\": \"0x{0:X8}\", ", setHr);
+                sb.AppendFormat("\"instanceId\": \"{0}\"", EscapeJson(instanceId));
+                sb.Append("}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (pHwIds != IntPtr.Zero) Marshal.FreeHGlobal(pHwIds);
+                if (hSwDevice != IntPtr.Zero) {
+                    try { SwDeviceClose(hSwDevice); } catch {}
+                }
+            }
+        }
+
+        static void SwDeviceInterfaceCmd(string guidStr, string refString, bool enabled) {
+            IntPtr hSwDevice = IntPtr.Zero;
+            IntPtr pHwIds = IntPtr.Zero;
+            IntPtr pInterfaceId = IntPtr.Zero;
+            try {
+                string instanceId = "GeminiInterfaceProbe_" + Guid.NewGuid().ToString("N").Substring(0, 8);
+                string[] hwIds = new string[] { "SWD\\GeminiInterfaceProbe" };
+                pHwIds = CreateMultiString(hwIds);
+
+                SW_DEVICE_CREATE_INFO info = new SW_DEVICE_CREATE_INFO();
+                info.cbSize = (uint)Marshal.SizeOf(info);
+                info.pszInstanceId = instanceId;
+                info.pszzHardwareIds = pHwIds;
+                info.pszzCompatibleIds = IntPtr.Zero;
+                info.pContainerId = IntPtr.Zero;
+                info.CapabilityFlags = SWDeviceCapabilitiesRemovable | SWDeviceCapabilitiesSilentInstall;
+                info.pszDeviceDescription = "Gemini Interface Probe Device";
+                info.pszDeviceLocation = "Root";
+                info.pSecurityDescriptor = IntPtr.Zero;
+
+                var evt = new System.Threading.ManualResetEvent(false);
+                SwDeviceCreateCallback cb = (hDev, createRes, ctx, pId) => { evt.Set(); };
+
+                Guid ifaceGuid = new Guid("4D36E978-E325-11CE-BFC1-08002BE10318");
+                if (!string.IsNullOrEmpty(guidStr)) {
+                    try { ifaceGuid = new Guid(guidStr.Trim('{', '}')); } catch {}
+                }
+
+                int hr = SwDeviceCreate("Gemini", null, ref info, 0, IntPtr.Zero, cb, IntPtr.Zero, out hSwDevice);
+                if (hr == 0 && hSwDevice != IntPtr.Zero) {
+                    evt.WaitOne(2000);
+                }
+
+                if (hSwDevice == IntPtr.Zero || hr != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"registered\": false, \"hresult\": \"0x{0:X8}\", \"interfaceClassGuid\": \"{1}\", \"deviceInterfaceId\": \"\", \"enabled\": {2}, \"status\": \"SwDeviceCreate completed with code 0x{0:X8}\"}}", hr, ifaceGuid.ToString("B"), enabled ? "true" : "false"));
+                    return;
+                }
+
+                int regHr = SwDeviceInterfaceRegister(hSwDevice, ref ifaceGuid, refString, 0, IntPtr.Zero, enabled, out pInterfaceId);
+                string interfaceIdStr = "";
+                if (pInterfaceId != IntPtr.Zero) {
+                    interfaceIdStr = Marshal.PtrToStringUni(pInterfaceId);
+                }
+
+                int stateHr = 0;
+                if (regHr == 0 && !string.IsNullOrEmpty(interfaceIdStr)) {
+                    stateHr = SwDeviceInterfaceSetState(hSwDevice, interfaceIdStr, enabled);
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.AppendFormat("\"hresult\": \"0x{0:X8}\", ", regHr);
+                sb.AppendFormat("\"registered\": {0}, ", regHr == 0 ? "true" : "false");
+                sb.AppendFormat("\"interfaceClassGuid\": \"{0}\", ", ifaceGuid.ToString("B"));
+                sb.AppendFormat("\"deviceInterfaceId\": \"{0}\", ", EscapeJson(interfaceIdStr));
+                sb.AppendFormat("\"enabled\": {0}, ", enabled ? "true" : "false");
+                sb.AppendFormat("\"stateHresult\": \"0x{0:X8}\"", stateHr);
+                sb.Append("}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (pInterfaceId != IntPtr.Zero) {
+                    try { SwMemFree(pInterfaceId); } catch {}
+                }
+                if (pHwIds != IntPtr.Zero) Marshal.FreeHGlobal(pHwIds);
+                if (hSwDevice != IntPtr.Zero) {
+                    try { SwDeviceClose(hSwDevice); } catch {}
+                }
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -20977,6 +21357,26 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "xinput_battery_audio" || cmd == "gamepad_battery" || cmd == "xinput-battery-audio") {
                 string slot = args.Length >= 2 ? args[1] : "all";
                 XInputBatteryAndAudioCmd(slot);
+            } else if (cmd == "swdevice_info" || cmd == "swdevice-info" || cmd == "swd_info") {
+                string filter = args.Length >= 2 ? args[1] : "";
+                SwDeviceInfoCmd(filter);
+            } else if (cmd == "swdevice_create" || cmd == "swdevice-create" || cmd == "swd_create") {
+                string instanceId = args.Length >= 2 ? args[1] : "";
+                string desc = args.Length >= 3 ? args[2] : "";
+                string hwIds = args.Length >= 4 ? args[3] : "";
+                string caps = args.Length >= 5 ? args[4] : "";
+                bool probeOnly = args.Length >= 6 ? (args[5].ToLowerInvariant() == "true" || args[5] == "1") : true;
+                SwDeviceCreateCmd(instanceId, desc, hwIds, caps, probeOnly);
+            } else if (cmd == "swdevice_lifecycle" || cmd == "swdevice-lifecycle" || cmd == "swd_lifecycle") {
+                string act = args.Length >= 2 ? args[1] : "get";
+                string instanceId = args.Length >= 3 ? args[2] : "";
+                string lifetime = args.Length >= 4 ? args[3] : "";
+                SwDeviceLifecycleCmd(act, instanceId, lifetime);
+            } else if (cmd == "swdevice_interface" || cmd == "swdevice-interface" || cmd == "swd_interface") {
+                string guidStr = args.Length >= 2 ? args[1] : "";
+                string refStr = args.Length >= 3 ? args[2] : "";
+                bool enabled = args.Length >= 4 ? (args[3].ToLowerInvariant() == "true" || args[3] == "1") : true;
+                SwDeviceInterfaceCmd(guidStr, refStr, enabled);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

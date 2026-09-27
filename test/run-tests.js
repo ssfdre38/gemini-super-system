@@ -4853,10 +4853,76 @@ async function run() {
     assert(typeof res.batteryAndAudio.renderDeviceId === "string" || res.batteryAndAudio.renderDeviceId === null);
   });
 
-  it("All 240 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 69: Windows Software Device Management Subsystem (swdevice.h / cfgmgr32.dll)
+  console.log("\n\x1b[1m[Suite 69: Windows Software Device Management Subsystem]\x1b[0m");
+
+  await itAsync("getSwDeviceInfo enumerates active software device instances, enumerators, and device properties", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getSwDeviceInfo();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getSwDeviceInfo failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert.strictEqual(res.enumerator, "SWD");
+    assert(typeof res.totalDiscovered === "number");
+    assert(Array.isArray(res.devices));
+    if (res.devices.length > 0) {
+      const d0 = res.devices[0];
+      assert(typeof d0.instanceId === "string");
+      assert(typeof d0.description === "string");
+    }
+  });
+
+  await itAsync("createSwDevice creates and probes native software device in PnP tree", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.createSwDevice({
+      instanceId: "GeminiTestDevice_Probe",
+      description: "Gemini Test Software Device",
+      capabilities: "removable,silent",
+      probeOnly: true
+    });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "createSwDevice failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.deviceCreated === "boolean");
+    assert(typeof res.hresult === "string");
+    assert.strictEqual(res.probeOnly, true);
+  });
+
+  await itAsync("manageSwDeviceLifecycle queries and manages software device lifetime", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.manageSwDeviceLifecycle({ action: "get" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "manageSwDeviceLifecycle failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.lifetime === "string");
+    assert(typeof res.lifetimeCode === "number");
+  });
+
+  await itAsync("manageSwDeviceInterface registers and configures device interface class GUID", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.manageSwDeviceInterface({
+      interfaceClassGuid: "{4D36E978-E325-11CE-BFC1-08002BE10318}",
+      enabled: true
+    });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "manageSwDeviceInterface failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.registered === "boolean");
+    assert.strictEqual(res.enabled, true);
+  });
+
+  it("All 244 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 240);
+    assert.strictEqual(SYSTEM_TOOLS.length, 244);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -5030,6 +5096,10 @@ async function run() {
     assert(toolNames.includes("super_xinput_vibration"));
     assert(toolNames.includes("super_xinput_capabilities"));
     assert(toolNames.includes("super_xinput_battery_audio"));
+    assert(toolNames.includes("super_swdevice_info"));
+    assert(toolNames.includes("super_swdevice_create"));
+    assert(toolNames.includes("super_swdevice_lifecycle"));
+    assert(toolNames.includes("super_swdevice_interface"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

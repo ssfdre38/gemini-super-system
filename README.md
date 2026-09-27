@@ -99,6 +99,7 @@
   - [81. Windows Magnification API Subsystem](#81--windows-magnification-api-subsystem-magnificationh--magnificationdll)
   - [82. Trusted Platform Module Base Services (TBS) Subsystem](#82-️-trusted-platform-module-base-services-tbs-subsystem-tbsh--tbsdll)
   - [83. Windows XInput Game Controller Subsystem](#83--windows-xinput-game-controller-subsystem-xinputh--xinput1_4dll)
+  - [84. Windows Software Device Management Subsystem](#84--windows-software-device-management-subsystem-swdeviceh--cfgmgr32dll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1105,6 +1106,18 @@ Directly interfaces with physical and virtual Xbox and DirectInput-compatible ga
 - **Battery Health & Core Audio Device GUID Telemetry (`super_xinput_battery_audio`)**: Interrogates controller and headset battery types (`WIRED`, `ALKALINE`, `NIMH`) and charge states (`EMPTY`, `LOW`, `MEDIUM`, `FULL`) via `XInputGetBatteryInformation`. In addition, maps linked Windows Core Audio endpoint GUID strings (`renderDeviceId`, `captureDeviceId`) via `XInputGetAudioDeviceIds` to link physical gamepad headset jacks directly to WASAPI audio capture/render pipelines.
 - **240 Tools Milestone**: Reaches **240 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **68 comprehensive test suites** and **64 environment health checks**.
 - **Native MCP Tools**: `super_xinput_state`, `super_xinput_vibration`, `super_xinput_capabilities`, `super_xinput_battery_audio`.
+
+---
+
+## 84. 🔌 Windows Software Device Management Subsystem (`swdevice.h` / `cfgmgr32.dll`)
+
+Directly manages the lifecycle, hardware/compatible identifiers, interface classes, and operational states of native Windows Software Devices (Root / SWD PnP bus) via the Configuration Manager and Software Device APIs (`cfgmgr32.dll`):
+- **Software Device Enumeration & Discovery (`super_swdevice_info`)**: Discovers and enumerates active software device instances registered in the Windows PnP tree under the `SWD` root enumerator via SetupAPI. Reports device instance IDs, friendly descriptions, device class GUIDs, hardware IDs, and system status across virtual audio endpoints, network tunnels, print queues, and custom kernel/user drivers.
+- **Software Device Instantiation & Configuration (`super_swdevice_create`)**: Creates and installs native Windows Software Devices via `SwDeviceCreate`. Configures custom root enumerator IDs, instance IDs, hardware/compatible ID lists, device capabilities (`SWDeviceCapabilitiesRemovable`, `SWDeviceCapabilitiesSilentInstall`, `SWDeviceCapabilitiesNoDisplayInUI`, `SWDeviceCapabilitiesDriverRequired`), and initial creation flags (`SWDeviceFlagNone`, `SWDeviceFlagDriverRequired`).
+- **Software Device Lifetime Control (`super_swdevice_lifecycle`)**: Inspects or modifies the execution lifetime scope of software devices via `SwDeviceGetLifetime` and `SwDeviceSetLifetime`. Toggles lifetime between handle-bound lifetime (`SWDeviceLifetimeHandle` — automatically uninstalls when process handle closes) and parent-bound lifetime (`SWDeviceLifetimeParentPresent` — remains persistent across host process lifecycles).
+- **Device Interface Registration & State Actuation (`super_swdevice_interface`)**: Registers device interface class GUIDs for software devices via `SwDeviceInterfaceRegister` and actuates their live operational state via `SwDeviceInterfaceSetState`. Enables virtual devices to dynamically publish or withdraw DirectShow, WASAPI audio, HID, serial, or custom driver interfaces into the Windows subsystem.
+- **244 Tools Milestone**: Reaches **244 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **69 comprehensive test suites** and **65 environment health checks**.
+- **Native MCP Tools**: `super_swdevice_info`, `super_swdevice_create`, `super_swdevice_lifecycle`, `super_swdevice_interface`.
 
 ---
 

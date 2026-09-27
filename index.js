@@ -4515,6 +4515,99 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_swdevice_info",
+        description: "Enumerates active software device instances (SWD enumerator in PnP tree via SetupAPI), inspects cfgmgr32.dll SwDevice API availability, root enumerator name, and default parent node.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              description: "Optional substring filter to match device instance ID, description, or friendly name."
+            }
+          }
+        }
+      },
+      {
+        name: "super_swdevice_create",
+        description: "Creates a native software device in the Windows PnP hardware tree using SwDeviceCreate via cfgmgr32.dll, configuring custom instance ID, hardware IDs, capability flags, and creation callback.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            instanceId: {
+              type: "string",
+              description: "Device instance ID (e.g. 'GeminiVirtualDevice_01')."
+            },
+            description: {
+              type: "string",
+              description: "Device description (e.g. 'Gemini Sovereign Virtual Software Device')."
+            },
+            hardwareIds: {
+              type: "array",
+              items: { type: "string" },
+              description: "Hardware IDs for driver matching (e.g. ['SWD\\\\GeminiVirtualDevice'])."
+            },
+            capabilities: {
+              type: "string",
+              description: "Capability flags: 'removable', 'silent', 'nodisplay', 'driver' (default: 'removable,silent')."
+            },
+            probeOnly: {
+              type: "boolean",
+              default: true,
+              description: "Whether to safely probe creation and close handle immediately (default: true)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_swdevice_lifecycle",
+        description: "Queries or modifies software device lifetime via SwDeviceGetLifetime and SwDeviceSetLifetime (handle-tied SWDeviceLifetimeHandle or parent-present SWDeviceLifetimeParentPresent).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            action: {
+              type: "string",
+              enum: ["get", "set"],
+              default: "get",
+              description: "Action: 'get' to inspect current lifetime, 'set' to update lifetime."
+            },
+            instanceId: {
+              type: "string",
+              description: "Target device instance ID."
+            },
+            lifetime: {
+              type: "string",
+              enum: ["handle", "parentPresent"],
+              default: "handle",
+              description: "Lifetime mode: 'handle' (lifetime tied to open handle) or 'parentPresent' (device persists while parent exists)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_swdevice_interface",
+        description: "Registers and activates a device interface class GUID on a software device via SwDeviceInterfaceRegister and SwDeviceInterfaceSetState, managing interface ID string and enabled state.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            interfaceClassGuid: {
+              type: "string",
+              default: "{4D36E978-E325-11CE-BFC1-08002BE10318}",
+              description: "Device interface class GUID string (e.g. '{4D36E978-E325-11CE-BFC1-08002BE10318}')."
+            },
+            referenceString: {
+              type: "string",
+              default: "",
+              description: "Optional reference string for interface instance."
+            },
+            enabled: {
+              type: "boolean",
+              default: true,
+              description: "Whether to enable the interface immediately (default: true)."
+            }
+          }
+        }
       }
 ];
 
@@ -7992,6 +8085,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🔋 [Windows XInput Battery & Headset Audio Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_swdevice_info") {
+    const res = await orch.getSwDeviceInfo(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔌 [Windows Software Device Hardware Graph Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_swdevice_create") {
+    const res = await orch.createSwDevice(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛠️ [Windows Software Device Creation & PnP Attachment]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_swdevice_lifecycle") {
+    const res = await orch.manageSwDeviceLifecycle(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⏳ [Windows Software Device Lifetime State]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_swdevice_interface") {
+    const res = await orch.manageSwDeviceInterface(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔗 [Windows Software Device Interface Registration]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
