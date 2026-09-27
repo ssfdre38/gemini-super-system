@@ -19,6 +19,7 @@ using System.IO.Pipes;
 using System.IO.MemoryMappedFiles;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
+using System.Reflection;
 
 namespace GeminiSuperDesktop {
     [StructLayout(LayoutKind.Sequential)]
@@ -15380,6 +15381,351 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 78: Windows Update Agent & Servicing Subsystem (wuapi.h / wuerror.h)
+
+        static string MapWuaResultCode(int code) {
+            switch (code) {
+                case 1: return "InProgress";
+                case 2: return "Succeeded";
+                case 3: return "SucceededWithErrors";
+                case 4: return "Failed";
+                case 5: return "Aborted";
+                default: return "Unknown";
+            }
+        }
+
+        static void WuaStatusCmd() {
+            try {
+                Type tSys = Type.GetTypeFromProgID("Microsoft.Update.SystemInfo");
+                bool comAvailable = tSys != null;
+                bool rebootRequired = false;
+                if (tSys != null) {
+                    try {
+                        object sys = Activator.CreateInstance(tSys);
+                        rebootRequired = (bool)tSys.InvokeMember("RebootRequired", BindingFlags.GetProperty, null, sys, null);
+                    } catch {}
+                }
+
+                Type tSess = Type.GetTypeFromProgID("Microsoft.Update.Session");
+                bool sessionAvailable = tSess != null;
+                string clientAppId = "";
+                bool readOnly = false;
+                if (tSess != null) {
+                    try {
+                        object sess = Activator.CreateInstance(tSess);
+                        clientAppId = (string)tSess.InvokeMember("ClientApplicationID", BindingFlags.GetProperty, null, sess, null) ?? "";
+                        readOnly = (bool)tSess.InvokeMember("ReadOnly", BindingFlags.GetProperty, null, sess, null);
+                    } catch {}
+                }
+
+                string svcStatus = "Unknown";
+                try {
+                    using (var sc = new ServiceController("wuauserv")) {
+                        svcStatus = sc.Status.ToString();
+                    }
+                } catch {
+                    svcStatus = "NotAvailable";
+                }
+
+                int auOptions = -1;
+                int noAutoUpdate = -1;
+                int useWUServer = -1;
+                string wuServer = "";
+                try {
+                    using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU")) {
+                        if (key != null) {
+                            object v = key.GetValue("AUOptions");
+                            if (v is int) auOptions = (int)v;
+                            object noAu = key.GetValue("NoAutoUpdate");
+                            if (noAu is int) noAutoUpdate = (int)noAu;
+                            object wu = key.GetValue("UseWUServer");
+                            if (wu is int) useWUServer = (int)wu;
+                        }
+                    }
+                    using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate")) {
+                        if (key != null) {
+                            object ws = key.GetValue("WUServer");
+                            if (ws != null) wuServer = ws.ToString();
+                        }
+                    }
+                } catch {}
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"rebootRequired\": {0}, ", rebootRequired ? "true" : "false"));
+                sb.Append(string.Format("\"wuaComAvailable\": {0}, ", comAvailable ? "true" : "false"));
+                sb.Append(string.Format("\"sessionAvailable\": {0}, ", sessionAvailable ? "true" : "false"));
+                sb.Append(string.Format("\"clientApplicationId\": \"{0}\", ", EscapeJson(clientAppId)));
+                sb.Append(string.Format("\"readOnlySession\": {0}, ", readOnly ? "true" : "false"));
+                sb.Append(string.Format("\"serviceStatus\": \"{0}\", ", EscapeJson(svcStatus)));
+                sb.Append("\"policy\": {");
+                sb.Append(string.Format("\"auOptions\": {0}, ", auOptions));
+                sb.Append(string.Format("\"noAutoUpdate\": {0}, ", noAutoUpdate));
+                sb.Append(string.Format("\"useWUServer\": {0}, ", useWUServer));
+                sb.Append(string.Format("\"wuServer\": \"{0}\"", EscapeJson(wuServer)));
+                sb.Append("}}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WuaServicesCmd() {
+            try {
+                Type tSm = Type.GetTypeFromProgID("Microsoft.Update.ServiceManager");
+                if (tSm == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Microsoft.Update.ServiceManager COM class not registered\"}");
+                    return;
+                }
+
+                object sm = Activator.CreateInstance(tSm);
+                var svcs = (System.Collections.IEnumerable)tSm.InvokeMember("Services", BindingFlags.GetProperty, null, sm, null);
+
+                var list = new List<string>();
+                int defaultCount = 0;
+                int managedCount = 0;
+
+                if (svcs != null) {
+                    foreach (object svc in svcs) {
+                        try {
+                            string name = (string)svc.GetType().InvokeMember("Name", BindingFlags.GetProperty, null, svc, null) ?? "";
+                            string serviceId = (string)svc.GetType().InvokeMember("ServiceId", BindingFlags.GetProperty, null, svc, null) ?? "";
+                            bool isDef = false;
+                            try { isDef = (bool)svc.GetType().InvokeMember("IsDefaultAUService", BindingFlags.GetProperty, null, svc, null); } catch {}
+                            bool isManaged = false;
+                            try { isManaged = (bool)svc.GetType().InvokeMember("IsManaged", BindingFlags.GetProperty, null, svc, null); } catch {}
+                            bool canBeRemoved = false;
+                            try { canBeRemoved = (bool)svc.GetType().InvokeMember("CanBeRemoved", BindingFlags.GetProperty, null, svc, null); } catch {}
+
+                            if (isDef) defaultCount++;
+                            if (isManaged) managedCount++;
+
+                            list.Add(string.Format(
+                                "{{\"name\": \"{0}\", \"serviceId\": \"{1}\", \"isDefaultAUService\": {2}, \"isManaged\": {3}, \"canBeRemoved\": {4}}}",
+                                EscapeJson(name), EscapeJson(serviceId),
+                                isDef ? "true" : "false",
+                                isManaged ? "true" : "false",
+                                canBeRemoved ? "true" : "false"
+                            ));
+                        } catch {}
+                    }
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"totalServices\": {0}, ", list.Count));
+                sb.Append(string.Format("\"managedCount\": {0}, ", managedCount));
+                sb.Append(string.Format("\"hasDefaultAU\": {0}, ", defaultCount > 0 ? "true" : "false"));
+                sb.Append("\"services\": [");
+                sb.Append(string.Join(", ", list.ToArray()));
+                sb.Append("]}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WuaHistoryCmd(int startIndex, int maxCount) {
+            try {
+                if (startIndex < 0) startIndex = 0;
+                if (maxCount <= 0) maxCount = 20;
+                if (maxCount > 100) maxCount = 100;
+
+                Type tSess = Type.GetTypeFromProgID("Microsoft.Update.Session");
+                if (tSess == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Microsoft.Update.Session COM class not found\"}");
+                    return;
+                }
+
+                object sess = Activator.CreateInstance(tSess);
+                object searcher = tSess.InvokeMember("CreateUpdateSearcher", BindingFlags.InvokeMethod, null, sess, null);
+
+                int totalCount = 0;
+                try {
+                    totalCount = (int)searcher.GetType().InvokeMember("GetTotalHistoryCount", BindingFlags.InvokeMethod, null, searcher, null);
+                } catch {}
+
+                var list = new List<string>();
+                if (totalCount > 0 && startIndex < totalCount) {
+                    int fetchCount = Math.Min(maxCount, totalCount - startIndex);
+                    object[] queryArgs = new object[] { startIndex, fetchCount };
+                    var hist = (System.Collections.IEnumerable)searcher.GetType().InvokeMember("QueryHistory", BindingFlags.InvokeMethod, null, searcher, queryArgs);
+
+                    if (hist != null) {
+                        foreach (object entry in hist) {
+                            try {
+                                string title = (string)entry.GetType().InvokeMember("Title", BindingFlags.GetProperty, null, entry, null) ?? "";
+                                string desc = (string)entry.GetType().InvokeMember("Description", BindingFlags.GetProperty, null, entry, null) ?? "";
+                                DateTime dt = (DateTime)entry.GetType().InvokeMember("Date", BindingFlags.GetProperty, null, entry, null);
+                                int code = (int)entry.GetType().InvokeMember("ResultCode", BindingFlags.GetProperty, null, entry, null);
+                                int hr = 0;
+                                try { hr = (int)entry.GetType().InvokeMember("HResult", BindingFlags.GetProperty, null, entry, null); } catch {}
+                                string supportUrl = "";
+                                try { supportUrl = (string)entry.GetType().InvokeMember("SupportUrl", BindingFlags.GetProperty, null, entry, null) ?? ""; } catch {}
+                                
+                                string updateId = "";
+                                int revision = 0;
+                                try {
+                                    object ident = entry.GetType().InvokeMember("UpdateIdentity", BindingFlags.GetProperty, null, entry, null);
+                                    if (ident != null) {
+                                        updateId = (string)ident.GetType().InvokeMember("UpdateID", BindingFlags.GetProperty, null, ident, null) ?? "";
+                                        revision = (int)ident.GetType().InvokeMember("RevisionNumber", BindingFlags.GetProperty, null, ident, null);
+                                    }
+                                } catch {}
+
+                                list.Add(string.Format(
+                                    "{{\"title\": \"{0}\", \"description\": \"{1}\", \"date\": \"{2}\", \"resultCode\": {3}, \"resultCodeName\": \"{4}\", \"hresult\": \"0x{5:X8}\", \"supportUrl\": \"{6}\", \"updateId\": \"{7}\", \"revision\": {8}}}",
+                                    EscapeJson(title),
+                                    EscapeJson(desc.Length > 200 ? desc.Substring(0, 200) + "..." : desc),
+                                    dt.ToString("o"),
+                                    code,
+                                    MapWuaResultCode(code),
+                                    hr,
+                                    EscapeJson(supportUrl),
+                                    EscapeJson(updateId),
+                                    revision
+                                ));
+                            } catch {}
+                        }
+                    }
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"totalHistoryCount\": {0}, ", totalCount));
+                sb.Append(string.Format("\"startIndex\": {0}, ", startIndex));
+                sb.Append(string.Format("\"returnedCount\": {0}, ", list.Count));
+                sb.Append("\"entries\": [");
+                sb.Append(string.Join(", ", list.ToArray()));
+                sb.Append("]}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WuaSearchUpdatesCmd(string criteria, bool online, int maxResults) {
+            try {
+                if (string.IsNullOrEmpty(criteria) || criteria.ToLowerInvariant() == "default" || criteria.ToLowerInvariant() == "pending") {
+                    criteria = "IsInstalled=0 and Type='Software' and IsHidden=0";
+                } else if (criteria.ToLowerInvariant() == "installed") {
+                    criteria = "IsInstalled=1";
+                } else if (criteria.ToLowerInvariant() == "all_uninstalled") {
+                    criteria = "IsInstalled=0";
+                } else {
+                    criteria = criteria.Replace("\"", "'");
+                }
+
+                if (maxResults <= 0) maxResults = 20;
+                if (maxResults > 100) maxResults = 100;
+
+                Type tSess = Type.GetTypeFromProgID("Microsoft.Update.Session");
+                if (tSess == null) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Microsoft.Update.Session COM class not found\"}");
+                    return;
+                }
+
+                object sess = Activator.CreateInstance(tSess);
+                object searcher = tSess.InvokeMember("CreateUpdateSearcher", BindingFlags.InvokeMethod, null, sess, null);
+                
+                try {
+                    searcher.GetType().InvokeMember("Online", BindingFlags.SetProperty, null, searcher, new object[] { online });
+                } catch {}
+
+                object searchResult = null;
+                try {
+                    searchResult = searcher.GetType().InvokeMember("Search", BindingFlags.InvokeMethod, null, searcher, new object[] { criteria });
+                } catch (Exception searchEx) {
+                    string exMsg = searchEx.InnerException != null ? searchEx.InnerException.Message : searchEx.Message;
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"apiAvailable\": true, \"searchCompleted\": false, \"criteria\": \"{0}\", \"online\": {1}, \"totalFound\": 0, \"updates\": [], \"warning\": \"Search failed or timed out: {2}\"}}",
+                        EscapeJson(criteria), online ? "true" : "false", EscapeJson(exMsg)
+                    ));
+                    return;
+                }
+
+                var list = new List<string>();
+                int totalFound = 0;
+                if (searchResult != null) {
+                    object updatesCol = searchResult.GetType().InvokeMember("Updates", BindingFlags.GetProperty, null, searchResult, null);
+                    if (updatesCol != null) {
+                        totalFound = (int)updatesCol.GetType().InvokeMember("Count", BindingFlags.GetProperty, null, updatesCol, null);
+                        int countToTake = Math.Min(maxResults, totalFound);
+
+                        for (int i = 0; i < countToTake; i++) {
+                            try {
+                                object item = updatesCol.GetType().InvokeMember("Item", BindingFlags.GetProperty, null, updatesCol, new object[] { i });
+                                if (item == null) continue;
+
+                                string title = (string)item.GetType().InvokeMember("Title", BindingFlags.GetProperty, null, item, null) ?? "";
+                                string desc = (string)item.GetType().InvokeMember("Description", BindingFlags.GetProperty, null, item, null) ?? "";
+                                string msrc = "";
+                                try { msrc = (string)item.GetType().InvokeMember("MsrcSeverity", BindingFlags.GetProperty, null, item, null) ?? ""; } catch {}
+                                bool isDownloaded = false;
+                                try { isDownloaded = (bool)item.GetType().InvokeMember("IsDownloaded", BindingFlags.GetProperty, null, item, null); } catch {}
+                                bool isMandatory = false;
+                                try { isMandatory = (bool)item.GetType().InvokeMember("IsMandatory", BindingFlags.GetProperty, null, item, null); } catch {}
+                                bool isHidden = false;
+                                try { isHidden = (bool)item.GetType().InvokeMember("IsHidden", BindingFlags.GetProperty, null, item, null); } catch {}
+
+                                var kbList = new List<string>();
+                                try {
+                                    var kbColl = (System.Collections.IEnumerable)item.GetType().InvokeMember("KBArticleIDs", BindingFlags.GetProperty, null, item, null);
+                                    if (kbColl != null) {
+                                        foreach (object kb in kbColl) {
+                                            if (kb != null) kbList.Add(string.Format("\"{0}\"", EscapeJson(kb.ToString())));
+                                        }
+                                    }
+                                } catch {}
+
+                                string updateId = "";
+                                int rev = 0;
+                                try {
+                                    object ident = item.GetType().InvokeMember("Identity", BindingFlags.GetProperty, null, item, null);
+                                    if (ident != null) {
+                                        updateId = (string)ident.GetType().InvokeMember("UpdateID", BindingFlags.GetProperty, null, ident, null) ?? "";
+                                        rev = (int)ident.GetType().InvokeMember("RevisionNumber", BindingFlags.GetProperty, null, ident, null);
+                                    }
+                                } catch {}
+
+                                list.Add(string.Format(
+                                    "{{\"title\": \"{0}\", \"description\": \"{1}\", \"msrcSeverity\": \"{2}\", \"isDownloaded\": {3}, \"isMandatory\": {4}, \"isHidden\": {5}, \"kbArticles\": [{6}], \"updateId\": \"{7}\", \"revision\": {8}}}",
+                                    EscapeJson(title),
+                                    EscapeJson(desc.Length > 200 ? desc.Substring(0, 200) + "..." : desc),
+                                    EscapeJson(msrc),
+                                    isDownloaded ? "true" : "false",
+                                    isMandatory ? "true" : "false",
+                                    isHidden ? "true" : "false",
+                                    string.Join(", ", kbList.ToArray()),
+                                    EscapeJson(updateId),
+                                    rev
+                                ));
+                            } catch {}
+                        }
+                    }
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, \"searchCompleted\": true, ");
+                sb.Append(string.Format("\"criteria\": \"{0}\", ", EscapeJson(criteria)));
+                sb.Append(string.Format("\"online\": {0}, ", online ? "true" : "false"));
+                sb.Append(string.Format("\"totalFound\": {0}, ", totalFound));
+                sb.Append(string.Format("\"returnedCount\": {0}, ", list.Count));
+                sb.Append("\"updates\": [");
+                sb.Append(string.Join(", ", list.ToArray()));
+                sb.Append("]}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -18723,6 +19069,22 @@ namespace GeminiSuperDesktop {
                 WinSatRunAssessmentCmd(sub, live, extra);
             } else if (cmd == "winsat_hardware_assessment" || cmd == "winsat-hardware-assessment") {
                 WinSatHardwareAssessmentCmd();
+            } else if (cmd == "wua_status" || cmd == "wua-status") {
+                WuaStatusCmd();
+            } else if (cmd == "wua_services" || cmd == "wua-services") {
+                WuaServicesCmd();
+            } else if (cmd == "wua_history" || cmd == "wua-history") {
+                int start = 0;
+                int count = 20;
+                if (args.Length >= 2) int.TryParse(args[1], out start);
+                if (args.Length >= 3) int.TryParse(args[2], out count);
+                WuaHistoryCmd(start, count);
+            } else if (cmd == "wua_search" || cmd == "wua-search" || cmd == "wua_search_updates") {
+                string crit = args.Length >= 2 ? args[1] : "";
+                bool online = args.Length >= 3 && (args[2].ToLowerInvariant() == "online" || args[2].ToLowerInvariant() == "true");
+                int maxResults = 20;
+                if (args.Length >= 4) int.TryParse(args[3], out maxResults);
+                WuaSearchUpdatesCmd(crit, online, maxResults);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

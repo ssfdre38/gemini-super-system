@@ -4143,6 +4143,60 @@ const SYSTEM_TOOLS = [
           type: "object",
           properties: {}
         }
+      },
+      {
+        name: "super_wua_status",
+        description: "Inspects Windows Update Agent (WUA) COM availability, wuauserv service health, system reboot requirement state (RebootRequired), and local update policies (AUOptions, WUServer).",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_wua_services",
+        description: "Audits registered Windows Update service providers (e.g. Microsoft Update, Windows Update, WSUS, Windows Store, DCat Flighting), including default status and management flags.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_wua_history",
+        description: "Queries the Windows Update installation history database (DataStore) with date, title, result codes (Succeeded, Failed, Aborted), KB articles, and HRESULT status codes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            startIndex: {
+              type: "number",
+              description: "Zero-based index of the first history record to retrieve (default: 0)."
+            },
+            count: {
+              type: "number",
+              description: "Maximum number of history records to retrieve (default: 20, max: 100)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wua_search",
+        description: "Searches for Windows updates by criteria (e.g. pending, uninstalled, or installed) either online from Microsoft Update or offline from local cache with KB articles, severity, and download state.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            criteria: {
+              type: "string",
+              description: "Search criteria query. Presets: 'pending' (default: uninstalled software updates), 'installed', 'all_uninstalled', or custom WUA criteria string."
+            },
+            online: {
+              type: "boolean",
+              description: "Whether to query online update servers (true) or use fast local/cached metadata (false, default)."
+            },
+            maxResults: {
+              type: "number",
+              description: "Maximum number of matching updates to return (default: 20, max: 100)."
+            }
+          }
+        }
       }
 ];
 
@@ -7332,6 +7386,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `💻 [Windows WinSAT Unified Hardware Assessment Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wua_status") {
+    const res = await orch.getWuaStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔄 [Windows Update Agent Status & Reboot Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wua_services") {
+    const res = await orch.getWuaServices();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🏢 [Windows Update Registered Services Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wua_history") {
+    const res = await orch.getWuaHistory(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📜 [Windows Update Installation History Log]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wua_search") {
+    const res = await orch.searchWuaUpdates(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔍 [Windows Update Search Telemetry]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

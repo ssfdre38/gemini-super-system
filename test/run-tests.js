@@ -4478,10 +4478,79 @@ async function run() {
     assert(typeof res.dataStoreReportsCount === "number");
   });
 
-  it("All 216 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 63: Windows Update Agent (WUA) & Servicing Subsystem (wuapi.h / wuerror.h)
+  console.log("\n\x1b[1m[Suite 63: Windows Update Agent (WUA) & Servicing Subsystem]\x1b[0m");
+
+  await itAsync("getWuaStatus queries Windows Update Agent status, reboot requirements, and policy", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWuaStatus();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWuaStatus failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.rebootRequired === "boolean");
+    assert(typeof res.wuaComAvailable === "boolean");
+    assert(typeof res.sessionAvailable === "boolean");
+    assert(typeof res.serviceStatus === "string");
+    assert(typeof res.policy === "object");
+  });
+
+  await itAsync("getWuaServices audits registered Windows Update service providers", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWuaServices();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWuaServices failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.totalServices === "number");
+    assert(Array.isArray(res.services));
+    if (res.totalServices > 0) {
+      const svc = res.services[0];
+      assert(typeof svc.name === "string");
+      assert(typeof svc.serviceId === "string");
+      assert(typeof svc.isDefaultAUService === "boolean");
+    }
+  });
+
+  await itAsync("getWuaHistory queries Windows Update installation history database", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWuaHistory({ startIndex: 0, count: 5 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWuaHistory failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.totalHistoryCount === "number");
+    assert(typeof res.startIndex === "number");
+    assert(typeof res.returnedCount === "number");
+    assert(Array.isArray(res.entries));
+    if (res.returnedCount > 0) {
+      const entry = res.entries[0];
+      assert(typeof entry.title === "string");
+      assert(typeof entry.resultCode === "number");
+      assert(typeof entry.resultCodeName === "string");
+    }
+  });
+
+  await itAsync("searchWuaUpdates searches for Windows updates in offline/cached metadata", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.searchWuaUpdates({ criteria: "installed", online: false, maxResults: 5 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "searchWuaUpdates failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert.strictEqual(res.online, false);
+    assert(typeof res.totalFound === "number");
+    assert(Array.isArray(res.updates));
+  });
+
+  it("All 220 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 216);
+    assert.strictEqual(SYSTEM_TOOLS.length, 220);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -4631,6 +4700,10 @@ async function run() {
     assert(toolNames.includes("super_winsat_datastore_reports"));
     assert(toolNames.includes("super_winsat_run_assessment"));
     assert(toolNames.includes("super_winsat_hardware_assessment"));
+    assert(toolNames.includes("super_wua_status"));
+    assert(toolNames.includes("super_wua_services"));
+    assert(toolNames.includes("super_wua_history"));
+    assert(toolNames.includes("super_wua_search"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

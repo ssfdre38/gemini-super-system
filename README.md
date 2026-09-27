@@ -93,6 +93,7 @@
   - [75. Windows HTTP Services (WinHTTP) Subsystem](#75--windows-http-services-winhttp-subsystem-winhttph--winhttpdll)
   - [76. Windows Internet (WinINet) Subsystem](#76--windows-internet-wininet-subsystem-winineth--wininetdll)
   - [77. Windows System Assessment Tool (WinSAT) Subsystem](#77--windows-system-assessment-tool-winsat-subsystem-winsatcominterfaceih--winsatexe)
+  - [78. Windows Update Agent (WUA) & Servicing Subsystem](#78--windows-update-agent-wua--servicing-subsystem-wuapih--wuerrorh)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1027,6 +1028,18 @@ Directly interfaces with the Windows System Assessment Tool (WinSAT) and Windows
 - **Unified Hardware Assessment Profile (`super_winsat_hardware_assessment`)**: Combines WinSAT scores, multi-core processor topology, physical RAM capacity, storage volume free space, and DataStore report metrics into a unified hardware evaluation report.
 - **216 Tools Milestone**: Reaches **216 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **62 comprehensive test suites (199/199 tests passing 100%)** and **58 environment health checks**.
 - **Native MCP Tools**: `super_winsat_experience_index`, `super_winsat_datastore_reports`, `super_winsat_run_assessment`, `super_winsat_hardware_assessment`.
+
+---
+
+## 78. 🔄 Windows Update Agent (WUA) & Servicing Subsystem (`wuapi.h` / `wuerror.h`)
+
+Directly interfaces with the Windows Update Agent (WUA) COM infrastructure and OS servicing pipeline via `Microsoft.Update.Session`, `Microsoft.Update.SystemInfo`, and `Microsoft.Update.ServiceManager`:
+- **WUA Health, Readiness & Kernel Reboot Probing (`super_wua_status`)**: Directly queries `Microsoft.Update.SystemInfo` and `Microsoft.Update.Session` to inspect live OS reboot requirements (`RebootRequired`), WUA agent availability, `wuauserv` service state, and local update registry policies (`AUOptions`, `NoAutoUpdate`, `UseWUServer`, `WUServer`).
+- **Update Service Providers & Authorities (`super_wua_services`)**: Audits registered update endpoints via `Microsoft.Update.ServiceManager` (`Services` collection), detailing provider names (`Microsoft Update`, `Windows Store`, `DCat Flighting`, `WSUS`), service GUID IDs, default AU authority status, and management flags.
+- **Servicing Database & Installation History Auditing (`super_wua_history`)**: Queries the Windows Update servicing history database (`DataStore`) via `IUpdateSearcher::QueryHistory` and `GetTotalHistoryCount()`. Formats historical installation records with exact ISO timestamps, update titles, categories, KB IDs, HRESULT codes, and translated execution status (`InProgress`, `Succeeded`, `SucceededWithErrors`, `Failed`, `Aborted`).
+- **Criteria-Based Update Search & Cache Probing (`super_wua_search`)**: Conducts fast cached or live server queries via `IUpdateSearcher::Search` with configurable criteria queries (presets: `pending`, `installed`, `all_uninstalled`, or custom criteria). Returns update titles, descriptions, MSRC severity ratings (`Critical`, `Important`), KB article IDs, download state, and mandatory flags.
+- **220 Tools Milestone**: Reaches **220 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **63 comprehensive test suites (203/203 tests passing 100%)** and **59 environment health checks**.
+- **Native MCP Tools**: `super_wua_status`, `super_wua_services`, `super_wua_history`, `super_wua_search`.
 
 ---
 
