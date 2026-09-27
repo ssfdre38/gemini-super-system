@@ -4547,10 +4547,74 @@ async function run() {
     assert(Array.isArray(res.updates));
   });
 
-  it("All 220 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 64: Windows Color System (WCS) & Image Color Management Subsystem (icm.h / mscms.dll)
+  console.log("\n\x1b[1m[Suite 64: Windows Color System (WCS) & Image Color Management Subsystem]\x1b[0m");
+
+  await itAsync("getWcsSystemProfiles queries standard color space profiles and active display ICM profile", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWcsSystemProfiles();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWcsSystemProfiles failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.colorDirectory === "string" && res.colorDirectory.length > 0);
+    assert(typeof res.directoryExists === "boolean");
+    assert(typeof res.standard_sRGB === "string");
+    assert(typeof res.totalProfilesInDirectory === "number");
+  });
+
+  await itAsync("getWcsDirectoryProfiles enumerates installed ICC and WCS XML color profiles", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWcsDirectoryProfiles();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWcsDirectoryProfiles failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.totalProfiles === "number");
+    assert(Array.isArray(res.profiles));
+    if (res.totalProfiles > 0) {
+      const p = res.profiles[0];
+      assert(typeof p.fileName === "string");
+      assert(typeof p.format === "string");
+      assert(typeof p.sizeBytes === "number");
+    }
+  });
+
+  await itAsync("inspectWcsProfile decodes standard ICC header and color space attributes", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.inspectWcsProfile({ profileNameOrPath: "sRGB Color Space Profile.icm" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "inspectWcsProfile failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert.strictEqual(res.format, "ICC");
+    assert.strictEqual(res.magic, "acsp");
+    assert.strictEqual(res.isValidIcc, true);
+    assert.strictEqual(res.colorSpace, "RGB");
+    assert(typeof res.deviceClassDescription === "string");
+  });
+
+  await itAsync("getWcsDeviceContext interrogates display color depth, bits per pixel, and ICM state", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWcsDeviceContext();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWcsDeviceContext failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.bitsPerPixel === "number" && res.bitsPerPixel >= 8);
+    assert(typeof res.colorPlanes === "number");
+    assert(typeof res.totalColorDepthBits === "number");
+    assert(typeof res.icmEnabled === "boolean");
+  });
+
+  it("All 224 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 220);
+    assert.strictEqual(SYSTEM_TOOLS.length, 224);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -4704,6 +4768,10 @@ async function run() {
     assert(toolNames.includes("super_wua_services"));
     assert(toolNames.includes("super_wua_history"));
     assert(toolNames.includes("super_wua_search"));
+    assert(toolNames.includes("super_wcs_system_profiles"));
+    assert(toolNames.includes("super_wcs_directory_profiles"));
+    assert(toolNames.includes("super_wcs_inspect_profile"));
+    assert(toolNames.includes("super_wcs_device_context"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

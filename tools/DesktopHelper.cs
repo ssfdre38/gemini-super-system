@@ -15726,6 +15726,345 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 79: Windows Color System & Image Color Management Subsystem (icm.h / mscms.dll)
+
+        [DllImport("mscms.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool GetColorDirectoryW(string pMachineName, StringBuilder pBuffer, ref uint pdwSize);
+
+        [DllImport("mscms.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool GetStandardColorSpaceProfileW(string pMachineName, uint dwSCS, StringBuilder pBuffer, ref uint pdwSize);
+
+        [DllImport("gdi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern bool GetICMProfileW(IntPtr hdc, ref uint pBufSize, StringBuilder pszFilename);
+
+        const uint LCS_sRGB = 0x73524742; // 'sRGB'
+        const uint LCS_WINDOWS_COLOR_SPACE = 0x57435320; // 'WCS '
+
+        static uint SwapEndian32(uint val) {
+            return (val << 24) | ((val << 8) & 0x00FF0000) | ((val >> 8) & 0x0000FF00) | (val >> 24);
+        }
+
+        static ushort SwapEndian16(ushort val) {
+            return (ushort)((val << 8) | (val >> 8));
+        }
+
+        static string MapIccClass(string devClass) {
+            switch (devClass.Trim()) {
+                case "mntr": return "Display Monitor";
+                case "prtr": return "Printer / Output Device";
+                case "scnr": return "Scanner / Input Device";
+                case "spac": return "Color Space Conversion";
+                case "link": return "DeviceLink";
+                case "abst": return "Abstract Profile";
+                case "nmcl": return "Named Color Profile";
+                default: return devClass.Trim();
+            }
+        }
+
+        static string MapIccIntent(uint intent) {
+            switch (intent) {
+                case 0: return "Perceptual";
+                case 1: return "Relative Colorimetric";
+                case 2: return "Saturation";
+                case 3: return "Absolute Colorimetric";
+                default: return "Custom (" + intent + ")";
+            }
+        }
+
+        static void WcsSystemProfilesCmd() {
+            try {
+                uint dirSize = 260;
+                var dirSb = new StringBuilder((int)dirSize);
+                bool hasDir = GetColorDirectoryW(null, dirSb, ref dirSize);
+                string colorDir = hasDir ? dirSb.ToString() : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), @"System32\spool\drivers\color");
+
+                uint srgbSize = 260;
+                var srgbSb = new StringBuilder((int)srgbSize);
+                bool hasSrgb = GetStandardColorSpaceProfileW(null, LCS_sRGB, srgbSb, ref srgbSize);
+                string srgbPath = hasSrgb ? srgbSb.ToString() : "";
+
+                uint wcsSize = 260;
+                var wcsSb = new StringBuilder((int)wcsSize);
+                bool hasWcs = GetStandardColorSpaceProfileW(null, LCS_WINDOWS_COLOR_SPACE, wcsSb, ref wcsSize);
+                string wcsPath = hasWcs ? wcsSb.ToString() : "";
+
+                string activeDisplayProfile = "";
+                IntPtr hdc = GetDC(IntPtr.Zero);
+                if (hdc != IntPtr.Zero) {
+                    try {
+                        uint dcSize = 260;
+                        var dcSb = new StringBuilder((int)dcSize);
+                        if (GetICMProfileW(hdc, ref dcSize, dcSb)) {
+                            activeDisplayProfile = dcSb.ToString();
+                        }
+                    } finally {
+                        ReleaseDC(IntPtr.Zero, hdc);
+                    }
+                }
+
+                int totalProfiles = Directory.Exists(colorDir) ? Directory.GetFiles(colorDir, "*.*").Length : 0;
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"colorDirectory\": \"{0}\", ", EscapeJson(colorDir)));
+                sb.Append(string.Format("\"directoryExists\": {0}, ", Directory.Exists(colorDir) ? "true" : "false"));
+                sb.Append(string.Format("\"standard_sRGB\": \"{0}\", ", EscapeJson(srgbPath)));
+                sb.Append(string.Format("\"standard_WCS\": \"{0}\", ", EscapeJson(wcsPath)));
+                sb.Append(string.Format("\"activeDisplayProfile\": \"{0}\", ", EscapeJson(activeDisplayProfile)));
+                sb.Append(string.Format("\"totalProfilesInDirectory\": {0}}}", totalProfiles));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WcsDirectoryProfilesCmd() {
+            try {
+                uint dirSize = 260;
+                var dirSb = new StringBuilder((int)dirSize);
+                bool hasDir = GetColorDirectoryW(null, dirSb, ref dirSize);
+                string colorDir = hasDir ? dirSb.ToString() : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), @"System32\spool\drivers\color");
+
+                var list = new List<string>();
+                int iccCount = 0;
+                int cdmpCount = 0;
+                int campCount = 0;
+                int gmmpCount = 0;
+
+                if (Directory.Exists(colorDir)) {
+                    foreach (string filePath in Directory.GetFiles(colorDir, "*.*")) {
+                        try {
+                            var fi = new FileInfo(filePath);
+                            string ext = fi.Extension.ToLowerInvariant();
+                            string format = "Unknown";
+                            string category = "Other";
+
+                            if (ext == ".icm" || ext == ".icc") {
+                                format = "ICC/ICM";
+                                category = "Color Profile";
+                                iccCount++;
+                            } else if (ext == ".cdmp") {
+                                format = "WCS-XML";
+                                category = "Color Device Model Profile";
+                                cdmpCount++;
+                            } else if (ext == ".camp") {
+                                format = "WCS-XML";
+                                category = "Color Appearance Model Profile";
+                                campCount++;
+                            } else if (ext == ".gmmp") {
+                                format = "WCS-XML";
+                                category = "Gamut Map Model Profile";
+                                gmmpCount++;
+                            }
+
+                            list.Add(string.Format(
+                                "{{\"fileName\": \"{0}\", \"extension\": \"{1}\", \"format\": \"{2}\", \"category\": \"{3}\", \"sizeBytes\": {4}, \"lastModified\": \"{5}\"}}",
+                                EscapeJson(fi.Name),
+                                EscapeJson(ext),
+                                EscapeJson(format),
+                                EscapeJson(category),
+                                fi.Length,
+                                fi.LastWriteTimeUtc.ToString("o")
+                            ));
+                        } catch {}
+                    }
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"colorDirectory\": \"{0}\", ", EscapeJson(colorDir)));
+                sb.Append(string.Format("\"totalProfiles\": {0}, ", list.Count));
+                sb.Append(string.Format("\"iccCount\": {0}, ", iccCount));
+                sb.Append(string.Format("\"cdmpCount\": {0}, ", cdmpCount));
+                sb.Append(string.Format("\"campCount\": {0}, ", campCount));
+                sb.Append(string.Format("\"gmmpCount\": {0}, ", gmmpCount));
+                sb.Append("\"profiles\": [");
+                sb.Append(string.Join(", ", list.ToArray()));
+                sb.Append("]}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WcsInspectProfileCmd(string profileNameOrPath) {
+            try {
+                if (string.IsNullOrEmpty(profileNameOrPath)) {
+                    profileNameOrPath = "sRGB Color Space Profile.icm";
+                }
+
+                string resolvedPath = profileNameOrPath;
+                if (!File.Exists(resolvedPath)) {
+                    uint dirSize = 260;
+                    var dirSb = new StringBuilder((int)dirSize);
+                    GetColorDirectoryW(null, dirSb, ref dirSize);
+                    string defaultDir = dirSb.ToString();
+                    string candidate = Path.Combine(defaultDir, profileNameOrPath);
+                    if (File.Exists(candidate)) {
+                        resolvedPath = candidate;
+                    }
+                }
+
+                if (!File.Exists(resolvedPath)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Color profile file not found: {0}\"}}", EscapeJson(profileNameOrPath)));
+                    return;
+                }
+
+                var fi = new FileInfo(resolvedPath);
+                string ext = fi.Extension.ToLowerInvariant();
+
+                if (ext == ".cdmp" || ext == ".camp" || ext == ".gmmp" || ext == ".xml") {
+                    string content = File.ReadAllText(resolvedPath);
+                    string rootTag = "";
+                    string schemaNs = "";
+                    int rootStart = content.IndexOf("<");
+                    if (rootStart >= 0) {
+                        int rootEnd = content.IndexOfAny(new char[] { ' ', '>', '/' }, rootStart + 1);
+                        if (rootEnd > rootStart) {
+                            rootTag = content.Substring(rootStart + 1, rootEnd - rootStart - 1).Trim();
+                            if (rootTag.StartsWith("?xml") || rootTag.StartsWith("!--")) {
+                                int nextTag = content.IndexOf("<", rootEnd);
+                                if (nextTag >= 0) {
+                                    int nextEnd = content.IndexOfAny(new char[] { ' ', '>', '/' }, nextTag + 1);
+                                    if (nextEnd > nextTag) rootTag = content.Substring(nextTag + 1, nextEnd - nextTag - 1).Trim();
+                                }
+                            }
+                        }
+                    }
+
+                    int nsIdx = content.IndexOf("xmlns");
+                    if (nsIdx >= 0) {
+                        int q1 = content.IndexOf("\"", nsIdx);
+                        if (q1 >= 0) {
+                            int q2 = content.IndexOf("\"", q1 + 1);
+                            if (q2 > q1) schemaNs = content.Substring(q1 + 1, q2 - q1 - 1);
+                        }
+                    }
+
+                    var sbXml = new StringBuilder();
+                    sbXml.Append("{\"success\": true, \"apiAvailable\": true, \"format\": \"WCS-XML\", ");
+                    sbXml.Append(string.Format("\"filePath\": \"{0}\", ", EscapeJson(resolvedPath)));
+                    sbXml.Append(string.Format("\"fileName\": \"{0}\", ", EscapeJson(fi.Name)));
+                    sbXml.Append(string.Format("\"sizeBytes\": {0}, ", fi.Length));
+                    sbXml.Append(string.Format("\"rootElement\": \"{0}\", ", EscapeJson(rootTag)));
+                    sbXml.Append(string.Format("\"schemaNamespace\": \"{0}\", ", EscapeJson(schemaNs)));
+                    sbXml.Append(string.Format("\"description\": \"Windows Color System {0} Profile\"}}", EscapeJson(ext.ToUpperInvariant())));
+
+                    Console.WriteLine(sbXml.ToString());
+                    return;
+                }
+
+                byte[] bytes = File.ReadAllBytes(resolvedPath);
+                if (bytes.Length < 128) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"File is too small to be a valid ICC color profile (less than 128 bytes)\"}");
+                    return;
+                }
+
+                uint size = SwapEndian32(BitConverter.ToUInt32(bytes, 0));
+                string cmm = Encoding.ASCII.GetString(bytes, 4, 4);
+                byte vMaj = bytes[8];
+                byte vMin = (byte)(bytes[9] >> 4);
+                byte vBug = (byte)(bytes[9] & 0x0F);
+                string devClass = Encoding.ASCII.GetString(bytes, 12, 4);
+                string colorSpace = Encoding.ASCII.GetString(bytes, 16, 4);
+                string pcs = Encoding.ASCII.GetString(bytes, 20, 4);
+                string magic = Encoding.ASCII.GetString(bytes, 36, 4);
+                string platform = Encoding.ASCII.GetString(bytes, 40, 4);
+                string manufacturer = Encoding.ASCII.GetString(bytes, 48, 4);
+                string model = Encoding.ASCII.GetString(bytes, 52, 4);
+                uint intent = SwapEndian32(BitConverter.ToUInt32(bytes, 64));
+
+                ushort year = SwapEndian16(BitConverter.ToUInt16(bytes, 24));
+                ushort month = SwapEndian16(BitConverter.ToUInt16(bytes, 26));
+                ushort day = SwapEndian16(BitConverter.ToUInt16(bytes, 28));
+                ushort hour = SwapEndian16(BitConverter.ToUInt16(bytes, 30));
+                ushort minute = SwapEndian16(BitConverter.ToUInt16(bytes, 32));
+                ushort second = SwapEndian16(BitConverter.ToUInt16(bytes, 34));
+                string createdDate = string.Format("{0:D4}-{1:D2}-{2:D2}T{3:D2}:{4:D2}:{5:D2}Z", year, month, day, hour, minute, second);
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, \"format\": \"ICC\", ");
+                sb.Append(string.Format("\"filePath\": \"{0}\", ", EscapeJson(resolvedPath)));
+                sb.Append(string.Format("\"fileName\": \"{0}\", ", EscapeJson(fi.Name)));
+                sb.Append(string.Format("\"headerSize\": {0}, ", size));
+                sb.Append(string.Format("\"actualFileSize\": {0}, ", fi.Length));
+                sb.Append(string.Format("\"magic\": \"{0}\", ", EscapeJson(magic)));
+                sb.Append(string.Format("\"isValidIcc\": {0}, ", magic == "acsp" ? "true" : "false"));
+                sb.Append(string.Format("\"version\": \"{0}.{1}.{2}\", ", vMaj, vMin, vBug));
+                sb.Append(string.Format("\"deviceClass\": \"{0}\", ", EscapeJson(devClass.Trim())));
+                sb.Append(string.Format("\"deviceClassDescription\": \"{0}\", ", EscapeJson(MapIccClass(devClass))));
+                sb.Append(string.Format("\"colorSpace\": \"{0}\", ", EscapeJson(colorSpace.Trim())));
+                sb.Append(string.Format("\"connectionSpace\": \"{0}\", ", EscapeJson(pcs.Trim())));
+                sb.Append(string.Format("\"primaryPlatform\": \"{0}\", ", EscapeJson(platform.Trim())));
+                sb.Append(string.Format("\"cmmSignature\": \"{0}\", ", EscapeJson(cmm.Trim())));
+                sb.Append(string.Format("\"renderingIntent\": \"{0}\", ", EscapeJson(MapIccIntent(intent))));
+                sb.Append(string.Format("\"creationDate\": \"{0}\", ", EscapeJson(createdDate)));
+                sb.Append(string.Format("\"manufacturer\": \"{0}\", ", EscapeJson(manufacturer.Trim())));
+                sb.Append(string.Format("\"model\": \"{0}\"}}", EscapeJson(model.Trim())));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        const int ICM_RC_PALETTE = 0x0100;
+        const int ICM_COLORMGMTCAPS = 121;
+
+        static void WcsDeviceContextCmd(string deviceName) {
+            try {
+                IntPtr hdc = IntPtr.Zero;
+                bool created = false;
+                if (!string.IsNullOrEmpty(deviceName)) {
+                    hdc = CreateDisplayDC("DISPLAY", deviceName, null, IntPtr.Zero);
+                    created = hdc != IntPtr.Zero;
+                }
+                if (hdc == IntPtr.Zero) {
+                    hdc = GetDC(IntPtr.Zero);
+                }
+
+                try {
+                    int bpp = GetDeviceCaps(hdc, GDC_BITSPIXEL);
+                    int planes = GetDeviceCaps(hdc, GDC_PLANES);
+                    int numColors = GetDeviceCaps(hdc, GDC_NUMCOLORS);
+                    int rasterCaps = GetDeviceCaps(hdc, GDC_RASTERCAPS);
+                    int colorMgmtCaps = GetDeviceCaps(hdc, ICM_COLORMGMTCAPS);
+                    bool supportsPalette = (rasterCaps & ICM_RC_PALETTE) != 0;
+
+                    uint bufSize = 260;
+                    var profileSb = new StringBuilder((int)bufSize);
+                    bool hasIcm = GetICMProfileW(hdc, ref bufSize, profileSb);
+                    string icmProfile = hasIcm ? profileSb.ToString() : "";
+
+                    var sb = new StringBuilder();
+                    sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                    sb.Append(string.Format("\"device\": \"{0}\", ", EscapeJson(string.IsNullOrEmpty(deviceName) ? "PrimaryDisplay" : deviceName)));
+                    sb.Append(string.Format("\"bitsPerPixel\": {0}, ", bpp));
+                    sb.Append(string.Format("\"colorPlanes\": {0}, ", planes));
+                    sb.Append(string.Format("\"totalColorDepthBits\": {0}, ", bpp * planes));
+                    sb.Append(string.Format("\"numColors\": {0}, ", numColors));
+                    sb.Append(string.Format("\"supportsPalette\": {0}, ", supportsPalette ? "true" : "false"));
+                    sb.Append(string.Format("\"colorManagementCaps\": {0}, ", colorMgmtCaps));
+                    sb.Append(string.Format("\"icmEnabled\": {0}, ", hasIcm ? "true" : "false"));
+                    sb.Append(string.Format("\"activeProfile\": \"{0}\"}}", EscapeJson(icmProfile)));
+
+                    Console.WriteLine(sb.ToString());
+                } finally {
+                    if (created && hdc != IntPtr.Zero) {
+                        DeleteDC(hdc);
+                    } else if (hdc != IntPtr.Zero) {
+                        ReleaseDC(IntPtr.Zero, hdc);
+                    }
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -19085,6 +19424,16 @@ namespace GeminiSuperDesktop {
                 int maxResults = 20;
                 if (args.Length >= 4) int.TryParse(args[3], out maxResults);
                 WuaSearchUpdatesCmd(crit, online, maxResults);
+            } else if (cmd == "wcs_system_profiles" || cmd == "wcs-system-profiles") {
+                WcsSystemProfilesCmd();
+            } else if (cmd == "wcs_directory_profiles" || cmd == "wcs-directory-profiles") {
+                WcsDirectoryProfilesCmd();
+            } else if (cmd == "wcs_inspect_profile" || cmd == "wcs-inspect-profile") {
+                string profile = args.Length >= 2 ? args[1] : "";
+                WcsInspectProfileCmd(profile);
+            } else if (cmd == "wcs_device_context" || cmd == "wcs-device-context") {
+                string device = args.Length >= 2 ? args[1] : "";
+                WcsDeviceContextCmd(device);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

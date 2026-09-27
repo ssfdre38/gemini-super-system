@@ -94,6 +94,7 @@
   - [76. Windows Internet (WinINet) Subsystem](#76--windows-internet-wininet-subsystem-winineth--wininetdll)
   - [77. Windows System Assessment Tool (WinSAT) Subsystem](#77--windows-system-assessment-tool-winsat-subsystem-winsatcominterfaceih--winsatexe)
   - [78. Windows Update Agent (WUA) & Servicing Subsystem](#78--windows-update-agent-wua--servicing-subsystem-wuapih--wuerrorh)
+  - [79. Windows Color System (WCS) Subsystem](#79--windows-color-system-wcs-subsystem-icmh--mscmsdll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1040,6 +1041,18 @@ Directly interfaces with the Windows Update Agent (WUA) COM infrastructure and O
 - **Criteria-Based Update Search & Cache Probing (`super_wua_search`)**: Conducts fast cached or live server queries via `IUpdateSearcher::Search` with configurable criteria queries (presets: `pending`, `installed`, `all_uninstalled`, or custom criteria). Returns update titles, descriptions, MSRC severity ratings (`Critical`, `Important`), KB article IDs, download state, and mandatory flags.
 - **220 Tools Milestone**: Reaches **220 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **63 comprehensive test suites (203/203 tests passing 100%)** and **59 environment health checks**.
 - **Native MCP Tools**: `super_wua_status`, `super_wua_services`, `super_wua_history`, `super_wua_search`.
+
+---
+
+## 79. 🎨 Windows Color System (WCS) Subsystem (`icm.h` / `mscms.dll`)
+
+Directly interfaces with the Windows Color System (WCS) and Image Color Management (ICM) infrastructure via `mscms.dll` and `gdi32.dll`:
+- **System Color Spaces & Display ICM Profile (`super_wcs_system_profiles`)**: Queries the Windows Color Directory (`%WINDIR%\System32\spool\drivers\color`) via `GetColorDirectoryW`, retrieves standard color space profiles (sRGB `LCS_sRGB = 0x73524742`, WCS `0x57435320`) via `GetStandardColorSpaceProfileW`, and evaluates the active display context ICM profile via `GetICMProfileW`.
+- **Color Directory Inventory & Profile Categorization (`super_wcs_directory_profiles`)**: Enumerates all installed profiles in the color directory, automatically categorizing standard ICC/ICM profiles (`.icm`, `.icc`), Color Device Model Profiles (`.cdmp`), Color Appearance Model Profiles (`.camp`), and Gamut Map Model Profiles (`.gmmp`).
+- **Binary ICC & WCS XML Schema Inspection (`super_wcs_inspect_profile`)**: Performs deep inspection of color profiles. Parses standard 128-byte ICC binary headers (size, `acsp` magic validation, version, device class, data color space, profile connection space, primary platform, CMM signature, rendering intent, creation date) or parses WCS XML schemas, root tags, and namespaces.
+- **Display Device Context & Color Depth Evaluation (`super_wcs_device_context`)**: Queries bits per pixel, color planes, total color depth bits, palette capabilities (`RC_PALETTE`), color management capabilities (`ICM_COLORMGMTCAPS`), and ICM enablement on active display device contexts via `GetDeviceCaps` and `GetICMProfileW`.
+- **224 Tools Milestone**: Reaches **224 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **64 comprehensive test suites (207/207 tests passing 100%)** and **60 environment health checks**.
+- **Native MCP Tools**: `super_wcs_system_profiles`, `super_wcs_directory_profiles`, `super_wcs_inspect_profile`, `super_wcs_device_context`.
 
 ---
 

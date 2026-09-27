@@ -4197,6 +4197,48 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_wcs_system_profiles",
+        description: "Queries Windows Color System (WCS) and ICM spool directories, standard color space profiles (sRGB / WCS), and the active primary display ICM color profile.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_wcs_directory_profiles",
+        description: "Enumerates all installed ICC and WCS color profiles in the system color directory, categorizing ICC/ICM, CDMP device models, CAMP appearance models, and GMMP gamut maps.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_wcs_inspect_profile",
+        description: "Deeply inspects an ICC/ICM binary color profile header (CMM, version, device class, color space, PCS, intent) or WCS XML profile schema by name or path.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            profileNameOrPath: {
+              type: "string",
+              description: "Name or full path of the color profile to inspect (e.g. 'sRGB Color Space Profile.icm', 'D65.camp', 'wscRGB.cdmp'). Default: sRGB."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wcs_device_context",
+        description: "Evaluates the color rendering capabilities, bits per pixel, color planes, palette support, and active ICM color profile of a display device context.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            deviceName: {
+              type: "string",
+              description: "Optional display device name (e.g. '\\\\.\\DISPLAY1'). Defaults to primary display."
+            }
+          }
+        }
       }
 ];
 
@@ -7434,6 +7476,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🔍 [Windows Update Search Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wcs_system_profiles") {
+    const res = await orch.getWcsSystemProfiles();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎨 [Windows Color System (WCS) System Profiles Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wcs_directory_profiles") {
+    const res = await orch.getWcsDirectoryProfiles();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📂 [Windows Color Directory Profiles Inventory]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wcs_inspect_profile") {
+    const res = await orch.inspectWcsProfile(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔍 [Windows Color Profile Header & Schema Inspection]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wcs_device_context") {
+    const res = await orch.getWcsDeviceContext(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🖥️ [Display Device Context Color Telemetry]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
