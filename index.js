@@ -4239,6 +4239,50 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_security_center_health",
+        description: "Queries Windows Security Center health status across 7 security provider categories (Firewall, AutoUpdate, Antivirus, AntiSpyware, Internet Settings, UAC, Security Service) via native wscapi.dll / Windows Security Posture engine.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            provider: {
+              type: "string",
+              description: "Target security provider category to query ('all', 'firewall', 'autoupdate', 'antivirus', 'antispyware', 'internet_settings', 'uac', 'service'). Defaults to 'all'.",
+              enum: ["all", "firewall", "autoupdate", "antivirus", "antispyware", "internet_settings", "uac", "service"]
+            }
+          }
+        }
+      },
+      {
+        name: "super_security_center_products",
+        description: "Enumerates registered active and third-party security products (Antivirus, Firewall, Antispyware) with decoded product states, signature up-to-date status, and engine paths via root\\SecurityCenter2 WMI and Defender introspection.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            type: {
+              type: "string",
+              description: "Product category filter ('all', 'antivirus', 'firewall', 'antispyware'). Defaults to 'all'.",
+              enum: ["all", "antivirus", "firewall", "antispyware"]
+            }
+          }
+        }
+      },
+      {
+        name: "super_security_center_status",
+        description: "Evaluates the health and execution status of core Windows security daemon services (wscsvc, WinDefend, SecurityHealthService, Sense, mpssvc) along with real-time monitoring and tamper protection policies.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_security_center_store_uri",
+        description: "Queries the registered Windows Store URI for antimalware/security catalog solutions (WscGetAntiMalwareUri) and Windows Security deep-link URI endpoints.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
 ];
 
@@ -7524,6 +7568,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🖥️ [Display Device Context Color Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_security_center_health") {
+    const res = await orch.getSecurityCenterHealth(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [Windows Security Center Provider Health Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_security_center_products") {
+    const res = await orch.getSecurityCenterProducts(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [Windows Security Center Registered Products]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_security_center_status") {
+    const res = await orch.getSecurityCenterStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [Windows Security Center Core Services & Policy Status]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_security_center_store_uri") {
+    const res = await orch.getSecurityCenterStoreUri();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [Windows Security Center Store & Deep Link URIs]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

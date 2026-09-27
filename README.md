@@ -95,6 +95,7 @@
   - [77. Windows System Assessment Tool (WinSAT) Subsystem](#77--windows-system-assessment-tool-winsat-subsystem-winsatcominterfaceih--winsatexe)
   - [78. Windows Update Agent (WUA) & Servicing Subsystem](#78--windows-update-agent-wua--servicing-subsystem-wuapih--wuerrorh)
   - [79. Windows Color System (WCS) Subsystem](#79--windows-color-system-wcs-subsystem-icmh--mscmsdll)
+  - [80. Windows Security Center (WSC) Subsystem](#80-️-windows-security-center-wsc-subsystem-wscapih--wscapidll--rootsecuritycenter2)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1053,6 +1054,18 @@ Directly interfaces with the Windows Color System (WCS) and Image Color Manageme
 - **Display Device Context & Color Depth Evaluation (`super_wcs_device_context`)**: Queries bits per pixel, color planes, total color depth bits, palette capabilities (`RC_PALETTE`), color management capabilities (`ICM_COLORMGMTCAPS`), and ICM enablement on active display device contexts via `GetDeviceCaps` and `GetICMProfileW`.
 - **224 Tools Milestone**: Reaches **224 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **64 comprehensive test suites (207/207 tests passing 100%)** and **60 environment health checks**.
 - **Native MCP Tools**: `super_wcs_system_profiles`, `super_wcs_directory_profiles`, `super_wcs_inspect_profile`, `super_wcs_device_context`.
+
+---
+
+## 80. 🛡️ Windows Security Center (WSC) Subsystem (`wscapi.h` / `wscapi.dll` / `root\SecurityCenter2`)
+
+Directly interfaces with the Windows Security Center API and the unified `root\SecurityCenter2` WMI posture architecture:
+- **Security Provider Health & Posture Scoring (`super_security_center_health`)**: Queries live health across all seven fundamental security pillars (`Firewall`, `AutoUpdate`, `Antivirus`, `AntiSpyware`, `InternetSettings`, `UserAccountControl`, `SecurityService`) via `WscGetSecurityProviderHealth` (with high-fidelity native fallback for Windows 11 / Windows Server). Calculates overall protection percentage and aggregate health status.
+- **Registered Antivirus, Firewall & Security Products (`super_security_center_products`)**: Interrogates the `root\SecurityCenter2` WMI repository to detect third-party and native security suites (`AntiVirusProduct`, `FirewallProduct`, `AntiSpywareProduct`). Decodes the complex `productState` bitfield into active real-time protection, signature freshness, and engine status flags.
+- **Core Security Daemons & Tamper Protection Status (`super_security_center_status`)**: Audits foundational Windows Defender and security services (`WinDefend`, `SecurityHealthService`, `Sense`, `mpssvc`, `wscsvc`) and checks critical registry policies including Tamper Protection, real-time monitoring exclusions, and behavior monitoring.
+- **AntiMalware Deep Links & Store Acquisition URIs (`super_security_center_store_uri`)**: Retrieves registered antimalware acquisition endpoints via `WscGetAntiMalwareUri` and resolves Windows Security deep-link protocols (`windowsdefender://providers/`) and Store URIs.
+- **228 Tools Milestone**: Reaches **228 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **65 comprehensive test suites** and **61 environment health checks**.
+- **Native MCP Tools**: `super_security_center_health`, `super_security_center_products`, `super_security_center_status`, `super_security_center_store_uri`.
 
 ---
 

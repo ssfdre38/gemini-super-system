@@ -4604,10 +4604,73 @@ async function run() {
     assert(typeof res.icmEnabled === "boolean");
   });
 
-  it("All 224 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 65: Windows Security Center Subsystem (wscapi.h / root\SecurityCenter2)
+  console.log("\n\x1b[1m[Suite 65: Windows Security Center Subsystem]\x1b[0m");
+
+  await itAsync("getSecurityCenterHealth queries security provider health and posture score", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getSecurityCenterHealth({ provider: "all" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getSecurityCenterHealth failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.overallScore === "number");
+    assert(typeof res.aggregateHealth === "string");
+    assert(typeof res.healthyPillars === "number");
+    assert(typeof res.totalPillars === "number");
+    assert(Array.isArray(res.providers));
+    assert(res.providers.length > 0);
+  });
+
+  await itAsync("getSecurityCenterProducts interrogates SecurityCenter2 WMI registered products", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getSecurityCenterProducts({ category: "all" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getSecurityCenterProducts failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.totalProducts === "number");
+    assert(Array.isArray(res.products));
+    assert(res.products.length > 0);
+    const p = res.products[0];
+    assert(typeof p.name === "string");
+    assert(typeof p.type === "string");
+    assert(typeof p.productStateHex === "string");
+    assert(typeof p.isEnabled === "boolean");
+  });
+
+  await itAsync("getSecurityCenterStatus audits core security daemon services and policies", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getSecurityCenterStatus();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getSecurityCenterStatus failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(res.services !== null && typeof res.services === "object");
+    assert(typeof res.services.WinDefend === "string");
+    assert(typeof res.tamperProtection === "boolean");
+    assert(typeof res.realTimeMonitoring === "boolean");
+  });
+
+  await itAsync("getSecurityCenterStoreUri retrieves antimalware URI and Defender deep links", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getSecurityCenterStoreUri();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getSecurityCenterStoreUri failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.uri === "string" && res.uri.startsWith("windowsdefender://"));
+    assert(typeof res.storeCatalogUri === "string" && res.storeCatalogUri.startsWith("ms-windows-store://"));
+  });
+
+  it("All 228 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 224);
+    assert.strictEqual(SYSTEM_TOOLS.length, 228);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -4765,6 +4828,10 @@ async function run() {
     assert(toolNames.includes("super_wcs_directory_profiles"));
     assert(toolNames.includes("super_wcs_inspect_profile"));
     assert(toolNames.includes("super_wcs_device_context"));
+    assert(toolNames.includes("super_security_center_health"));
+    assert(toolNames.includes("super_security_center_products"));
+    assert(toolNames.includes("super_security_center_status"));
+    assert(toolNames.includes("super_security_center_store_uri"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

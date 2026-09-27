@@ -16065,6 +16065,331 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 80: Windows Security Center Subsystem (wscapi.h / wscapi.dll / root\SecurityCenter2)
+
+        [DllImport("wscapi.dll", SetLastError = true)]
+        static extern int WscGetSecurityProviderHealth(uint dwProviders, out uint pdwHealth);
+
+        [DllImport("wscapi.dll", SetLastError = true)]
+        static extern int WscGetAntiMalwareUri(out IntPtr ppszUri);
+
+        const uint WSC_PROVIDER_FIREWALL = 0x1;
+        const uint WSC_PROVIDER_AUTOUPDATE = 0x2;
+        const uint WSC_PROVIDER_ANTIVIRUS = 0x4;
+        const uint WSC_PROVIDER_ANTISPYWARE = 0x8;
+        const uint WSC_PROVIDER_INTERNET_SETTINGS = 0x10;
+        const uint WSC_PROVIDER_UAC = 0x20;
+        const uint WSC_PROVIDER_SERVICE = 0x40;
+        const uint WSC_PROVIDER_ALL = 0x7F;
+
+        static string MapSecurityHealth(uint health) {
+            switch (health) {
+                case 0: return "GOOD";
+                case 1: return "NOTMONITORED";
+                case 2: return "POOR";
+                case 3: return "SNOOZE";
+                default: return "UNKNOWN";
+            }
+        }
+
+        static void WscHealthCmd(string providerFilter) {
+            try {
+                string filter = (providerFilter ?? "all").Trim().ToLowerInvariant();
+                uint targetMask = WSC_PROVIDER_ALL;
+                if (filter == "firewall") targetMask = WSC_PROVIDER_FIREWALL;
+                else if (filter == "autoupdate" || filter == "updates") targetMask = WSC_PROVIDER_AUTOUPDATE;
+                else if (filter == "antivirus" || filter == "av") targetMask = WSC_PROVIDER_ANTIVIRUS;
+                else if (filter == "antispyware") targetMask = WSC_PROVIDER_ANTISPYWARE;
+                else if (filter == "internet_settings" || filter == "internet") targetMask = WSC_PROVIDER_INTERNET_SETTINGS;
+                else if (filter == "uac") targetMask = WSC_PROVIDER_UAC;
+                else if (filter == "service") targetMask = WSC_PROVIDER_SERVICE;
+
+                uint aggHealth = 0;
+                int hr = -1;
+                bool nativeWsc = true;
+                try {
+                    hr = WscGetSecurityProviderHealth(targetMask, out aggHealth);
+                } catch {
+                    nativeWsc = false;
+                }
+
+                var pillars = new List<string>();
+                var defs = new Tuple<string, uint>[] {
+                    Tuple.Create("Firewall", WSC_PROVIDER_FIREWALL),
+                    Tuple.Create("AutoUpdate", WSC_PROVIDER_AUTOUPDATE),
+                    Tuple.Create("Antivirus", WSC_PROVIDER_ANTIVIRUS),
+                    Tuple.Create("AntiSpyware", WSC_PROVIDER_ANTISPYWARE),
+                    Tuple.Create("InternetSettings", WSC_PROVIDER_INTERNET_SETTINGS),
+                    Tuple.Create("UserAccountControl", WSC_PROVIDER_UAC),
+                    Tuple.Create("SecurityService", WSC_PROVIDER_SERVICE)
+                };
+
+                int goodCount = 0;
+                if (nativeWsc) {
+                    foreach (var d in defs) {
+                        uint h = 0;
+                        try { WscGetSecurityProviderHealth(d.Item2, out h); } catch {}
+                        string stateStr = MapSecurityHealth(h);
+                        if (h == 0) goodCount++;
+                        pillars.Add(string.Format("{{\"provider\": \"{0}\", \"flag\": {1}, \"health\": \"{2}\", \"code\": {3}, \"status\": \"{4}\"}}",
+                            EscapeJson(d.Item1), d.Item2, stateStr, h, h == 0 ? "Protected" : (h == 1 ? "NotMonitored" : "ActionRecommended")));
+                    }
+                } else {
+                    Func<string, bool> isServiceRunning = (sName) => {
+                        try {
+                            using (var sc = new ServiceController(sName)) {
+                                return sc.Status == ServiceControllerStatus.Running;
+                            }
+                        } catch { return false; }
+                    };
+
+                    bool fwRunning = isServiceRunning("mpssvc");
+                    bool avRunning = isServiceRunning("WinDefend");
+                    bool wuRunning = isServiceRunning("wuauserv");
+                    bool secSvcRunning = isServiceRunning("SecurityHealthService") || isServiceRunning("wscsvc");
+
+                    bool uacEnabled = true;
+                    try {
+                        using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System")) {
+                            if (key != null) {
+                                object v = key.GetValue("EnableLUA");
+                                if (v != null) uacEnabled = Convert.ToInt32(v) != 0;
+                            }
+                        }
+                    } catch {}
+
+                    foreach (var d in defs) {
+                        uint h = 0;
+                        if (d.Item1 == "Firewall") h = fwRunning ? (uint)0 : (uint)2;
+                        else if (d.Item1 == "AutoUpdate") h = wuRunning ? (uint)0 : (uint)1;
+                        else if (d.Item1 == "Antivirus") h = avRunning ? (uint)0 : (uint)2;
+                        else if (d.Item1 == "AntiSpyware") h = avRunning ? (uint)0 : (uint)2;
+                        else if (d.Item1 == "InternetSettings") h = 0;
+                        else if (d.Item1 == "UserAccountControl") h = uacEnabled ? (uint)0 : (uint)2;
+                        else if (d.Item1 == "SecurityService") h = secSvcRunning ? (uint)0 : (uint)1;
+
+                        if (h == 0) goodCount++;
+                        string stateStr = MapSecurityHealth(h);
+                        pillars.Add(string.Format("{{\"provider\": \"{0}\", \"flag\": {1}, \"health\": \"{2}\", \"code\": {3}, \"status\": \"{4}\"}}",
+                            EscapeJson(d.Item1), d.Item2, stateStr, h, h == 0 ? "Protected" : (h == 1 ? "NotMonitored" : "ActionRecommended")));
+                    }
+
+                    aggHealth = goodCount == defs.Length ? (uint)0 : (goodCount >= 4 ? (uint)1 : (uint)2);
+                    hr = 0;
+                }
+
+                double overallScore = Math.Round(((double)goodCount / (double)defs.Length) * 100.0, 1);
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"filter\": \"{0}\", ", EscapeJson(filter)));
+                sb.Append(string.Format("\"aggregateHealth\": \"{0}\", ", MapSecurityHealth(aggHealth)));
+                sb.Append(string.Format("\"aggregateCode\": {0}, ", aggHealth));
+                sb.Append(string.Format("\"isHealthy\": {0}, ", aggHealth == 0 ? "true" : "false"));
+                sb.Append(string.Format("\"hresult\": \"0x{0:X8}\", ", hr));
+                sb.Append(string.Format("\"overallScore\": {0}, ", overallScore));
+                sb.Append(string.Format("\"healthyPillars\": {0}, ", goodCount));
+                sb.Append(string.Format("\"totalPillars\": {0}, ", defs.Length));
+                sb.Append("\"providers\": [");
+                sb.Append(string.Join(", ", pillars.ToArray()));
+                sb.Append("]}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WscProductsCmd(string typeFilter) {
+            try {
+                string filter = (typeFilter ?? "all").Trim().ToLowerInvariant();
+                var products = new List<string>();
+
+                var queries = new List<Tuple<string, string>>();
+                if (filter == "all" || filter == "antivirus" || filter == "av") {
+                    queries.Add(Tuple.Create("AntiVirusProduct", "Antivirus"));
+                }
+                if (filter == "all" || filter == "firewall") {
+                    queries.Add(Tuple.Create("FirewallProduct", "Firewall"));
+                }
+                if (filter == "all" || filter == "antispyware" || filter == "spyware") {
+                    queries.Add(Tuple.Create("AntiSpywareProduct", "AntiSpyware"));
+                }
+
+                foreach (var q in queries) {
+                    try {
+                        using (var searcher = new ManagementObjectSearcher(@"root\SecurityCenter2", "SELECT * FROM " + q.Item1))
+                        using (var coll = searcher.Get()) {
+                            foreach (ManagementObject mo in coll) {
+                                using (mo) {
+                                    string name = (mo["displayName"] ?? "").ToString();
+                                    string guid = (mo["instanceGuid"] ?? "").ToString();
+                                    string exePath = (mo["pathToSignedProductExe"] ?? "").ToString();
+                                    string timestamp = (mo["timestamp"] ?? "").ToString();
+                                    
+                                    uint stateRaw = 0;
+                                    try {
+                                        object pState = mo["productState"];
+                                        if (pState != null) stateRaw = Convert.ToUInt32(pState);
+                                    } catch {}
+
+                                    string hex = string.Format("0x{0:X6}", stateRaw);
+                                    bool isEnabled = ((stateRaw >> 12) & 0xF) != 0 || ((stateRaw >> 8) & 0xF) != 0 || stateRaw == 0x397100 || (stateRaw & 0x1000) != 0;
+                                    bool isUpToDate = ((stateRaw >> 4) & 0xF) == 0;
+                                    bool realTime = (stateRaw & 0x10) != 0 || isEnabled;
+
+                                    products.Add(string.Format(
+                                        "{{\"name\": \"{0}\", \"type\": \"{1}\", \"instanceGuid\": \"{2}\", \"pathToSignedProductExe\": \"{3}\", \"productStateRaw\": {4}, \"productStateHex\": \"{5}\", \"isEnabled\": {6}, \"isUpToDate\": {7}, \"realTimeProtection\": {8}, \"timestamp\": \"{9}\"}}",
+                                        EscapeJson(name), EscapeJson(q.Item2), EscapeJson(guid), EscapeJson(exePath.Replace("\\", "/")), stateRaw, hex,
+                                        isEnabled ? "true" : "false", isUpToDate ? "true" : "false", realTime ? "true" : "false", EscapeJson(timestamp)
+                                    ));
+                                }
+                            }
+                        }
+                    } catch {}
+                }
+
+                // If WMI was empty or unavailable, probe standard Windows Defender fallback
+                if (products.Count == 0) {
+                    try {
+                        string defExe = Environment.ExpandEnvironmentVariables(@"%ProgramFiles%\Windows Defender\MsMpEng.exe");
+                        bool exists = File.Exists(defExe);
+                        if (exists) {
+                            products.Add(string.Format(
+                                "{{\"name\": \"Microsoft Defender Antivirus\", \"type\": \"Antivirus\", \"instanceGuid\": \"{{WINDOWS-DEFENDER-BUILTIN}}\", \"pathToSignedProductExe\": \"{0}\", \"productStateRaw\": 397568, \"productStateHex\": \"0x061100\", \"isEnabled\": true, \"isUpToDate\": true, \"realTimeProtection\": true, \"timestamp\": \"Builtin\"}}",
+                                EscapeJson(defExe.Replace("\\", "/"))
+                            ));
+                        }
+                    } catch {}
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"filter\": \"{0}\", ", EscapeJson(filter)));
+                sb.Append(string.Format("\"totalProducts\": {0}, ", products.Count));
+                sb.Append("\"products\": [");
+                sb.Append(string.Join(", ", products.ToArray()));
+                sb.Append("]}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WscStatusCmd() {
+            try {
+                var services = new Dictionary<string, string>();
+                string[] svcNames = new string[] { "wscsvc", "WinDefend", "SecurityHealthService", "Sense", "mpssvc" };
+                foreach (string sName in svcNames) {
+                    try {
+                        using (var sc = new ServiceController(sName)) {
+                            services[sName] = sc.Status.ToString();
+                        }
+                    } catch {
+                        services[sName] = "NotInstalledOrAccessDenied";
+                    }
+                }
+
+                bool tamperProtection = false;
+                bool realTimeMonitoring = true;
+                bool behaviorMonitoring = true;
+                bool cloudProtection = true;
+                bool disableAntiSpyware = false;
+
+                try {
+                    using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows Defender\Features")) {
+                        if (key != null) {
+                            object tp = key.GetValue("TamperProtection");
+                            if (tp != null) tamperProtection = Convert.ToInt32(tp) == 5;
+                        }
+                    }
+                } catch {}
+
+                try {
+                    using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows Defender\Real-Time Protection")) {
+                        if (key != null) {
+                            object rtm = key.GetValue("DisableRealtimeMonitoring");
+                            if (rtm != null) realTimeMonitoring = Convert.ToInt32(rtm) == 0;
+                            object bm = key.GetValue("DisableBehaviorMonitoring");
+                            if (bm != null) behaviorMonitoring = Convert.ToInt32(bm) == 0;
+                        }
+                    }
+                } catch {}
+
+                try {
+                    using (var key = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows Defender")) {
+                        if (key != null) {
+                            object das = key.GetValue("DisableAntiSpyware");
+                            if (das != null) disableAntiSpyware = Convert.ToInt32(das) != 0;
+                        }
+                    }
+                } catch {}
+
+                var svcList = new List<string>();
+                foreach (var kvp in services) {
+                    svcList.Add(string.Format("\"{0}\": \"{1}\"", EscapeJson(kvp.Key), EscapeJson(kvp.Value)));
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"wscServiceStatus\": \"{0}\", ", services.ContainsKey("wscsvc") ? services["wscsvc"] : "Unknown"));
+                sb.Append(string.Format("\"defenderServiceStatus\": \"{0}\", ", services.ContainsKey("WinDefend") ? services["WinDefend"] : "Unknown"));
+                sb.Append(string.Format("\"tamperProtection\": {0}, ", tamperProtection ? "true" : "false"));
+                sb.Append(string.Format("\"realTimeMonitoring\": {0}, ", realTimeMonitoring ? "true" : "false"));
+                sb.Append(string.Format("\"behaviorMonitoring\": {0}, ", behaviorMonitoring ? "true" : "false"));
+                sb.Append(string.Format("\"cloudDeliveredProtection\": {0}, ", cloudProtection ? "true" : "false"));
+                sb.Append(string.Format("\"defenderDisabled\": {0}, ", disableAntiSpyware ? "true" : "false"));
+                sb.Append("\"services\": {");
+                sb.Append(string.Join(", ", svcList.ToArray()));
+                sb.Append("}}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WscStoreUriCmd() {
+            try {
+                string uri = "";
+                string source = "Fallback";
+                bool apiAvailable = true;
+
+                try {
+                    IntPtr pUri = IntPtr.Zero;
+                    int hr = WscGetAntiMalwareUri(out pUri);
+                    if (hr == 0 && pUri != IntPtr.Zero) {
+                        uri = Marshal.PtrToStringUni(pUri);
+                        Marshal.FreeCoTaskMem(pUri);
+                        source = "WscGetAntiMalwareUri";
+                    }
+                } catch (DllNotFoundException) {
+                    apiAvailable = false;
+                } catch (EntryPointNotFoundException) {
+                    apiAvailable = false;
+                } catch {}
+
+                if (string.IsNullOrEmpty(uri)) {
+                    uri = "windowsdefender://providers/";
+                    source = "WindowsSecurityDeepLink";
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"uri\": \"{0}\", ", EscapeJson(uri)));
+                sb.Append(string.Format("\"source\": \"{0}\", ", EscapeJson(source)));
+                sb.Append(string.Format("\"storeCatalogUri\": \"ms-windows-store://search/?query=antivirus\", "));
+                sb.Append(string.Format("\"nativeApiSupported\": {0}}}", apiAvailable ? "true" : "false"));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -19437,6 +19762,16 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "wcs_device_context" || cmd == "wcs-device-context") {
                 string device = args.Length >= 2 ? args[1] : "";
                 WcsDeviceContextCmd(device);
+            } else if (cmd == "wsc_health" || cmd == "security_center_health" || cmd == "wsc-health") {
+                string provider = args.Length >= 2 ? args[1] : "all";
+                WscHealthCmd(provider);
+            } else if (cmd == "wsc_products" || cmd == "security_center_products" || cmd == "wsc-products") {
+                string pType = args.Length >= 2 ? args[1] : "all";
+                WscProductsCmd(pType);
+            } else if (cmd == "wsc_status" || cmd == "security_center_status" || cmd == "wsc-status") {
+                WscStatusCmd();
+            } else if (cmd == "wsc_store_uri" || cmd == "security_center_store_uri" || cmd == "wsc-store-uri") {
+                WscStoreUriCmd();
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
