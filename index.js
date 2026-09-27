@@ -4400,6 +4400,50 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_tbs_device_info",
+        description: "Queries Trusted Platform Module (TPM 1.2 / 2.0) hardware device telemetry via TBS Base Services (tbs.dll / Tbsi_GetDeviceInfo) and Win32_Tpm WMI. Returns TPM version, interface type, manufacturer name/ID/version, and activated/enabled/owned states.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_tbs_context_status",
+        description: "Inspects and validates Trusted Platform Module Base Services (TBS) daemon connectivity and allocates an active TPM 2.0/1.2 client context session via Tbsi_Context_Create and Tbsip_Context_Close.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_tbs_tcg_log",
+        description: "Retrieves the cryptographic Trusted Computing Group (TCG) boot measurement event log from the physical TPM chip via Tbsi_Get_TCG_Log. Reports raw log byte size, log type (TCG 1.2 or 2.0 event log), estimated boot measurement events, and hex dump sample.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_tbs_pcr_read",
+        description: "Submits a raw TPM2_PCR_Read command to the physical TPM hardware chip via Tbsip_Submit_Command to read live cryptographic platform configuration register (PCR) digests (SHA-256 / SHA-1) across boot measurement banks.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            pcrIndex: {
+              type: "integer",
+              default: 0,
+              description: "PCR register index to read (0-23, default: 0)."
+            },
+            hashAlg: {
+              type: "string",
+              enum: ["sha256", "sha1"],
+              default: "sha256",
+              description: "Cryptographic hash algorithm bank to query ('sha256' [0x000B] or 'sha1' [0x0004], default: 'sha256')."
+            }
+          }
+        }
       }
 ];
 
@@ -7781,6 +7825,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `👁️ [Windows Magnifier Cursor & Window Filter State]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_tbs_device_info") {
+    const res = await orch.getTbsDeviceInfo();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [Trusted Platform Module Device Info]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_tbs_context_status") {
+    const res = await orch.getTbsContextStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔐 [TPM Base Services Context Status]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_tbs_tcg_log") {
+    const res = await orch.getTbsTcgLog();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📜 [TPM Cryptographic TCG Boot Measurement Event Log]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_tbs_pcr_read") {
+    const res = await orch.getTbsPcrRead(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔒 [TPM Hardware Platform Configuration Register (PCR) Read]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

@@ -4725,10 +4725,69 @@ async function run() {
     assert(Array.isArray(res.filteredWindows));
   });
 
-  it("All 232 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 67: Trusted Platform Module Base Services (TBS) Subsystem (tbs.h / tbs.dll)
+  console.log("\n\x1b[1m[Suite 67: Trusted Platform Module Base Services (TBS) Subsystem]\x1b[0m");
+
+  await itAsync("getTbsDeviceInfo queries TPM 2.0 / 1.2 hardware device info and WMI telemetry", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getTbsDeviceInfo();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getTbsDeviceInfo failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.tpmPresent === "boolean");
+    if (res.tpmPresent) {
+      assert(typeof res.tpmVersion === "string");
+      assert(typeof res.manufacturerId === "number");
+    }
+  });
+
+  await itAsync("getTbsContextStatus validates TBS service connectivity and client context allocation", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getTbsContextStatus();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getTbsContextStatus failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.contextCreated === "boolean");
+    assert(typeof res.serviceStatus === "string");
+  });
+
+  await itAsync("getTbsTcgLog extracts cryptographic boot measurement event log from TPM chip", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getTbsTcgLog();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getTbsTcgLog failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.logAvailable === "boolean");
+    assert(typeof res.logSizeBytes === "number");
+  });
+
+  await itAsync("getTbsPcrRead reads live cryptographic PCR digest from TPM hardware register", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getTbsPcrRead({ pcrIndex: 0, hashAlg: "sha256" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getTbsPcrRead failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.readSuccess === "boolean");
+    assert.strictEqual(res.pcrIndex, 0);
+    assert.strictEqual(res.algorithm.toLowerCase(), "sha256");
+    if (res.readSuccess) {
+      assert(typeof res.digestHex === "string");
+      assert(res.digestHex.length > 0);
+    }
+  });
+
+  it("All 236 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 232);
+    assert.strictEqual(SYSTEM_TOOLS.length, 236);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -4894,6 +4953,10 @@ async function run() {
     assert(toolNames.includes("super_mag_color_effect"));
     assert(toolNames.includes("super_mag_input_transform"));
     assert(toolNames.includes("super_mag_cursor_and_filter"));
+    assert(toolNames.includes("super_tbs_device_info"));
+    assert(toolNames.includes("super_tbs_context_status"));
+    assert(toolNames.includes("super_tbs_tcg_log"));
+    assert(toolNames.includes("super_tbs_pcr_read"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

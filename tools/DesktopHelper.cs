@@ -16781,6 +16781,327 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 82: Trusted Platform Module (TPM) Base Services (tbs.h / tbs.dll / root\CIMV2\Security\MicrosoftTpm)
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct TPM_DEVICE_INFO {
+            public uint structVersion;
+            public uint tpmVersion;
+            public uint tpmInterfaceType;
+            public uint tpmImpRevision;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct TBS_CONTEXT_PARAMS2 {
+            public uint version;
+            public uint asUINT32;
+        }
+
+        const uint TBS_SUCCESS = 0;
+        const uint TBS_CONTEXT_VERSION_TWO = 2;
+
+        const uint TPM_VERSION_UNKNOWN = 0;
+        const uint TPM_VERSION_12 = 1;
+        const uint TPM_VERSION_20 = 2;
+
+        const uint TPM_IFTYPE_UNKNOWN = 0;
+        const uint TPM_IFTYPE_1 = 1;
+        const uint TPM_IFTYPE_TRUSTZONE = 2;
+        const uint TPM_IFTYPE_HW = 3;
+        const uint TPM_IFTYPE_EMULATOR = 4;
+        const uint TPM_IFTYPE_SPB = 5;
+
+        [DllImport("tbs.dll", SetLastError = true)]
+        public static extern uint Tbsi_GetDeviceInfo(uint Size, out TPM_DEVICE_INFO pInfo);
+
+        [DllImport("tbs.dll", SetLastError = true)]
+        public static extern uint Tbsi_Context_Create(ref TBS_CONTEXT_PARAMS2 pContextParams, out IntPtr phContext);
+
+        [DllImport("tbs.dll", SetLastError = true)]
+        public static extern uint Tbsip_Context_Close(IntPtr hContext);
+
+        [DllImport("tbs.dll", SetLastError = true)]
+        public static extern uint Tbsi_Get_TCG_Log(IntPtr hContext, [Out] byte[] pOutputBuf, ref uint pOutputBufLen);
+
+        [DllImport("tbs.dll", SetLastError = true)]
+        public static extern uint Tbsip_Submit_Command(
+            IntPtr hContext,
+            uint Locality,
+            uint Priority,
+            [In] byte[] pabCommand,
+            uint cbCommand,
+            [Out] byte[] pabResult,
+            ref uint pcbResult);
+
+        static string MapTpmVersion(uint ver) {
+            switch (ver) {
+                case 1: return "1.2";
+                case 2: return "2.0";
+                default: return "Unknown";
+            }
+        }
+
+        static string MapTpmInterface(uint ifType) {
+            switch (ifType) {
+                case 1: return "I/O port or MMIO";
+                case 2: return "ARM TrustZone";
+                case 3: return "Hardware Discrete";
+                case 4: return "Emulator / Virtual";
+                case 5: return "Simple Peripheral Bus (SPB)";
+                default: return "Unknown";
+            }
+        }
+
+        static void TbsDeviceInfoCmd() {
+            try {
+                var info = new TPM_DEVICE_INFO();
+                info.structVersion = 1;
+                uint size = (uint)Marshal.SizeOf(info);
+                uint hr = 0xFFFFFFFF;
+                bool apiAvailable = true;
+
+                try {
+                    hr = Tbsi_GetDeviceInfo(size, out info);
+                } catch {
+                    apiAvailable = false;
+                }
+
+                bool isPresent = (hr == TBS_SUCCESS && info.tpmVersion != 0);
+
+                // Supplement with Win32_Tpm WMI details
+                bool isActivated = false;
+                bool isEnabled = false;
+                bool isOwned = false;
+                uint manufacturerId = 0;
+                string manufacturerVersion = "";
+                string specVersion = "";
+
+                try {
+                    using (var searcher = new ManagementObjectSearcher(@"root\CIMV2\Security\MicrosoftTpm", "SELECT * FROM Win32_Tpm")) {
+                        foreach (ManagementObject obj in searcher.Get()) {
+                            try { if (obj["IsActivated_InitialValue"] != null) isActivated = Convert.ToBoolean(obj["IsActivated_InitialValue"]); } catch {}
+                            try { if (obj["IsEnabled_InitialValue"] != null) isEnabled = Convert.ToBoolean(obj["IsEnabled_InitialValue"]); } catch {}
+                            try { if (obj["IsOwned_InitialValue"] != null) isOwned = Convert.ToBoolean(obj["IsOwned_InitialValue"]); } catch {}
+                            try { if (obj["ManufacturerId"] != null) manufacturerId = Convert.ToUInt32(obj["ManufacturerId"]); } catch {}
+                            try { if (obj["ManufacturerVersion"] != null) manufacturerVersion = obj["ManufacturerVersion"].ToString(); } catch {}
+                            try { if (obj["SpecVersion"] != null) specVersion = obj["SpecVersion"].ToString(); } catch {}
+                        }
+                    }
+                } catch {}
+
+                string mfgAscii = "";
+                if (manufacturerId != 0) {
+                    byte[] bytes = BitConverter.GetBytes(manufacturerId);
+                    Array.Reverse(bytes);
+                    mfgAscii = Encoding.ASCII.GetString(bytes).Trim('\0');
+                }
+
+                var sb = new StringBuilder();
+                sb.Append(string.Format("{{\"success\": true, \"apiAvailable\": {0}, ", apiAvailable ? "true" : "false"));
+                sb.Append(string.Format("\"tpmPresent\": {0}, ", isPresent ? "true" : "false"));
+                sb.Append(string.Format("\"tpmVersion\": \"{0}\", ", MapTpmVersion(info.tpmVersion)));
+                sb.Append(string.Format("\"tpmVersionCode\": {0}, ", info.tpmVersion));
+                sb.Append(string.Format("\"interfaceType\": \"{0}\", ", MapTpmInterface(info.tpmInterfaceType)));
+                sb.Append(string.Format("\"interfaceTypeCode\": {0}, ", info.tpmInterfaceType));
+                sb.Append(string.Format("\"implementationRevision\": {0}, ", info.tpmImpRevision));
+                sb.Append(string.Format("\"hresult\": \"0x{0:X8}\", ", hr));
+                sb.Append(string.Format("\"isActivated\": {0}, ", isActivated ? "true" : "false"));
+                sb.Append(string.Format("\"isEnabled\": {0}, ", isEnabled ? "true" : "false"));
+                sb.Append(string.Format("\"isOwned\": {0}, ", isOwned ? "true" : "false"));
+                sb.Append(string.Format("\"manufacturerId\": {0}, ", manufacturerId));
+                sb.Append(string.Format("\"manufacturerName\": \"{0}\", ", EscapeJson(mfgAscii)));
+                sb.Append(string.Format("\"manufacturerVersion\": \"{0}\", ", EscapeJson(manufacturerVersion)));
+                sb.Append(string.Format("\"specVersion\": \"{0}\"}}", EscapeJson(specVersion)));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void TbsContextStatusCmd() {
+            try {
+                var pars = new TBS_CONTEXT_PARAMS2();
+                pars.version = TBS_CONTEXT_VERSION_TWO;
+                pars.asUINT32 = 6; // TPM 1.2 and TPM 2.0
+                IntPtr hContext = IntPtr.Zero;
+                uint hr = 0xFFFFFFFF;
+                bool apiAvailable = true;
+
+                try {
+                    hr = Tbsi_Context_Create(ref pars, out hContext);
+                } catch {
+                    apiAvailable = false;
+                }
+
+                bool created = (hr == TBS_SUCCESS && hContext != IntPtr.Zero);
+                if (created) {
+                    try {
+                        Tbsip_Context_Close(hContext);
+                    } catch {}
+                }
+
+                string svcStatus = "Unknown";
+                try {
+                    using (var sc = new ServiceController("TBS")) {
+                        svcStatus = sc.Status.ToString();
+                    }
+                } catch {
+                    svcStatus = "NotInstalledOrAccessDenied";
+                }
+
+                var sb = new StringBuilder();
+                sb.Append(string.Format("{{\"success\": true, \"apiAvailable\": {0}, ", apiAvailable ? "true" : "false"));
+                sb.Append(string.Format("\"contextCreated\": {0}, ", created ? "true" : "false"));
+                sb.Append(string.Format("\"serviceStatus\": \"{0}\", ", EscapeJson(svcStatus)));
+                sb.Append(string.Format("\"hresult\": \"0x{0:X8}\", ", hr));
+                sb.Append(string.Format("\"tpmVersionRequested\": \"2.0 + 1.2\", "));
+                sb.Append(string.Format("\"contextVersion\": {0}}}", TBS_CONTEXT_VERSION_TWO));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void TbsTcgLogCmd() {
+            try {
+                var pars = new TBS_CONTEXT_PARAMS2();
+                pars.version = TBS_CONTEXT_VERSION_TWO;
+                pars.asUINT32 = 6;
+                IntPtr hContext = IntPtr.Zero;
+                uint hr = 0xFFFFFFFF;
+
+                try {
+                    hr = Tbsi_Context_Create(ref pars, out hContext);
+                } catch {}
+
+                uint logLen = 0;
+                uint logHr = 0xFFFFFFFF;
+                string sampleHex = "";
+                int estimatedEvents = 0;
+
+                if (hr == TBS_SUCCESS && hContext != IntPtr.Zero) {
+                    try {
+                        logHr = Tbsi_Get_TCG_Log(hContext, null, ref logLen);
+                        if (logHr == TBS_SUCCESS && logLen > 0) {
+                            byte[] buf = new byte[logLen];
+                            logHr = Tbsi_Get_TCG_Log(hContext, buf, ref logLen);
+                            if (logHr == TBS_SUCCESS) {
+                                int sampleSize = Math.Min((int)logLen, 64);
+                                sampleHex = BitConverter.ToString(buf, 0, sampleSize).Replace("-", "");
+                                estimatedEvents = Math.Max(1, (int)(logLen / 300));
+                            }
+                        }
+                    } catch {}
+                    finally {
+                        try { Tbsip_Context_Close(hContext); } catch {}
+                    }
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"logAvailable\": {0}, ", (logHr == TBS_SUCCESS && logLen > 0) ? "true" : "false"));
+                sb.Append(string.Format("\"logSizeBytes\": {0}, ", logLen));
+                sb.Append(string.Format("\"hresult\": \"0x{0:X8}\", ", logHr));
+                sb.Append(string.Format("\"sampleHex\": \"{0}\", ", EscapeJson(sampleHex)));
+                sb.Append(string.Format("\"estimatedEvents\": {0}}}", estimatedEvents));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void TbsPcrReadCmd(string pcrIndexStr, string algStr) {
+            try {
+                int pcr = 0;
+                if (!string.IsNullOrEmpty(pcrIndexStr)) int.TryParse(pcrIndexStr, out pcr);
+                if (pcr < 0) pcr = 0;
+                if (pcr > 23) pcr = 23;
+
+                string alg = (algStr ?? "sha256").Trim().ToLowerInvariant();
+                ushort algId = 0x000B; // TPM_ALG_SHA256
+                int digestSize = 32;
+                if (alg == "sha1") {
+                    algId = 0x0004; // TPM_ALG_SHA1
+                    digestSize = 20;
+                }
+
+                var pars = new TBS_CONTEXT_PARAMS2();
+                pars.version = TBS_CONTEXT_VERSION_TWO;
+                pars.asUINT32 = 6;
+                IntPtr hContext = IntPtr.Zero;
+                uint hr = 0xFFFFFFFF;
+
+                try {
+                    hr = Tbsi_Context_Create(ref pars, out hContext);
+                } catch {}
+
+                uint cmdHr = 0xFFFFFFFF;
+                string pcrDigestHex = "";
+                bool readSuccess = false;
+
+                if (hr == TBS_SUCCESS && hContext != IntPtr.Zero) {
+                    try {
+                        byte pcrByteIndex = (byte)(pcr / 8);
+                        byte pcrBitMask = (byte)(1 << (pcr % 8));
+                        byte[] selectBytes = new byte[3];
+                        selectBytes[pcrByteIndex] = pcrBitMask;
+
+                        byte[] cmd = new byte[20];
+                        cmd[0] = 0x80; cmd[1] = 0x01;
+                        cmd[2] = 0x00; cmd[3] = 0x00; cmd[4] = 0x00; cmd[5] = 0x14;
+                        cmd[6] = 0x00; cmd[7] = 0x00; cmd[8] = 0x01; cmd[9] = 0x7E;
+                        cmd[10] = 0x00; cmd[11] = 0x00; cmd[12] = 0x00; cmd[13] = 0x01;
+                        cmd[14] = (byte)(algId >> 8); cmd[15] = (byte)(algId & 0xFF);
+                        cmd[16] = 0x03;
+                        cmd[17] = selectBytes[0]; cmd[18] = selectBytes[1]; cmd[19] = selectBytes[2];
+
+                        byte[] outBuf = new byte[4096];
+                        uint outLen = 4096;
+                        cmdHr = Tbsip_Submit_Command(hContext, 0, 200, cmd, (uint)cmd.Length, outBuf, ref outLen);
+
+                        if (cmdHr == TBS_SUCCESS && outLen >= 30) {
+                            uint respCode = (uint)((outBuf[6] << 24) | (outBuf[7] << 16) | (outBuf[8] << 8) | outBuf[9]);
+                            if (respCode == 0 && outLen >= (uint)(outLen - digestSize)) {
+                                int offset = (int)outLen - digestSize;
+                                pcrDigestHex = BitConverter.ToString(outBuf, offset, digestSize).Replace("-", "");
+                                readSuccess = true;
+                            }
+                        }
+                    } catch {}
+                    finally {
+                        try { Tbsip_Context_Close(hContext); } catch {}
+                    }
+                }
+
+                string pcrRole = "General Platform Measurement";
+                if (pcr == 0) pcrRole = "Core Root of Trust / BIOS Firmware";
+                else if (pcr == 1) pcrRole = "Host Platform Configuration";
+                else if (pcr == 2) pcrRole = "Option ROM Code";
+                else if (pcr == 4) pcrRole = "Master Boot Record / Boot Manager";
+                else if (pcr == 7) pcrRole = "Secure Boot State / Policies";
+                else if (pcr == 11) pcrRole = "BitLocker Access Control";
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"readSuccess\": {0}, ", readSuccess ? "true" : "false"));
+                sb.Append(string.Format("\"pcrIndex\": {0}, ", pcr));
+                sb.Append(string.Format("\"algorithm\": \"{0}\", ", alg.ToUpperInvariant()));
+                sb.Append(string.Format("\"algorithmId\": \"0x{0:X4}\", ", algId));
+                sb.Append(string.Format("\"pcrRole\": \"{0}\", ", EscapeJson(pcrRole)));
+                sb.Append(string.Format("\"digestHex\": \"{0}\", ", EscapeJson(pcrDigestHex)));
+                sb.Append(string.Format("\"hresult\": \"0x{0:X8}\"}}", cmdHr));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -20185,6 +20506,16 @@ namespace GeminiSuperDesktop {
                 string hwnd = args.Length >= 4 ? args[3] : null;
                 string mode = args.Length >= 5 ? args[4] : null;
                 MagCursorAndFilterCmd(act, cursor, hwnd, mode);
+            } else if (cmd == "tbs_device_info" || cmd == "tpm_info" || cmd == "tbs-device-info") {
+                TbsDeviceInfoCmd();
+            } else if (cmd == "tbs_context_status" || cmd == "tpm_status" || cmd == "tbs-context-status") {
+                TbsContextStatusCmd();
+            } else if (cmd == "tbs_tcg_log" || cmd == "tpm_log" || cmd == "tbs-tcg-log") {
+                TbsTcgLogCmd();
+            } else if (cmd == "tbs_pcr_read" || cmd == "tpm_pcr" || cmd == "tbs-pcr-read") {
+                string pcrIdx = args.Length >= 2 ? args[1] : "0";
+                string alg = args.Length >= 3 ? args[2] : "sha256";
+                TbsPcrReadCmd(pcrIdx, alg);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

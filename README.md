@@ -97,6 +97,7 @@
   - [79. Windows Color System (WCS) Subsystem](#79--windows-color-system-wcs-subsystem-icmh--mscmsdll)
   - [80. Windows Security Center (WSC) Subsystem](#80-️-windows-security-center-wsc-subsystem-wscapih--wscapidll--rootsecuritycenter2)
   - [81. Windows Magnification API Subsystem](#81--windows-magnification-api-subsystem-magnificationh--magnificationdll)
+  - [82. Trusted Platform Module Base Services (TBS) Subsystem](#82-️-trusted-platform-module-base-services-tbs-subsystem-tbsh--tbsdll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1079,6 +1080,18 @@ Directly interfaces with the Windows Magnification architecture and hardware dis
 - **System Cursor Visibility & Window Filtering (`super_mag_cursor_and_filter`)**: Controls system cursor visibility during magnification via `MagShowSystemCursor` and queries or configures window inclusion/exclusion filtering (`MW_FILTERMODE_EXCLUDE`, `MW_FILTERMODE_INCLUDE`) via `MagGetWindowFilterList` and `MagSetWindowFilterList` to exclude transparent HUDs, overlays, or private dialogs.
 - **232 Tools Milestone**: Reaches **232 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **66 comprehensive test suites** and **62 environment health checks**.
 - **Native MCP Tools**: `super_mag_fullscreen_transform`, `super_mag_color_effect`, `super_mag_input_transform`, `super_mag_cursor_and_filter`.
+
+---
+
+## 82. 🛡️ Trusted Platform Module Base Services (TBS) Subsystem (`tbs.h` / `tbs.dll`)
+
+Directly interfaces with the hardware Trusted Platform Module (TPM 2.0 / 1.2) cryptographic coprocessor and the native Windows TPM Base Services (TBS) architecture:
+- **TPM Hardware Device Telemetry (`super_tbs_device_info`)**: Interrogates the physical TPM chip via `Tbsi_GetDeviceInfo` and `Win32_Tpm` WMI. Reports TPM version (`TPM_VERSION_20` / `TPM_VERSION_12`), hardware interface type (`TPM_IFTYPE_1` MMIO / I/O port, CRB, FIFO), manufacturer ID/name (e.g. NTC / Nuvoton Technology Corporation), firmware version, and owner/activation status.
+- **TBS Service Daemon & Client Context Session (`super_tbs_context_status`)**: Validates TBS daemon state and allocates active client context handles (`TBS_HCONTEXT`) via `Tbsi_Context_Create` with `TBS_CONTEXT_PARAMS2` requesting TPM 2.0 & 1.2 flags. Confirms TPM service readiness and safe context destruction (`Tbsip_Context_Close`).
+- **Cryptographic TCG Boot Measurement Event Log (`super_tbs_tcg_log`)**: Extracts the full raw cryptographic Trusted Computing Group (TCG) boot measurement log (TCG 1.2 and TCG 2.0 / CryptoAgile event log) via `Tbsi_Get_TCG_Log`. Quantifies log size in bytes, samples header hex, and estimates boot events for hardware attestation and zero-trust verification.
+- **Platform Configuration Register (PCR) Hardware Inspection (`super_tbs_pcr_read`)**: Submits raw binary TPM 2.0 command packets (`TPM2_PCR_Read` `0x017E`) directly to the TPM coprocessor via `Tbsip_Submit_Command`. Decodes the live cryptographic PCR digests (SHA-256 / SHA-1) across registers 0-23 without requiring elevated privileges for read-only hardware attestation.
+- **236 Tools Milestone**: Reaches **236 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **67 comprehensive test suites** and **63 environment health checks**.
+- **Native MCP Tools**: `super_tbs_device_info`, `super_tbs_context_status`, `super_tbs_tcg_log`, `super_tbs_pcr_read`.
 
 ---
 
