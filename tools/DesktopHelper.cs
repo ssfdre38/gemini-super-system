@@ -19164,6 +19164,521 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 87: Windows DirectX Graphics Infrastructure (DXGI) Subsystem (dxgi.h / dxgi.dll)
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct DXGI_LUID {
+            public uint LowPart;
+            public int HighPart;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct DXGI_ADAPTER_DESC1 {
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+            public string Description;
+            public uint VendorId;
+            public uint DeviceId;
+            public uint SubSysId;
+            public uint Revision;
+            public UIntPtr DedicatedVideoMemory;
+            public UIntPtr DedicatedSystemMemory;
+            public UIntPtr SharedSystemMemory;
+            public DXGI_LUID AdapterLuid;
+            public uint Flags;
+        }
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        public struct DXGI_OUTPUT_DESC {
+            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+            public string DeviceName;
+            public RECT DesktopCoordinates;
+            public int AttachedToDesktop;
+            public int Rotation;
+            public IntPtr Monitor;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct DXGI_RATIONAL {
+            public uint Numerator;
+            public uint Denominator;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct DXGI_MODE_DESC {
+            public uint Width;
+            public uint Height;
+            public DXGI_RATIONAL RefreshRate;
+            public int Format;
+            public int ScanlineOrdering;
+            public int Scaling;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct DXGI_QUERY_VIDEO_MEMORY_INFO {
+            public ulong Budget;
+            public ulong CurrentUsage;
+            public ulong AvailableForReservation;
+            public ulong CurrentReservation;
+        }
+
+        static readonly Guid IID_IDXGIFactory1_COM = new Guid("770aae78-f26f-4dba-a829-253c83d1b387");
+        static readonly Guid IID_IDXGIAdapter1_COM = new Guid("29038f61-3839-4626-91fd-086879011a05");
+        static readonly Guid IID_IDXGIAdapter3_COM = new Guid("645967a4-1392-4310-a798-8053ce3e93fd");
+        static readonly Guid IID_IDXGIOutput_COM   = new Guid("ae02eedb-c735-4690-8d52-5a8dc20213aa");
+
+        [ComImport]
+        [Guid("770aae78-f26f-4dba-a829-253c83d1b387")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IDXGIFactory1_COM {
+            int SetPrivateData(ref Guid Name, uint DataSize, IntPtr pData);
+            int SetPrivateDataInterface(ref Guid Name, [MarshalAs(UnmanagedType.IUnknown)] object pUnknown);
+            int GetPrivateData(ref Guid Name, ref uint pDataSize, IntPtr pData);
+            int GetParent(ref Guid riid, out IntPtr ppParent);
+            int EnumAdapters(uint Adapter, out IntPtr ppAdapter);
+            int MakeWindowAssociation(IntPtr WindowHandle, uint Flags);
+            int GetWindowAssociation(out IntPtr pWindowHandle);
+            int CreateSwapChain(IntPtr pDevice, IntPtr pDesc, out IntPtr ppSwapChain);
+            int CreateSoftwareAdapter(IntPtr Module, out IntPtr ppAdapter);
+            [PreserveSig]
+            int EnumAdapters1(uint Adapter, [MarshalAs(UnmanagedType.Interface)] out IDXGIAdapter1_COM ppAdapter);
+            [PreserveSig]
+            int IsCurrent();
+        }
+
+        [ComImport]
+        [Guid("29038f61-3839-4626-91fd-086879011a05")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IDXGIAdapter1_COM {
+            int SetPrivateData(ref Guid Name, uint DataSize, IntPtr pData);
+            int SetPrivateDataInterface(ref Guid Name, [MarshalAs(UnmanagedType.IUnknown)] object pUnknown);
+            int GetPrivateData(ref Guid Name, ref uint pDataSize, IntPtr pData);
+            int GetParent(ref Guid riid, out IntPtr ppParent);
+            [PreserveSig]
+            int EnumOutputs(uint Output, [MarshalAs(UnmanagedType.Interface)] out IDXGIOutput_COM ppOutput);
+            [PreserveSig]
+            int GetDesc(out IntPtr pDesc);
+            [PreserveSig]
+            int CheckInterfaceSupport(ref Guid InterfaceName, out long pUMDVersion);
+            [PreserveSig]
+            int GetDesc1(out DXGI_ADAPTER_DESC1 pDesc);
+        }
+
+        [ComImport]
+        [Guid("645967a4-1392-4310-a798-8053ce3e93fd")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IDXGIAdapter3_COM {
+            int SetPrivateData(ref Guid Name, uint DataSize, IntPtr pData);
+            int SetPrivateDataInterface(ref Guid Name, [MarshalAs(UnmanagedType.IUnknown)] object pUnknown);
+            int GetPrivateData(ref Guid Name, ref uint pDataSize, IntPtr pData);
+            int GetParent(ref Guid riid, out IntPtr ppParent);
+            [PreserveSig]
+            int EnumOutputs(uint Output, [MarshalAs(UnmanagedType.Interface)] out IDXGIOutput_COM ppOutput);
+            [PreserveSig]
+            int GetDesc(out IntPtr pDesc);
+            [PreserveSig]
+            int CheckInterfaceSupport(ref Guid InterfaceName, out long pUMDVersion);
+            [PreserveSig]
+            int GetDesc1(out DXGI_ADAPTER_DESC1 pDesc);
+            [PreserveSig]
+            int GetDesc2(out IntPtr pDesc);
+            [PreserveSig]
+            int RegisterHardwareContentProtectionTeardownStatusEvent(IntPtr hEvent, out uint pdwCookie);
+            [PreserveSig]
+            void UnregisterHardwareContentProtectionTeardownStatus(uint dwCookie);
+            [PreserveSig]
+            int QueryVideoMemoryInfo(uint NodeIndex, int MemorySegmentGroup, out DXGI_QUERY_VIDEO_MEMORY_INFO pVideoMemoryInfo);
+            [PreserveSig]
+            int SetVideoMemoryReservation(uint NodeIndex, int MemorySegmentGroup, ulong Reservation);
+            [PreserveSig]
+            int RegisterVideoMemoryBudgetChangeNotificationEvent(IntPtr hEvent, out uint pdwCookie);
+            [PreserveSig]
+            void UnregisterVideoMemoryBudgetChangeNotification(uint dwCookie);
+        }
+
+        [ComImport]
+        [Guid("ae02eedb-c735-4690-8d52-5a8dc20213aa")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IDXGIOutput_COM {
+            int SetPrivateData(ref Guid Name, uint DataSize, IntPtr pData);
+            int SetPrivateDataInterface(ref Guid Name, [MarshalAs(UnmanagedType.IUnknown)] object pUnknown);
+            int GetPrivateData(ref Guid Name, ref uint pDataSize, IntPtr pData);
+            int GetParent(ref Guid riid, out IntPtr ppParent);
+            [PreserveSig]
+            int GetDesc(out DXGI_OUTPUT_DESC pDesc);
+            [PreserveSig]
+            int GetDisplayModeList(int EnumFormat, uint Flags, ref uint pNumModes, IntPtr pDesc);
+            [PreserveSig]
+            int FindClosestMatchingMode(IntPtr pModeToMatch, out IntPtr pClosestMatch, IntPtr pConcernedDevice);
+            [PreserveSig]
+            int WaitForVBlank();
+            [PreserveSig]
+            int TakeOwnership(IntPtr pDevice, int Exclusive);
+            [PreserveSig]
+            void ReleaseOwnership();
+            [PreserveSig]
+            int GetGammaControlCapabilities(IntPtr pGammaCaps);
+            [PreserveSig]
+            int SetGammaControl(IntPtr pArray);
+            [PreserveSig]
+            int GetGammaControl(IntPtr pArray);
+            [PreserveSig]
+            int SetDisplaySurface(IntPtr pScanoutSurface);
+            [PreserveSig]
+            int GetDisplaySurfaceData(IntPtr pDestination);
+            [PreserveSig]
+            int GetFrameStatistics(IntPtr pStats);
+        }
+
+        [DllImport("dxgi.dll", EntryPoint = "CreateDXGIFactory1", CallingConvention = CallingConvention.StdCall)]
+        static extern int CreateDXGIFactory1Com(ref Guid riid, [MarshalAs(UnmanagedType.Interface)] out IDXGIFactory1_COM ppFactory);
+
+        static string GetDxgiVendorName(uint vendorId) {
+            switch (vendorId) {
+                case 0x10DE: return "NVIDIA Corporation";
+                case 0x1002: return "Advanced Micro Devices, Inc. (AMD)";
+                case 0x8086: return "Intel Corporation";
+                case 0x1414: return "Microsoft Corporation";
+                case 0x5143: return "Qualcomm Inc.";
+                default: return "Unknown Vendor";
+            }
+        }
+
+        static string GetDxgiRotationName(int rotation) {
+            switch (rotation) {
+                case 1: return "Identity (Landscape 0°)";
+                case 2: return "Rotate90 (Portrait 90°)";
+                case 3: return "Rotate180 (Landscape Inverted 180°)";
+                case 4: return "Rotate270 (Portrait Inverted 270°)";
+                default: return "Unspecified";
+            }
+        }
+
+        static string GetDxgiScanlineName(int ordering) {
+            switch (ordering) {
+                case 1: return "Progressive";
+                case 2: return "UpperFieldFirst";
+                case 3: return "LowerFieldFirst";
+                default: return "Unspecified";
+            }
+        }
+
+        static string GetDxgiScalingName(int scaling) {
+            switch (scaling) {
+                case 1: return "Centered";
+                case 2: return "Stretched";
+                default: return "Unspecified";
+            }
+        }
+
+        static string GetDxgiFormatName(int format) {
+            switch (format) {
+                case 28: return "DXGI_FORMAT_R8G8B8A8_UNORM";
+                case 87: return "DXGI_FORMAT_B8G8R8A8_UNORM";
+                case 10: return "DXGI_FORMAT_R16G16B16A16_FLOAT";
+                case 24: return "DXGI_FORMAT_R10G10B10A2_UNORM";
+                default: return "DXGI_FORMAT_" + format;
+            }
+        }
+
+        static void DxgiAdaptersCmd() {
+            try {
+                IDXGIFactory1_COM factory;
+                Guid factoryGuid = IID_IDXGIFactory1_COM;
+                int hr = CreateDXGIFactory1Com(ref factoryGuid, out factory);
+                if (hr != 0 || factory == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": false, \"hr\": \"0x{0:X8}\", \"error\": \"Failed to create DXGI Factory1\"}}", hr));
+                    return;
+                }
+
+                var adaptersList = new List<string>();
+                for (uint aIdx = 0; aIdx < 32; aIdx++) {
+                    IDXGIAdapter1_COM adapter;
+                    if (factory.EnumAdapters1(aIdx, out adapter) != 0 || adapter == null) break;
+
+                    DXGI_ADAPTER_DESC1 desc;
+                    adapter.GetDesc1(out desc);
+
+                    ulong vramBytes = (ulong)desc.DedicatedVideoMemory.ToUInt64();
+                    ulong sysMemBytes = (ulong)desc.DedicatedSystemMemory.ToUInt64();
+                    ulong sharedMemBytes = (ulong)desc.SharedSystemMemory.ToUInt64();
+
+                    double vramMb = Math.Round((double)vramBytes / (1024.0 * 1024.0), 2);
+                    double vramGb = Math.Round((double)vramBytes / (1024.0 * 1024.0 * 1024.0), 2);
+                    double sharedMb = Math.Round((double)sharedMemBytes / (1024.0 * 1024.0), 2);
+                    double sharedGb = Math.Round((double)sharedMemBytes / (1024.0 * 1024.0 * 1024.0), 2);
+
+                    bool isSoftware = (desc.Flags & 2) != 0 || desc.VendorId == 0x1414;
+                    bool isRemote = (desc.Flags & 1) != 0;
+                    bool isHardware = !isSoftware && !isRemote;
+
+                    uint outCount = 0;
+                    for (uint o = 0; o < 32; o++) {
+                        IDXGIOutput_COM outProbe;
+                        if (adapter.EnumOutputs(o, out outProbe) == 0 && outProbe != null) {
+                            outCount++;
+                        } else {
+                            break;
+                        }
+                    }
+
+                    string luidStr = string.Format("0x{0:X8}:{1:X8}", desc.AdapterLuid.HighPart, desc.AdapterLuid.LowPart);
+
+                    adaptersList.Add(string.Format(
+                        "{{\"adapterIndex\": {0}, \"description\": \"{1}\", \"vendorId\": \"0x{2:X4}\", \"vendorName\": \"{3}\", \"deviceId\": \"0x{4:X4}\", \"subSysId\": \"0x{5:X8}\", \"revision\": {6}, \"luid\": \"{7}\", \"flags\": {8}, \"isHardware\": {9}, \"isSoftware\": {10}, \"isRemote\": {11}, \"outputCount\": {12}, \"dedicatedVideoMemoryBytes\": {13}, \"dedicatedVideoMemoryMb\": {14}, \"dedicatedVideoMemoryGb\": {15}, \"dedicatedSystemMemoryBytes\": {16}, \"sharedSystemMemoryBytes\": {17}, \"sharedSystemMemoryMb\": {18}, \"sharedSystemMemoryGb\": {19}}}",
+                        aIdx,
+                        EscapeJson(desc.Description ?? ""),
+                        desc.VendorId,
+                        EscapeJson(GetDxgiVendorName(desc.VendorId)),
+                        desc.DeviceId,
+                        desc.SubSysId,
+                        desc.Revision,
+                        luidStr,
+                        desc.Flags,
+                        isHardware ? "true" : "false",
+                        isSoftware ? "true" : "false",
+                        isRemote ? "true" : "false",
+                        outCount,
+                        vramBytes,
+                        vramMb,
+                        vramGb,
+                        sysMemBytes,
+                        sharedMemBytes,
+                        sharedMb,
+                        sharedGb
+                    ));
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"apiAvailable\": true, \"totalAdapters\": {0}, \"adapters\": [{1}]}}",
+                    adaptersList.Count,
+                    string.Join(", ", adaptersList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DxgiOutputsCmd(int targetAdapter) {
+            try {
+                IDXGIFactory1_COM factory;
+                Guid factoryGuid = IID_IDXGIFactory1_COM;
+                int hr = CreateDXGIFactory1Com(ref factoryGuid, out factory);
+                if (hr != 0 || factory == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": false, \"hr\": \"0x{0:X8}\", \"error\": \"Failed to create DXGI Factory1\"}}", hr));
+                    return;
+                }
+
+                var outputsList = new List<string>();
+                uint startAdapter = targetAdapter >= 0 ? (uint)targetAdapter : 0;
+                uint maxAdapter = targetAdapter >= 0 ? (uint)(targetAdapter + 1) : 32;
+
+                for (uint aIdx = startAdapter; aIdx < maxAdapter; aIdx++) {
+                    IDXGIAdapter1_COM adapter;
+                    if (factory.EnumAdapters1(aIdx, out adapter) != 0 || adapter == null) {
+                        if (targetAdapter >= 0) break;
+                        break;
+                    }
+
+                    DXGI_ADAPTER_DESC1 adDesc;
+                    adapter.GetDesc1(out adDesc);
+                    string adapterName = adDesc.Description ?? "";
+
+                    for (uint oIdx = 0; oIdx < 32; oIdx++) {
+                        IDXGIOutput_COM output;
+                        if (adapter.EnumOutputs(oIdx, out output) != 0 || output == null) break;
+
+                        DXGI_OUTPUT_DESC outDesc;
+                        if (output.GetDesc(out outDesc) == 0) {
+                            int w = outDesc.DesktopCoordinates.Right - outDesc.DesktopCoordinates.Left;
+                            int h = outDesc.DesktopCoordinates.Bottom - outDesc.DesktopCoordinates.Top;
+                            outputsList.Add(string.Format(
+                                "{{\"adapterIndex\": {0}, \"adapterDescription\": \"{1}\", \"outputIndex\": {2}, \"deviceName\": \"{3}\", \"attachedToDesktop\": {4}, \"rotation\": {5}, \"rotationName\": \"{6}\", \"monitorHandle\": \"0x{7:X}\", \"desktopCoordinates\": {{\"left\": {8}, \"top\": {9}, \"right\": {10}, \"bottom\": {11}, \"width\": {12}, \"height\": {13}}}}}",
+                                aIdx,
+                                EscapeJson(adapterName),
+                                oIdx,
+                                EscapeJson(outDesc.DeviceName ?? ""),
+                                outDesc.AttachedToDesktop != 0 ? "true" : "false",
+                                outDesc.Rotation,
+                                EscapeJson(GetDxgiRotationName(outDesc.Rotation)),
+                                outDesc.Monitor.ToInt64(),
+                                outDesc.DesktopCoordinates.Left,
+                                outDesc.DesktopCoordinates.Top,
+                                outDesc.DesktopCoordinates.Right,
+                                outDesc.DesktopCoordinates.Bottom,
+                                w,
+                                h
+                            ));
+                        }
+                    }
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"apiAvailable\": true, \"filterAdapterIndex\": {0}, \"totalOutputs\": {1}, \"outputs\": [{2}]}}",
+                    targetAdapter,
+                    outputsList.Count,
+                    string.Join(", ", outputsList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DxgiDisplayModesCmd(uint adapterIndex, uint outputIndex, string formatStr, uint maxModes) {
+            try {
+                IDXGIFactory1_COM factory;
+                Guid factoryGuid = IID_IDXGIFactory1_COM;
+                int hr = CreateDXGIFactory1Com(ref factoryGuid, out factory);
+                if (hr != 0 || factory == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": false, \"hr\": \"0x{0:X8}\", \"error\": \"Failed to create DXGI Factory1\"}}", hr));
+                    return;
+                }
+
+                IDXGIAdapter1_COM adapter;
+                hr = factory.EnumAdapters1(adapterIndex, out adapter);
+                if (hr != 0 || adapter == null) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"found\": false, \"adapterIndex\": {0}, \"outputIndex\": {1}, \"totalModes\": 0, \"modes\": [], \"message\": \"Adapter index not found\"}}", adapterIndex, outputIndex));
+                    return;
+                }
+
+                IDXGIOutput_COM output;
+                hr = adapter.EnumOutputs(outputIndex, out output);
+                if (hr != 0 || output == null) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"found\": false, \"adapterIndex\": {0}, \"outputIndex\": {1}, \"totalModes\": 0, \"modes\": [], \"message\": \"Output index not found\"}}", adapterIndex, outputIndex));
+                    return;
+                }
+
+                string fUpper = (formatStr ?? "").Trim().ToUpperInvariant();
+                int fmt = 87; // DXGI_FORMAT_B8G8R8A8_UNORM
+                if (fUpper.Contains("R8G8B8A8") || fUpper == "28") fmt = 28;
+                else if (fUpper.Contains("R16G16B16A16") || fUpper == "10") fmt = 10;
+                else if (fUpper.Contains("R10G10B10A2") || fUpper == "24") fmt = 24;
+
+                uint numModes = 0;
+                hr = output.GetDisplayModeList(fmt, 0, ref numModes, IntPtr.Zero);
+                if ((hr != 0 || numModes == 0) && fmt == 87) {
+                    fmt = 28;
+                    hr = output.GetDisplayModeList(fmt, 0, ref numModes, IntPtr.Zero);
+                }
+
+                var modeItems = new List<string>();
+                if (numModes > 0) {
+                    int structSize = Marshal.SizeOf(typeof(DXGI_MODE_DESC));
+                    IntPtr buffer = Marshal.AllocHGlobal(structSize * (int)numModes);
+                    try {
+                        hr = output.GetDisplayModeList(fmt, 0, ref numModes, buffer);
+                        if (hr == 0) {
+                            uint limit = Math.Max(1, Math.Min(maxModes, numModes));
+                            for (uint i = 0; i < limit; i++) {
+                                IntPtr ptr = new IntPtr(buffer.ToInt64() + (long)(i * structSize));
+                                DXGI_MODE_DESC m = (DXGI_MODE_DESC)Marshal.PtrToStructure(ptr, typeof(DXGI_MODE_DESC));
+                                double hz = m.RefreshRate.Denominator > 0 ? Math.Round((double)m.RefreshRate.Numerator / (double)m.RefreshRate.Denominator, 2) : 0;
+                                modeItems.Add(string.Format(
+                                    "{{\"width\": {0}, \"height\": {1}, \"refreshRateHz\": {2}, \"refreshRate\": {{\"numerator\": {3}, \"denominator\": {4}}}, \"format\": \"{5}\", \"scanlineOrdering\": \"{6}\", \"scaling\": \"{7}\"}}",
+                                    m.Width, m.Height, hz, m.RefreshRate.Numerator, m.RefreshRate.Denominator,
+                                    EscapeJson(GetDxgiFormatName(m.Format)),
+                                    EscapeJson(GetDxgiScanlineName(m.ScanlineOrdering)),
+                                    EscapeJson(GetDxgiScalingName(m.Scaling))
+                                ));
+                            }
+                        }
+                    } finally {
+                        Marshal.FreeHGlobal(buffer);
+                    }
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"apiAvailable\": true, \"found\": true, \"adapterIndex\": {0}, \"outputIndex\": {1}, \"format\": \"{2}\", \"totalModes\": {3}, \"returnedModes\": {4}, \"modes\": [{5}]}}",
+                    adapterIndex, outputIndex, EscapeJson(GetDxgiFormatName(fmt)), numModes, modeItems.Count, string.Join(", ", modeItems.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DxgiVideoMemoryBudgetCmd(int targetAdapter) {
+            try {
+                IDXGIFactory1_COM factory;
+                Guid factoryGuid = IID_IDXGIFactory1_COM;
+                int hr = CreateDXGIFactory1Com(ref factoryGuid, out factory);
+                if (hr != 0 || factory == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": false, \"hr\": \"0x{0:X8}\", \"error\": \"Failed to create DXGI Factory1\"}}", hr));
+                    return;
+                }
+
+                var budgetList = new List<string>();
+                uint startAdapter = targetAdapter >= 0 ? (uint)targetAdapter : 0;
+                uint maxAdapter = targetAdapter >= 0 ? (uint)(targetAdapter + 1) : 32;
+
+                for (uint aIdx = startAdapter; aIdx < maxAdapter; aIdx++) {
+                    IDXGIAdapter1_COM adapter;
+                    if (factory.EnumAdapters1(aIdx, out adapter) != 0 || adapter == null) break;
+
+                    DXGI_ADAPTER_DESC1 desc;
+                    adapter.GetDesc1(out desc);
+
+                    ulong vramBytes = (ulong)desc.DedicatedVideoMemory.ToUInt64();
+                    ulong sharedBytes = (ulong)desc.SharedSystemMemory.ToUInt64();
+
+                    IDXGIAdapter3_COM adapter3 = adapter as IDXGIAdapter3_COM;
+                    DXGI_QUERY_VIDEO_MEMORY_INFO localInfo = new DXGI_QUERY_VIDEO_MEMORY_INFO();
+                    DXGI_QUERY_VIDEO_MEMORY_INFO nonLocalInfo = new DXGI_QUERY_VIDEO_MEMORY_INFO();
+                    bool hasAdapter3 = false;
+
+                    if (adapter3 != null) {
+                        try {
+                            int hrL = adapter3.QueryVideoMemoryInfo(0, 0, out localInfo);
+                            int hrN = adapter3.QueryVideoMemoryInfo(0, 1, out nonLocalInfo);
+                            if (hrL == 0 && hrN == 0) hasAdapter3 = true;
+                        } catch {}
+                    }
+
+                    ulong localBudget = hasAdapter3 ? localInfo.Budget : vramBytes;
+                    ulong localUsage = hasAdapter3 ? localInfo.CurrentUsage : 0;
+                    ulong localAvailRes = hasAdapter3 ? localInfo.AvailableForReservation : localBudget;
+                    ulong localCurRes = hasAdapter3 ? localInfo.CurrentReservation : 0;
+                    double localUsagePct = localBudget > 0 ? Math.Round(((double)localUsage / (double)localBudget) * 100.0, 2) : 0;
+
+                    ulong nonLocalBudget = hasAdapter3 ? nonLocalInfo.Budget : sharedBytes;
+                    ulong nonLocalUsage = hasAdapter3 ? nonLocalInfo.CurrentUsage : 0;
+                    ulong nonLocalAvailRes = hasAdapter3 ? nonLocalInfo.AvailableForReservation : nonLocalBudget;
+                    ulong nonLocalCurRes = hasAdapter3 ? nonLocalInfo.CurrentReservation : 0;
+                    double nonLocalUsagePct = nonLocalBudget > 0 ? Math.Round(((double)nonLocalUsage / (double)nonLocalBudget) * 100.0, 2) : 0;
+
+                    budgetList.Add(string.Format(
+                        "{{\"adapterIndex\": {0}, \"adapterDescription\": \"{1}\", \"supportsDxgi14Budget\": {2}, \"localSegment\": {{\"budgetBytes\": {3}, \"budgetMb\": {4}, \"usageBytes\": {5}, \"usageMb\": {6}, \"availableForReservationBytes\": {7}, \"currentReservationBytes\": {8}, \"usagePercentage\": {9}}}, \"nonLocalSegment\": {{\"budgetBytes\": {10}, \"budgetMb\": {11}, \"usageBytes\": {12}, \"usageMb\": {13}, \"availableForReservationBytes\": {14}, \"currentReservationBytes\": {15}, \"usagePercentage\": {16}}}}}",
+                        aIdx,
+                        EscapeJson(desc.Description ?? ""),
+                        hasAdapter3 ? "true" : "false",
+                        localBudget,
+                        Math.Round((double)localBudget / (1024.0 * 1024.0), 2),
+                        localUsage,
+                        Math.Round((double)localUsage / (1024.0 * 1024.0), 2),
+                        localAvailRes,
+                        localCurRes,
+                        localUsagePct,
+                        nonLocalBudget,
+                        Math.Round((double)nonLocalBudget / (1024.0 * 1024.0), 2),
+                        nonLocalUsage,
+                        Math.Round((double)nonLocalUsage / (1024.0 * 1024.0), 2),
+                        nonLocalAvailRes,
+                        nonLocalCurRes,
+                        nonLocalUsagePct
+                    ));
+                }
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"apiAvailable\": true, \"filterAdapterIndex\": {0}, \"totalAdapters\": {1}, \"adapters\": [{2}]}}",
+                    targetAdapter,
+                    budgetList.Count,
+                    string.Join(", ", budgetList.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -22646,6 +23161,25 @@ namespace GeminiSuperDesktop {
                 uint interval = 0;
                 if (args.Length >= 4) uint.TryParse(args[3], out interval);
                 SensorPropertiesCmd(sensorId, act, interval);
+            } else if (cmd == "dxgi_adapters" || cmd == "dxgi-adapters") {
+                DxgiAdaptersCmd();
+            } else if (cmd == "dxgi_outputs" || cmd == "dxgi-outputs") {
+                int adapterIdx = -1;
+                if (args.Length >= 2) int.TryParse(args[1], out adapterIdx);
+                DxgiOutputsCmd(adapterIdx);
+            } else if (cmd == "dxgi_display_modes" || cmd == "dxgi-display-modes") {
+                uint adapterIdx = 0;
+                uint outputIdx = 0;
+                string fmt = args.Length >= 4 ? args[3] : "B8G8R8A8_UNORM";
+                uint maxModes = 50;
+                if (args.Length >= 2) uint.TryParse(args[1], out adapterIdx);
+                if (args.Length >= 3) uint.TryParse(args[2], out outputIdx);
+                if (args.Length >= 5) uint.TryParse(args[4], out maxModes);
+                DxgiDisplayModesCmd(adapterIdx, outputIdx, fmt, maxModes);
+            } else if (cmd == "dxgi_video_memory_budget" || cmd == "dxgi-video-memory-budget" || cmd == "dxgi_vram") {
+                int adapterIdx = -1;
+                if (args.Length >= 2) int.TryParse(args[1], out adapterIdx);
+                DxgiVideoMemoryBudgetCmd(adapterIdx);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

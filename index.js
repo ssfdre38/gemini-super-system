@@ -4755,6 +4755,72 @@ const SYSTEM_TOOLS = [
           },
           required: ["sensorId"]
         }
+      },
+      {
+        name: "super_dxgi_adapters",
+        description: "Enumerates all DirectX physical and virtual graphics adapters via IDXGIFactory1::EnumAdapters1 (dxgi.dll / dxgi.h). Reports GPU description, hardware vendor (NVIDIA, AMD, Intel, Microsoft), PCI device IDs, hardware/software/remote flags, active output monitor count, dedicated VRAM (MB/GB), and shared system memory.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_dxgi_outputs",
+        description: "Enumerates physical display outputs and desktop monitors attached to DXGI graphics adapters via IDXGIAdapter::EnumOutputs. Reports monitor device names (\\\\.\\DISPLAY#), virtual desktop coordinates, desktop attachment state, screen rotation (Landscape, Portrait), and Win32 HMONITOR handles.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            adapterIndex: {
+              type: "integer",
+              default: -1,
+              description: "Target DXGI graphics adapter index (default: -1 for all adapters)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_dxgi_display_modes",
+        description: "Enumerates supported display modes and refresh rates for a specified output monitor via IDXGIOutput::GetDisplayModeList. Reports resolution width/height, exact rational refresh rates in Hz (e.g. 59.94Hz, 60Hz, 144Hz), pixel format (B8G8R8A8_UNORM, R8G8B8A8_UNORM), scanline ordering, and scaling modes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            adapterIndex: {
+              type: "integer",
+              default: 0,
+              description: "Target DXGI graphics adapter index (default: 0)."
+            },
+            outputIndex: {
+              type: "integer",
+              default: 0,
+              description: "Target display output index on the adapter (default: 0)."
+            },
+            format: {
+              type: "string",
+              default: "B8G8R8A8_UNORM",
+              enum: ["B8G8R8A8_UNORM", "R8G8B8A8_UNORM", "R16G16B16A16_FLOAT", "R10G10B10A2_UNORM"],
+              description: "DirectX pixel format to query (default: 'B8G8R8A8_UNORM')."
+            },
+            maxModes: {
+              type: "integer",
+              default: 50,
+              description: "Maximum number of display modes to return (default: 50)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_dxgi_video_memory_budget",
+        description: "Queries live GPU video memory budget, usage, and reservation limits via IDXGIAdapter3::QueryVideoMemoryInfo. Reports local GPU VRAM segment budget/usage and non-local shared system memory budget/usage, available reservation headroom, and usage percentages.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            adapterIndex: {
+              type: "integer",
+              default: -1,
+              description: "Target DXGI graphics adapter index (default: -1 for all adapters)."
+            }
+          }
+        }
       }
 ];
 
@@ -8376,6 +8442,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚙️ [Windows Sensor Properties]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dxgi_adapters") {
+    const res = await orch.getDxgiAdapters();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎮 [DirectX Graphics Infrastructure (DXGI) Adapters]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dxgi_outputs") {
+    const res = await orch.getDxgiOutputs(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🖥️ [DXGI Display Outputs & Monitors]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dxgi_display_modes") {
+    const res = await orch.getDxgiDisplayModes(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📐 [DXGI Display Modes & Refresh Rates]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dxgi_video_memory_budget") {
+    const res = await orch.getDxgiVideoMemoryBudget(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💾 [DXGI GPU Video Memory Budget & Usage]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

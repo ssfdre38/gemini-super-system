@@ -5030,10 +5030,107 @@ async function run() {
     assert(typeof res.found === "boolean");
   });
 
-  it("All 252 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 72: Windows DirectX Graphics Infrastructure (DXGI) Subsystem (dxgi.h / dxgi.dll)
+  console.log("\x1b[1m[Suite 72: Windows DirectX Graphics Infrastructure (DXGI) Subsystem]\x1b[0m");
+
+  await itAsync("getDxgiAdapters enumerates GPU adapters, vendor IDs, and VRAM memory telemetry", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getDxgiAdapters();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getDxgiAdapters failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.totalAdapters === "number" && res.totalAdapters > 0);
+    assert(Array.isArray(res.adapters));
+    assert(res.adapters.length > 0);
+
+    const a = res.adapters[0];
+    assert(typeof a.adapterIndex === "number");
+    assert(typeof a.description === "string");
+    assert(typeof a.vendorId === "string");
+    assert(typeof a.vendorName === "string");
+    assert(typeof a.luid === "string");
+    assert(typeof a.isHardware === "boolean");
+    assert(typeof a.isSoftware === "boolean");
+    assert(typeof a.outputCount === "number");
+    assert(typeof a.sharedSystemMemoryGb === "number");
+  });
+
+  await itAsync("getDxgiOutputs enumerates connected display outputs, desktop bounds, and rotations", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getDxgiOutputs({ adapterIndex: -1 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getDxgiOutputs failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.totalOutputs === "number");
+    assert(Array.isArray(res.outputs));
+    if (res.totalOutputs > 0) {
+      const o = res.outputs[0];
+      assert(typeof o.adapterIndex === "number");
+      assert(typeof o.outputIndex === "number");
+      assert(typeof o.deviceName === "string");
+      assert(typeof o.attachedToDesktop === "boolean");
+      assert(typeof o.rotation === "number");
+      assert(typeof o.rotationName === "string");
+      assert(typeof o.monitorHandle === "string");
+      assert(typeof o.desktopCoordinates === "object" && o.desktopCoordinates !== null);
+      assert(typeof o.desktopCoordinates.width === "number");
+      assert(typeof o.desktopCoordinates.height === "number");
+    }
+  });
+
+  await itAsync("getDxgiDisplayModes queries resolution list and exact refresh rates", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getDxgiDisplayModes({ adapterIndex: 0, outputIndex: 0, maxModes: 10 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getDxgiDisplayModes failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.found === "boolean");
+    assert(typeof res.totalModes === "number");
+    assert(Array.isArray(res.modes));
+    if (res.modes.length > 0) {
+      const m = res.modes[0];
+      assert(typeof m.width === "number");
+      assert(typeof m.height === "number");
+      assert(typeof m.refreshRateHz === "number");
+      assert(typeof m.format === "string");
+      assert(typeof m.scanlineOrdering === "string");
+      assert(typeof m.scaling === "string");
+    }
+  });
+
+  await itAsync("getDxgiVideoMemoryBudget queries local VRAM and system memory segment budgets", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getDxgiVideoMemoryBudget({ adapterIndex: -1 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getDxgiVideoMemoryBudget failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.totalAdapters === "number");
+    assert(Array.isArray(res.adapters));
+    if (res.adapters.length > 0) {
+      const b = res.adapters[0];
+      assert(typeof b.adapterIndex === "number");
+      assert(typeof b.adapterDescription === "string");
+      assert(typeof b.supportsDxgi14Budget === "boolean");
+      assert(typeof b.localSegment === "object" && b.localSegment !== null);
+      assert(typeof b.localSegment.budgetBytes === "number");
+      assert(typeof b.localSegment.usageBytes === "number");
+      assert(typeof b.nonLocalSegment === "object" && b.nonLocalSegment !== null);
+      assert(typeof b.nonLocalSegment.budgetBytes === "number");
+    }
+  });
+
+  it("All 256 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 252);
+    assert.strictEqual(SYSTEM_TOOLS.length, 256);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -5219,6 +5316,10 @@ async function run() {
     assert(toolNames.includes("super_sensor_list"));
     assert(toolNames.includes("super_sensor_data"));
     assert(toolNames.includes("super_sensor_properties"));
+    assert(toolNames.includes("super_dxgi_adapters"));
+    assert(toolNames.includes("super_dxgi_outputs"));
+    assert(toolNames.includes("super_dxgi_display_modes"));
+    assert(toolNames.includes("super_dxgi_video_memory_budget"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

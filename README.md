@@ -102,6 +102,7 @@
   - [84. Windows Software Device Management Subsystem](#84--windows-software-device-management-subsystem-swdeviceh--cfgmgr32dll)
   - [85. Windows Native Wifi Subsystem](#85--windows-native-wifi-subsystem-wlanapih--wlanapidll)
   - [86. Windows Sensor and Location Platform Subsystem](#86--windows-sensor-and-location-platform-subsystem-sensorsapih--sensorsh--sensorsapidll)
+  - [87. Windows DirectX Graphics Infrastructure (DXGI) Subsystem](#87--windows-directx-graphics-infrastructure-dxgi-subsystem-dxgih--dxgi1_2h--dxgi1_3h--dxgidll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1148,6 +1149,15 @@ Directly accesses physical hardware and virtual system sensors via the Microsoft
 - **Sensor Tuning & Reporting Intervals (`super_sensor_properties`)**: Interrogates or reconfigures operational parameters via `IPortableDeviceValues` (`PortableDeviceValuesClass`), enabling dynamic adjustment of sensor polling rates (`CurrentReportInterval` in milliseconds) and change sensitivity thresholds on the fly.
 - **252 Tools Milestone**: Reaches **252 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **71 comprehensive test suites** and **67 environment health checks**.
 - **Native MCP Tools**: `super_sensor_manager_info`, `super_sensor_list`, `super_sensor_data`, `super_sensor_properties`.
+
+### 87. 🎮 Windows DirectX Graphics Infrastructure (DXGI) Subsystem (`dxgi.h` / `dxgi1_2.h` / `dxgi1_3.h` / `dxgi.dll`)
+Directly interfaces with Microsoft's bare-metal DirectX Graphics Infrastructure (DXGI) to introspect GPU hardware, display outputs, and video memory budgets:
+- **DXGI Adapters & GPU Inventory (`super_dxgi_adapters`)**: Traverses physical and virtual GPU adapters using `IDXGIFactory1::EnumAdapters1`. Queries adapter descriptions, hardware vendor identification (NVIDIA, AMD, Intel, Microsoft Basic Render Driver), PCI vendor/device/subsys IDs, LUID identifiers, hardware/software/remote execution flags, attached display output counts, dedicated VRAM capacity (Bytes, MB, GB), and shared system memory allocations.
+- **Display Outputs & Monitor Topology (`super_dxgi_outputs`)**: Enumerates display outputs attached to each graphics adapter via `IDXGIAdapter::EnumOutputs`. Interrogates physical monitor device paths (`\\.\DISPLAY#`), virtual desktop coordinate bounding boxes (`left, top, right, bottom, width, height`), desktop attachment state, screen rotation orientation (Identity 0°, Rotate90 90°, Rotate180 180°, Rotate270 270°), and Win32 HMONITOR handles.
+- **Display Modes & Rational Refresh Rates (`super_dxgi_display_modes`)**: Enumerates supported display modes and exact rational refresh rates for any connected monitor via `IDXGIOutput::GetDisplayModeList`. Unpacks resolution dimensions, rational refresh rates computed to exact decimal Hz (e.g. 59.94Hz, 60.00Hz, 144.00Hz), DirectX pixel formats (`DXGI_FORMAT_B8G8R8A8_UNORM`, `DXGI_FORMAT_R8G8B8A8_UNORM`), scanline ordering (Progressive, UpperFieldFirst, LowerFieldFirst), and scaling behavior.
+- **GPU Video Memory Budget & Usage (`super_dxgi_video_memory_budget`)**: Queries live video memory budget limits and real-time usage via `IDXGIAdapter3::QueryVideoMemoryInfo`. Analyzes GPU local memory segments (dedicated high-speed VRAM) and non-local segments (system RAM over PCIe), calculating total budgets, active usage, available reservation headroom, and utilization percentages.
+- **256 Tools Milestone**: Reaches **256 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **72 comprehensive test suites** and **68 environment health checks**.
+- **Native MCP Tools**: `super_dxgi_adapters`, `super_dxgi_outputs`, `super_dxgi_display_modes`, `super_dxgi_video_memory_budget`.
 
 ---
 
