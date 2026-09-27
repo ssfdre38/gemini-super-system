@@ -4969,10 +4969,71 @@ async function run() {
     assert(typeof res.connected === "boolean");
   });
 
-  it("All 248 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 71: Windows Sensor & Location Platform Subsystem (sensorsapi.h / SensorsApi.dll)
+  console.log("\x1b[1m[Suite 71: Windows Sensor & Location Platform Subsystem]\x1b[0m");
+
+  await itAsync("getSensorManagerInfo queries ISensorManager COM activation and category sensor counts", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getSensorManagerInfo();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getSensorManagerInfo failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert.strictEqual(res.platformActive, true);
+    assert(typeof res.totalSensors === "number");
+    assert(typeof res.categories === "object" && res.categories !== null);
+    assert(typeof res.categories.location === "number");
+    assert(typeof res.categories.motion === "number");
+    assert(typeof res.categories.environmental === "number");
+    assert(typeof res.categories.orientation === "number");
+  });
+
+  await itAsync("getSensorList enumerates installed sensors filtered by category", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getSensorList({ category: "all" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getSensorList failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.count === "number");
+    assert(Array.isArray(res.sensors));
+    if (res.sensors.length > 0) {
+      const s = res.sensors[0];
+      assert(typeof s.id === "string");
+      assert(typeof s.friendlyName === "string");
+      assert(typeof s.categoryName === "string");
+      assert(typeof s.typeName === "string");
+      assert(typeof s.state === "number");
+    }
+  });
+
+  await itAsync("getSensorData retrieves structured telemetry or handles unknown sensor gracefully", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getSensorData({ sensorId: "{00000000-0000-0000-0000-000000000000}" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getSensorData failed: " + JSON.stringify(res));
+    assert(typeof res.found === "boolean");
+  });
+
+  await itAsync("manageSensorProperties validates property queries or parameter tuning", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.manageSensorProperties({ sensorId: "{00000000-0000-0000-0000-000000000000}", action: "get" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "manageSensorProperties failed: " + JSON.stringify(res));
+    assert.strictEqual(res.action, "get");
+    assert(typeof res.found === "boolean");
+  });
+
+  it("All 252 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 248);
+    assert.strictEqual(SYSTEM_TOOLS.length, 252);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -5154,6 +5215,10 @@ async function run() {
     assert(toolNames.includes("super_wlan_networks"));
     assert(toolNames.includes("super_wlan_profiles"));
     assert(toolNames.includes("super_wlan_connection"));
+    assert(toolNames.includes("super_sensor_manager_info"));
+    assert(toolNames.includes("super_sensor_list"));
+    assert(toolNames.includes("super_sensor_data"));
+    assert(toolNames.includes("super_sensor_properties"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

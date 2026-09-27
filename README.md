@@ -101,6 +101,7 @@
   - [83. Windows XInput Game Controller Subsystem](#83--windows-xinput-game-controller-subsystem-xinputh--xinput1_4dll)
   - [84. Windows Software Device Management Subsystem](#84--windows-software-device-management-subsystem-swdeviceh--cfgmgr32dll)
   - [85. Windows Native Wifi Subsystem](#85--windows-native-wifi-subsystem-wlanapih--wlanapidll)
+  - [86. Windows Sensor and Location Platform Subsystem](#86--windows-sensor-and-location-platform-subsystem-sensorsapih--sensorsh--sensorsapidll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1131,6 +1132,22 @@ Directly manages wireless adapters, 802.11 active scanning, radio hardware state
 - **Connection Lifecycle & Channel Actuation (`super_wlan_connection`)**: Interrogates or actuates active wireless connection state via `WlanQueryInterface`, `WlanConnect`, and `WlanDisconnect`. Queries active SSID, BSSID MAC address, PHY modulation type (`802.11be` Wi-Fi 7, `802.11ax` Wi-Fi 6, `802.11ac` Wi-Fi 5, `802.11n`), Rx/Tx link rates in Kbps, and channel numbers.
 - **248 Tools Milestone**: Reaches **248 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **70 comprehensive test suites** and **66 environment health checks**.
 - **Native MCP Tools**: `super_wlan_interfaces`, `super_wlan_networks`, `super_wlan_profiles`, `super_wlan_connection`.
+
+---
+
+## 86. 🧭 Windows Sensor and Location Platform Subsystem (`sensorsapi.h` / `sensors.h` / `SensorsApi.dll`)
+
+Directly accesses physical hardware and virtual system sensors via the Microsoft Windows Sensor and Location Platform COM architecture (`SensorsApi.dll` / `sensorsapi.h`):
+- **Sensor Manager & Multi-Category Telemetry (`super_sensor_manager_info`)**: Activates the native COM `ISensorManager` class (`CLSID {77A1C827-FCD2-4689-8915-9D613CC5FA3E}`), interrogates platform availability, and reports live sensor counts across all 10 device categories: Location (GPS/Static/Triangulation), Environmental (Temperature, Pressure, Humidity), Motion (1D/2D/3D Accelerometer, Gyrometer, Speedometer), Orientation (Compass, Inclinometer, Distance), Mechanical, Electrical, Biometric, Light (Ambient Lux, Color Temp), Scanner, and Other.
+- **Sensor Enumeration & Hardware Specification (`super_sensor_list`)**: Traverses `ISensorCollection` and `ISensor` interfaces with optional category filtering. Discovers friendly device names, operational states (`Ready`, `NotAvailable`, `NoData`, `Initializing`, `AccessDenied`), manufacturers, models, serial numbers, descriptions, connection bus types, minimum report intervals, and hardware device paths (`\\?\root#sensors#...`).
+- **Real-Time Data Report Telemetry (`super_sensor_data`)**: Obtains live, high-precision timestamped sensor reports via `ISensorDataReport` and `GetSensorValue`. Automatically extracts calibrated physical telemetry:
+  - **Motion**: 3-axis acceleration ($G$), angular velocity ($\deg/s$), linear speed ($m/s$), motion state flag.
+  - **Orientation**: 3-axis tilt angles ($\deg$), compass headings (magnetic and true North in $\deg$), 3-axis magnetic field strength ($mG$).
+  - **Environmental & Light**: Temperature ($^\circ\text{C}$), relative humidity ($\%$), atmospheric pressure ($\text{bar}$), ambient illuminance ($\text{lux}$), light color temperature ($\text{K}$).
+  - **Location & Biometrics**: Latitude/longitude, ellipsoidal/sea level altitude ($m$), ground speed ($\text{knots}$), GPS fix quality, human presence/proximity detection.
+- **Sensor Tuning & Reporting Intervals (`super_sensor_properties`)**: Interrogates or reconfigures operational parameters via `IPortableDeviceValues` (`PortableDeviceValuesClass`), enabling dynamic adjustment of sensor polling rates (`CurrentReportInterval` in milliseconds) and change sensitivity thresholds on the fly.
+- **252 Tools Milestone**: Reaches **252 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **71 comprehensive test suites** and **67 environment health checks**.
+- **Native MCP Tools**: `super_sensor_manager_info`, `super_sensor_list`, `super_sensor_data`, `super_sensor_properties`.
 
 ---
 

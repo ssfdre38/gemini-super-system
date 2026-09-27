@@ -4694,6 +4694,67 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_sensor_manager_info",
+        description: "Queries Windows Sensor and Location Platform status, COM manager activation (ISensorManager via SensorsApi.dll), and reports installed sensor counts across all 10 hardware/virtual categories (location, environmental, motion, orientation, mechanical, electrical, biometric, light, scanner, and other).",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_sensor_list",
+        description: "Enumerates hardware and virtual sensors registered in Windows Sensor and Location Platform (ISensorCollection / ISensor), reporting unique ID GUID, friendly name, operational state (Ready, NotAvailable, Initializing, AccessDenied), manufacturer, model, serial number, connection type, and polling interval constraints.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            category: {
+              type: "string",
+              enum: ["all", "location", "environmental", "motion", "orientation", "mechanical", "electrical", "biometric", "light", "scanner", "other"],
+              default: "all",
+              description: "Optional sensor category filter (default: 'all')."
+            }
+          }
+        }
+      },
+      {
+        name: "super_sensor_data",
+        description: "Acquires real-time high-fidelity sensory readings and timestamped data reports (ISensorDataReport) from a target sensor by GUID. Automatically extracts physical telemetry across motion (3-axis acceleration, angular velocity, speed), orientation (inclinometer tilt, compass heading, magnetic field), environmental (temperature, pressure, humidity), light (lux, kelvin), location (lat/lon, altitude), or biometrics.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            sensorId: {
+              type: "string",
+              description: "Target sensor unique GUID identifier."
+            }
+          },
+          required: ["sensorId"]
+        }
+      },
+      {
+        name: "super_sensor_properties",
+        description: "Interrogates or sets operational properties and tuning parameters for a sensor via IPortableDeviceValues (e.g. retrieving full hardware metadata or updating CurrentReportInterval in milliseconds).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            sensorId: {
+              type: "string",
+              description: "Target sensor unique GUID identifier."
+            },
+            action: {
+              type: "string",
+              enum: ["get", "set"],
+              default: "get",
+              description: "Property action: 'get' (retrieve all properties) or 'set' (configure sensor property)."
+            },
+            currentReportInterval: {
+              type: "number",
+              description: "Desired reporting interval in milliseconds (used when action is 'set')."
+            }
+          },
+          required: ["sensorId"]
+        }
       }
 ];
 
@@ -8267,6 +8328,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [Windows Native Wifi Connection State]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_sensor_manager_info") {
+    const res = await orch.getSensorManagerInfo();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🧭 [Windows Sensor Platform Manager Info]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_sensor_list") {
+    const res = await orch.getSensorList(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📊 [Windows Sensor Device List]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_sensor_data") {
+    const res = await orch.getSensorData(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows Sensor Live Data Report]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_sensor_properties") {
+    const res = await orch.manageSensorProperties(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚙️ [Windows Sensor Properties]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

@@ -684,14 +684,26 @@ namespace GeminiSuperDesktop {
         struct PROPERTYKEY {
             public Guid fmtid;
             public uint pid;
+            public PROPERTYKEY(Guid g, uint p) {
+                fmtid = g;
+                pid = p;
+            }
         }
 
-        [StructLayout(LayoutKind.Explicit)]
+        [StructLayout(LayoutKind.Explicit, Size = 24)]
         struct PROPVARIANT {
             [FieldOffset(0)] public ushort vt;
+            [FieldOffset(2)] public ushort wReserved1;
+            [FieldOffset(4)] public ushort wReserved2;
+            [FieldOffset(6)] public ushort wReserved3;
             [FieldOffset(8)] public IntPtr pwszVal;
             [FieldOffset(8)] public int iVal;
             [FieldOffset(8)] public uint uiVal;
+            [FieldOffset(8)] public long hVal;
+            [FieldOffset(8)] public ulong uhVal;
+            [FieldOffset(8)] public float fltVal;
+            [FieldOffset(8)] public double dblVal;
+            [FieldOffset(8)] public short boolVal;
         }
 
         [Guid("886d8eeb-8cf2-4446-8d02-cdba1dbdcf99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -18539,6 +18551,619 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 86: Windows Sensor and Location Platform Subsystem (sensorsapi.h / sensors.h / SensorsApi.dll)
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct SENSOR_SYSTEMTIME {
+            public short wYear;
+            public short wMonth;
+            public short wDayOfWeek;
+            public short wDay;
+            public short wHour;
+            public short wMinute;
+            public short wSecond;
+            public short wMilliseconds;
+        }
+
+        [ComImport]
+        [Guid("77A1C827-FCD2-4689-8915-9D613CC5FA3E")]
+        class SensorManagerClass { }
+
+        [ComImport]
+        [Guid("0c15d503-d017-47ce-9016-7b3f978721cc")]
+        class PortableDeviceValuesClass { }
+
+        [ComImport]
+        [Guid("BD77DB67-45A8-42DC-8D00-6DCF15F8377A")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface ISensorManager {
+            [PreserveSig] int GetSensorsByCategory([In] ref Guid sensorCategory, [Out] out ISensorCollection ppSensorsResult);
+            [PreserveSig] int GetSensorsByType([In] ref Guid sensorType, [Out] out ISensorCollection ppSensorsResult);
+            [PreserveSig] int GetSensorByID([In] ref Guid sensorID, [Out] out ISensor ppSensor);
+            [PreserveSig] int SetEventSink([In] IntPtr pEvents);
+            [PreserveSig] int RequestPermissions([In] IntPtr hParent, [In] ISensorCollection pSensors, [In, MarshalAs(UnmanagedType.Bool)] bool fModal);
+        }
+
+        [ComImport]
+        [Guid("23571E11-E545-4DD8-A337-B89BF44B10DF")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface ISensorCollection {
+            [PreserveSig] int GetAt([In] uint ulIndex, [Out] out ISensor ppSensor);
+            [PreserveSig] int GetCount([Out] out uint pulCount);
+            [PreserveSig] int Add([In] ISensor pSensor);
+            [PreserveSig] int Remove([In] ISensor pSensor);
+            [PreserveSig] int RemoveByID([In] ref Guid sensorID);
+            [PreserveSig] int Clear();
+        }
+
+        [ComImport]
+        [Guid("5FA08F80-2657-458E-AF75-46F73FA6AC5C")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface ISensor {
+            [PreserveSig] int GetID([Out] out Guid pID);
+            [PreserveSig] int GetCategory([Out] out Guid pSensorCategory);
+            [PreserveSig] int GetType([Out] out Guid pSensorType);
+            [PreserveSig] int GetFriendlyName([Out, MarshalAs(UnmanagedType.BStr)] out string pFriendlyName);
+            [PreserveSig] int GetProperty([In] ref PROPERTYKEY key, [In, Out] ref PROPVARIANT pValue);
+            [PreserveSig] int GetProperties([In] IntPtr pKeys, [Out] out IPortableDeviceValues ppProperties);
+            [PreserveSig] int GetSupportedDataFields([Out] out IntPtr ppDataFields);
+            [PreserveSig] int SetProperties([In] IPortableDeviceValues pProperties, [Out] out IPortableDeviceValues ppResults);
+            [PreserveSig] int SupportsDataField([In] ref PROPERTYKEY key, [Out, MarshalAs(UnmanagedType.Bool)] out bool pIsSupported);
+            [PreserveSig] int GetState([Out] out uint pState);
+            [PreserveSig] int GetData([Out] out ISensorDataReport ppDataReport);
+            [PreserveSig] int SupportsEvent([In] ref Guid eventType, [Out, MarshalAs(UnmanagedType.Bool)] out bool pIsSupported);
+            [PreserveSig] int GetEventInterest([Out] out IntPtr ppValues, [Out] out uint pCount);
+            [PreserveSig] int SetEventInterest([In] IntPtr pValues, [In] uint count);
+            [PreserveSig] int SetEventSink([In] IntPtr pEvents);
+        }
+
+        [ComImport]
+        [Guid("0AB9DF9B-C4B5-4796-8898-0470706A2E1D")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface ISensorDataReport {
+            [PreserveSig] int GetTimestamp([Out] out SENSOR_SYSTEMTIME pTimeStamp);
+            [PreserveSig] int GetSensorValue([In] ref PROPERTYKEY key, [In, Out] ref PROPVARIANT pValue);
+            [PreserveSig] int GetSensorValues([In] IntPtr pKeys, [Out] out IPortableDeviceValues ppValues);
+        }
+
+        [ComImport]
+        [Guid("6848F6F2-3155-4F86-B6F5-263EEEAB3143")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        interface IPortableDeviceValues {
+            [PreserveSig] int GetCount([Out] out uint pcelt);
+            [PreserveSig] int GetAt([In] uint index, [In, Out] ref PROPERTYKEY pKey, [In, Out] ref PROPVARIANT pValue);
+            [PreserveSig] int SetValue([In] ref PROPERTYKEY key, [In] ref PROPVARIANT pValue);
+            [PreserveSig] int GetValue([In] ref PROPERTYKEY key, [Out] out PROPVARIANT pValue);
+            [PreserveSig] int SetStringValue([In] ref PROPERTYKEY key, [In, MarshalAs(UnmanagedType.LPWStr)] string Value);
+            [PreserveSig] int GetStringValue([In] ref PROPERTYKEY key, [Out, MarshalAs(UnmanagedType.LPWStr)] out string ppValue);
+            [PreserveSig] int SetUnsignedIntegerValue([In] ref PROPERTYKEY key, [In] uint Value);
+            [PreserveSig] int GetUnsignedIntegerValue([In] ref PROPERTYKEY key, [Out] out uint pValue);
+            [PreserveSig] int SetSignedIntegerValue([In] ref PROPERTYKEY key, [In] int Value);
+            [PreserveSig] int GetSignedIntegerValue([In] ref PROPERTYKEY key, [Out] out int pValue);
+            [PreserveSig] int SetUnsignedLargeIntegerValue([In] ref PROPERTYKEY key, [In] ulong Value);
+            [PreserveSig] int GetUnsignedLargeIntegerValue([In] ref PROPERTYKEY key, [Out] out ulong pValue);
+            [PreserveSig] int SetSignedLargeIntegerValue([In] ref PROPERTYKEY key, [In] long Value);
+            [PreserveSig] int GetSignedLargeIntegerValue([In] ref PROPERTYKEY key, [Out] out long pValue);
+            [PreserveSig] int SetFloatValue([In] ref PROPERTYKEY key, [In] float Value);
+            [PreserveSig] int GetFloatValue([In] ref PROPERTYKEY key, [Out] out float pValue);
+            [PreserveSig] int SetErrorValue([In] ref PROPERTYKEY key, [In] int Value);
+            [PreserveSig] int GetErrorValue([In] ref PROPERTYKEY key, [Out] out int pValue);
+            [PreserveSig] int SetKeyValue([In] ref PROPERTYKEY key, [In] ref PROPERTYKEY Value);
+            [PreserveSig] int GetKeyValue([In] ref PROPERTYKEY key, [Out] out PROPERTYKEY pValue);
+            [PreserveSig] int SetBoolValue([In] ref PROPERTYKEY key, [In, MarshalAs(UnmanagedType.Bool)] bool Value);
+            [PreserveSig] int GetBoolValue([In] ref PROPERTYKEY key, [Out, MarshalAs(UnmanagedType.Bool)] out bool pValue);
+            [PreserveSig] int SetIUnknownValue([In] ref PROPERTYKEY key, [In, MarshalAs(UnmanagedType.IUnknown)] object pValue);
+            [PreserveSig] int GetIUnknownValue([In] ref PROPERTYKEY key, [Out, MarshalAs(UnmanagedType.IUnknown)] out object ppValue);
+            [PreserveSig] int SetGuidValue([In] ref PROPERTYKEY key, [In] ref Guid Value);
+            [PreserveSig] int GetGuidValue([In] ref PROPERTYKEY key, [Out] out Guid pValue);
+            [PreserveSig] int SetBufferValue([In] ref PROPERTYKEY key, [In] byte[] pValue, [In] uint cbValue);
+            [PreserveSig] int GetBufferValue([In] ref PROPERTYKEY key, [Out] out IntPtr ppValue, [Out] out uint pcbValue);
+            [PreserveSig] int SetIPortableDeviceValuesValue([In] ref PROPERTYKEY key, [In] IPortableDeviceValues pValue);
+            [PreserveSig] int GetIPortableDeviceValuesValue([In] ref PROPERTYKEY key, [Out] out IPortableDeviceValues ppValue);
+        }
+
+        static readonly Guid SENSOR_CATEGORY_ALL = new Guid("C317C286-C468-4288-9975-D4C4587C442C");
+        static readonly Guid SENSOR_CATEGORY_LOCATION = new Guid("BFA794E4-F964-4FDB-90F6-51056BFE4B44");
+        static readonly Guid SENSOR_CATEGORY_ENVIRONMENTAL = new Guid("323439AA-7F66-492B-BA0C-73E9AA0A65D5");
+        static readonly Guid SENSOR_CATEGORY_MOTION = new Guid("CD09DAF1-3B2E-4C3D-B598-B5E5FF93FD46");
+        static readonly Guid SENSOR_CATEGORY_ORIENTATION = new Guid("9E6C04B6-96FE-4954-B726-68682A473F69");
+        static readonly Guid SENSOR_CATEGORY_MECHANICAL = new Guid("8D131D68-8EF7-4656-80B5-CCCBD93791C5");
+        static readonly Guid SENSOR_CATEGORY_ELECTRICAL = new Guid("FB73FCD8-FC4A-483C-AC58-27B691C6BEFF");
+        static readonly Guid SENSOR_CATEGORY_BIOMETRIC = new Guid("CA19690F-A2C7-477D-A99E-99EC6E2B5648");
+        static readonly Guid SENSOR_CATEGORY_LIGHT = new Guid("17A665C0-9063-4216-B202-5C7A255E18CE");
+        static readonly Guid SENSOR_CATEGORY_SCANNER = new Guid("B000E77E-F5B5-420F-815D-0270A726F270");
+        static readonly Guid SENSOR_CATEGORY_OTHER = new Guid("2C90E7A9-F4C9-4FA2-AF37-56D471FE5A3D");
+
+        static readonly Guid SENSOR_PROPERTY_COMMON_GUID = new Guid("7F8383EC-D3EC-495C-A8CF-B8BBE85C2920");
+
+        static readonly Guid SENSOR_DATA_TYPE_MOTION_GUID = new Guid("3F8A69A2-07C5-4E48-A965-CD797AAB56D5");
+        static readonly Guid SENSOR_DATA_TYPE_ORIENTATION_GUID = new Guid("1637D8A2-4248-4275-865D-558DE84AEDFD");
+        static readonly Guid SENSOR_DATA_TYPE_ENVIRONMENTAL_GUID = new Guid("8B0AA2F1-2D57-42EE-8CC0-4D27622B46C4");
+        static readonly Guid SENSOR_DATA_TYPE_LIGHT_GUID = new Guid("E4C77CE2-DCB7-46E9-8439-4FEC548833A6");
+        static readonly Guid SENSOR_DATA_TYPE_LOCATION_GUID = new Guid("055C74D8-CA6F-47D6-95C6-1ED3637A0FF4");
+        static readonly Guid SENSOR_DATA_TYPE_BIOMETRIC_GUID = new Guid("2299288A-6D9E-4B0B-B7EC-3528F89E40AF");
+        static readonly Guid SENSOR_DATA_TYPE_MECHANICAL_GUID = new Guid("38564A7C-F2F2-49BB-9B2B-BA60F66A58DF");
+        static readonly Guid SENSOR_DATA_TYPE_ELECTRICAL_GUID = new Guid("BBB246D1-E242-4780-A2D3-CDED84F35842");
+
+        static object ExtractSensorPropVariant(ref PROPVARIANT pv) {
+            try {
+                switch (pv.vt) {
+                    case 0: return null;
+                    case 1: return null;
+                    case 2: return pv.iVal;
+                    case 3: return pv.iVal;
+                    case 4: return pv.fltVal;
+                    case 5: return pv.dblVal;
+                    case 11: return pv.boolVal != 0;
+                    case 18: return pv.uiVal;
+                    case 19: return pv.uiVal;
+                    case 20: return pv.hVal;
+                    case 21: return pv.uhVal;
+                    case 30: return Marshal.PtrToStringAnsi(pv.pwszVal);
+                    case 31: return Marshal.PtrToStringUni(pv.pwszVal);
+                    case 72:
+                        if (pv.pwszVal != IntPtr.Zero) {
+                            return (Guid)Marshal.PtrToStructure(pv.pwszVal, typeof(Guid));
+                        }
+                        return Guid.Empty;
+                    default: return null;
+                }
+            } finally {
+                PropVariantClear(ref pv);
+            }
+        }
+
+        static string GetSensorCategoryName(Guid cat) {
+            if (cat == SENSOR_CATEGORY_LOCATION) return "location";
+            if (cat == SENSOR_CATEGORY_ENVIRONMENTAL) return "environmental";
+            if (cat == SENSOR_CATEGORY_MOTION) return "motion";
+            if (cat == SENSOR_CATEGORY_ORIENTATION) return "orientation";
+            if (cat == SENSOR_CATEGORY_MECHANICAL) return "mechanical";
+            if (cat == SENSOR_CATEGORY_ELECTRICAL) return "electrical";
+            if (cat == SENSOR_CATEGORY_BIOMETRIC) return "biometric";
+            if (cat == SENSOR_CATEGORY_LIGHT) return "light";
+            if (cat == SENSOR_CATEGORY_SCANNER) return "scanner";
+            if (cat == SENSOR_CATEGORY_OTHER) return "other";
+            if (cat == SENSOR_CATEGORY_ALL) return "all";
+            return "unknown";
+        }
+
+        static Guid ParseSensorCategory(string catStr) {
+            if (string.IsNullOrEmpty(catStr)) return SENSOR_CATEGORY_ALL;
+            string s = catStr.Trim().ToLowerInvariant();
+            if (s == "location" || s == "gps") return SENSOR_CATEGORY_LOCATION;
+            if (s == "environmental" || s == "temp" || s == "weather") return SENSOR_CATEGORY_ENVIRONMENTAL;
+            if (s == "motion" || s == "accel" || s == "gyro") return SENSOR_CATEGORY_MOTION;
+            if (s == "orientation" || s == "compass" || s == "inclinometer") return SENSOR_CATEGORY_ORIENTATION;
+            if (s == "mechanical") return SENSOR_CATEGORY_MECHANICAL;
+            if (s == "electrical" || s == "power") return SENSOR_CATEGORY_ELECTRICAL;
+            if (s == "biometric" || s == "presence") return SENSOR_CATEGORY_BIOMETRIC;
+            if (s == "light" || s == "lux") return SENSOR_CATEGORY_LIGHT;
+            if (s == "scanner") return SENSOR_CATEGORY_SCANNER;
+            if (s == "other") return SENSOR_CATEGORY_OTHER;
+            try {
+                return new Guid(catStr);
+            } catch {
+                return SENSOR_CATEGORY_ALL;
+            }
+        }
+
+        static string FormatSensorState(uint state) {
+            switch (state) {
+                case 0: return "Ready";
+                case 1: return "NotAvailable";
+                case 2: return "NoData";
+                case 3: return "Initializing";
+                case 4: return "AccessDenied";
+                case 5: return "Error";
+                default: return "Unknown";
+            }
+        }
+
+        static string FormatSensorTypeName(Guid type) {
+            string g = type.ToString().ToUpperInvariant();
+            if (g == "C04D2387-7340-4CC2-991E-3B18CB8EF2F4") return "Accelerometer1D";
+            if (g == "B2C517A8-F6B5-4BA6-A423-5DF560B4CC07") return "Accelerometer2D";
+            if (g == "C2FB0F5F-E2D2-4C78-BCD0-352A9582819D") return "Accelerometer3D";
+            if (g == "FA088734-F552-4584-8324-EDFAF649652C") return "Gyrometer1D";
+            if (g == "31EF4F83-919B-48BF-8DE0-5D7A9D240556") return "Gyrometer2D";
+            if (g == "09485F5A-759E-42C2-BD4B-A349B75C8643") return "Gyrometer3D";
+            if (g == "5C7C1A12-30A5-43B9-A4B2-CF09EC5B7BE8") return "MotionDetector";
+            if (g == "6BD73C1F-0BB4-4310-81B2-DFC18A52BF94") return "Speedometer";
+            if (g == "A415F6C5-CB50-49D0-8E62-A8270BD7A26C") return "Compass1D";
+            if (g == "15655CC0-997A-4D30-84DB-57CABA3648BB") return "Compass2D";
+            if (g == "76B5CE0D-17DD-414D-93A1-E127F40BDF6E") return "Compass3D";
+            if (g == "B96F98C5-7A75-4BA7-94E9-AC868C966DD8") return "Inclinometer1D";
+            if (g == "AB140F6D-83EB-4264-B70B-B16A5B256A01") return "Inclinometer2D";
+            if (g == "B84919FB-EA85-4976-8444-6F6F5C6D31DB") return "Inclinometer3D";
+            if (g == "97F115C8-599A-4153-8894-D2D12899918A") return "AmbientLight";
+            if (g == "ED4CA589-327A-4FF9-A560-91DA4B48275E") return "LocationGPS";
+            if (g == "04FD0EC4-D5DA-45FA-95A9-5DB38EE19306") return "Temperature";
+            if (g == "0E903829-FF8A-4A93-97DF-3DCBDE402288") return "AtmosphericPressure";
+            if (g == "5C72BF67-BD7E-4257-990B-98A3BA3B400A") return "Humidity";
+            if (g == "C138C12B-AD52-451C-9375-87F518FF10C6") return "HumanPresence";
+            if (g == "5220DAE9-3179-4430-9F90-06266D2A34DE") return "HumanProximity";
+            if (g == "C5484637-4FB7-4953-98B8-A56D8AA1FB1E") return "Voltage";
+            if (g == "5ADC9FCE-15A0-4BBE-A1AD-2D38A9AE831C") return "Current";
+            if (g == "212F10F5-14AB-4376-9A43-A7794098C2FE") return "ElectricalPower";
+            return "GenericSensor";
+        }
+
+        static object GetSensorProperty(ISensor sensor, PROPERTYKEY key) {
+            PROPVARIANT pv = new PROPVARIANT();
+            int hr = sensor.GetProperty(ref key, ref pv);
+            if (hr == 0) {
+                return ExtractSensorPropVariant(ref pv);
+            }
+            return null;
+        }
+
+        static object GetReportDataValue(ISensorDataReport report, PROPERTYKEY key) {
+            PROPVARIANT pv = new PROPVARIANT();
+            int hr = report.GetSensorValue(ref key, ref pv);
+            if (hr == 0) {
+                return ExtractSensorPropVariant(ref pv);
+            }
+            return null;
+        }
+
+        static uint QueryCategorySensorCount(ISensorManager mgr, ref Guid cat) {
+            try {
+                ISensorCollection coll;
+                int hr = mgr.GetSensorsByCategory(ref cat, out coll);
+                if (hr >= 0 && coll != null) {
+                    uint count = 0;
+                    coll.GetCount(out count);
+                    return count;
+                }
+            } catch {}
+            return 0;
+        }
+
+        static void SensorManagerInfoCmd() {
+            try {
+                ISensorManager mgr = null;
+                try {
+                    mgr = (ISensorManager)new SensorManagerClass();
+                } catch (Exception ex) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"platformActive\": false, \"totalSensors\": 0, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+                    return;
+                }
+
+                Guid catAll = SENSOR_CATEGORY_ALL;
+                Guid catLoc = SENSOR_CATEGORY_LOCATION;
+                Guid catEnv = SENSOR_CATEGORY_ENVIRONMENTAL;
+                Guid catMot = SENSOR_CATEGORY_MOTION;
+                Guid catOri = SENSOR_CATEGORY_ORIENTATION;
+                Guid catMec = SENSOR_CATEGORY_MECHANICAL;
+                Guid catEle = SENSOR_CATEGORY_ELECTRICAL;
+                Guid catBio = SENSOR_CATEGORY_BIOMETRIC;
+                Guid catLig = SENSOR_CATEGORY_LIGHT;
+                Guid catSca = SENSOR_CATEGORY_SCANNER;
+                Guid catOth = SENSOR_CATEGORY_OTHER;
+
+                uint total = QueryCategorySensorCount(mgr, ref catAll);
+                uint locCount = QueryCategorySensorCount(mgr, ref catLoc);
+                uint envCount = QueryCategorySensorCount(mgr, ref catEnv);
+                uint motCount = QueryCategorySensorCount(mgr, ref catMot);
+                uint oriCount = QueryCategorySensorCount(mgr, ref catOri);
+                uint mecCount = QueryCategorySensorCount(mgr, ref catMec);
+                uint eleCount = QueryCategorySensorCount(mgr, ref catEle);
+                uint bioCount = QueryCategorySensorCount(mgr, ref catBio);
+                uint ligCount = QueryCategorySensorCount(mgr, ref catLig);
+                uint scaCount = QueryCategorySensorCount(mgr, ref catSca);
+                uint othCount = QueryCategorySensorCount(mgr, ref catOth);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"apiAvailable\": true, \"platformActive\": true, \"totalSensors\": {0}, \"categories\": {{\"location\": {1}, \"environmental\": {2}, \"motion\": {3}, \"orientation\": {4}, \"mechanical\": {5}, \"electrical\": {6}, \"biometric\": {7}, \"light\": {8}, \"scanner\": {9}, \"other\": {10}}}}}",
+                    total, locCount, envCount, motCount, oriCount, mecCount, eleCount, bioCount, ligCount, scaCount, othCount
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void SensorListCmd(string categoryFilter) {
+            try {
+                ISensorManager mgr = null;
+                try {
+                    mgr = (ISensorManager)new SensorManagerClass();
+                } catch (Exception ex) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"platformActive\": false, \"count\": 0, \"sensors\": [], \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+                    return;
+                }
+
+                Guid targetCat = ParseSensorCategory(categoryFilter);
+                ISensorCollection coll;
+                int hr = mgr.GetSensorsByCategory(ref targetCat, out coll);
+                if (hr < 0 || coll == null) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"category\": \"{0}\", \"count\": 0, \"sensors\": []}}",
+                        EscapeJson(GetSensorCategoryName(targetCat))));
+                    return;
+                }
+
+                uint count = 0;
+                coll.GetCount(out count);
+                var sensorsJson = new List<string>();
+
+                for (uint i = 0; i < count; i++) {
+                    ISensor sensor;
+                    if (coll.GetAt(i, out sensor) == 0 && sensor != null) {
+                        try {
+                            Guid id, cat, type;
+                            sensor.GetID(out id);
+                            sensor.GetCategory(out cat);
+                            sensor.GetType(out type);
+
+                            string friendlyName = "";
+                            sensor.GetFriendlyName(out friendlyName);
+
+                            uint state = 1;
+                            sensor.GetState(out state);
+
+                            object manufacturer = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 6));
+                            object model = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 7));
+                            object serial = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 8));
+                            object desc = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 10));
+                            object connType = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 11));
+                            object minInterval = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 12));
+                            object curInterval = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 13));
+                            object devPath = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 15));
+
+                            sensorsJson.Add(string.Format(
+                                "{{\"id\": \"{0}\", \"friendlyName\": \"{1}\", \"category\": \"{2}\", \"categoryName\": \"{3}\", \"type\": \"{4}\", \"typeName\": \"{5}\", \"state\": {6}, \"stateName\": \"{7}\", \"manufacturer\": \"{8}\", \"model\": \"{9}\", \"serialNumber\": \"{10}\", \"description\": \"{11}\", \"connectionType\": {12}, \"minReportInterval\": {13}, \"currentReportInterval\": {14}, \"devicePath\": \"{15}\"}}",
+                                id,
+                                EscapeJson(friendlyName ?? ""),
+                                cat,
+                                EscapeJson(GetSensorCategoryName(cat)),
+                                type,
+                                EscapeJson(FormatSensorTypeName(type)),
+                                state,
+                                EscapeJson(FormatSensorState(state)),
+                                EscapeJson((manufacturer as string) ?? ""),
+                                EscapeJson((model as string) ?? ""),
+                                EscapeJson((serial as string) ?? ""),
+                                EscapeJson((desc as string) ?? ""),
+                                connType != null ? connType.ToString() : "0",
+                                minInterval != null ? minInterval.ToString() : "0",
+                                curInterval != null ? curInterval.ToString() : "0",
+                                EscapeJson((devPath as string) ?? "")
+                            ));
+                        } catch {}
+                    }
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"category\": \"{0}\", \"count\": {1}, \"sensors\": [{2}]}}",
+                    EscapeJson(GetSensorCategoryName(targetCat)),
+                    sensorsJson.Count,
+                    string.Join(", ", sensorsJson.ToArray())));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void SensorDataCmd(string sensorIdStr) {
+            try {
+                if (string.IsNullOrEmpty(sensorIdStr)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Sensor ID parameter required\"}");
+                    return;
+                }
+
+                Guid id;
+                try {
+                    id = new Guid(sensorIdStr);
+                } catch {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Invalid Sensor ID format\"}");
+                    return;
+                }
+
+                ISensorManager mgr = null;
+                try {
+                    mgr = (ISensorManager)new SensorManagerClass();
+                } catch (Exception ex) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"platformActive\": false, \"found\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+                    return;
+                }
+
+                ISensor sensor;
+                int hr = mgr.GetSensorByID(ref id, out sensor);
+                if (hr != 0 || sensor == null) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"found\": false, \"sensorId\": \"{0}\", \"message\": \"Sensor not found\"}}", id));
+                    return;
+                }
+
+                string friendlyName = "";
+                sensor.GetFriendlyName(out friendlyName);
+                uint state = 1;
+                sensor.GetState(out state);
+                Guid cat, type;
+                sensor.GetCategory(out cat);
+                sensor.GetType(out type);
+
+                ISensorDataReport report;
+                int hrData = sensor.GetData(out report);
+                if (hrData != 0 || report == null) {
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"found\": true, \"hasData\": false, \"sensorId\": \"{0}\", \"friendlyName\": \"{1}\", \"state\": {2}, \"stateName\": \"{3}\", \"category\": \"{4}\", \"type\": \"{5}\", \"hr\": \"0x{6:X8}\"}}",
+                        id, EscapeJson(friendlyName ?? ""), state, EscapeJson(FormatSensorState(state)), EscapeJson(GetSensorCategoryName(cat)), EscapeJson(FormatSensorTypeName(type)), hrData
+                    ));
+                    return;
+                }
+
+                SENSOR_SYSTEMTIME st;
+                string timestampStr = "";
+                if (report.GetTimestamp(out st) == 0) {
+                    timestampStr = string.Format("{0:D4}-{1:D2}-{2:D2}T{3:D2}:{4:D2}:{5:D2}.{6:D3}Z",
+                        st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond, st.wMilliseconds);
+                }
+
+                var fields = new List<string>();
+
+                Action<string, Guid, uint> probe = (name, guid, pid) => {
+                    object val = GetReportDataValue(report, new PROPERTYKEY(guid, pid));
+                    if (val != null) {
+                        if (val is bool) {
+                            fields.Add(string.Format("\"{0}\": {1}", name, ((bool)val) ? "true" : "false"));
+                        } else if (val is string) {
+                            fields.Add(string.Format("\"{0}\": \"{1}\"", name, EscapeJson((string)val)));
+                        } else if (val is double || val is float || val is int || val is uint || val is long || val is ulong) {
+                            fields.Add(string.Format("\"{0}\": {1}", name, Convert.ToString(val, System.Globalization.CultureInfo.InvariantCulture)));
+                        }
+                    }
+                };
+
+                // Motion
+                probe("accelerationX_G", SENSOR_DATA_TYPE_MOTION_GUID, 2);
+                probe("accelerationY_G", SENSOR_DATA_TYPE_MOTION_GUID, 3);
+                probe("accelerationZ_G", SENSOR_DATA_TYPE_MOTION_GUID, 4);
+                probe("angularVelocityX_DegPerSec", SENSOR_DATA_TYPE_MOTION_GUID, 10);
+                probe("angularVelocityY_DegPerSec", SENSOR_DATA_TYPE_MOTION_GUID, 11);
+                probe("angularVelocityZ_DegPerSec", SENSOR_DATA_TYPE_MOTION_GUID, 12);
+                probe("speed_MetersPerSec", SENSOR_DATA_TYPE_MOTION_GUID, 8);
+                probe("motionState", SENSOR_DATA_TYPE_MOTION_GUID, 9);
+
+                // Orientation
+                probe("tiltX_Degrees", SENSOR_DATA_TYPE_ORIENTATION_GUID, 2);
+                probe("tiltY_Degrees", SENSOR_DATA_TYPE_ORIENTATION_GUID, 3);
+                probe("tiltZ_Degrees", SENSOR_DATA_TYPE_ORIENTATION_GUID, 4);
+                probe("magneticHeadingMagNorth_Degrees", SENSOR_DATA_TYPE_ORIENTATION_GUID, 13);
+                probe("magneticHeadingTrueNorth_Degrees", SENSOR_DATA_TYPE_ORIENTATION_GUID, 14);
+                probe("magneticFieldStrengthX_MilliGauss", SENSOR_DATA_TYPE_ORIENTATION_GUID, 19);
+                probe("magneticFieldStrengthY_MilliGauss", SENSOR_DATA_TYPE_ORIENTATION_GUID, 20);
+                probe("magneticFieldStrengthZ_MilliGauss", SENSOR_DATA_TYPE_ORIENTATION_GUID, 21);
+
+                // Environmental
+                probe("temperature_Celsius", SENSOR_DATA_TYPE_ENVIRONMENTAL_GUID, 2);
+                probe("relativeHumidity_Percent", SENSOR_DATA_TYPE_ENVIRONMENTAL_GUID, 3);
+                probe("atmosphericPressure_Bar", SENSOR_DATA_TYPE_ENVIRONMENTAL_GUID, 4);
+                probe("windDirection_Degrees", SENSOR_DATA_TYPE_ENVIRONMENTAL_GUID, 5);
+                probe("windSpeed_MetersPerSec", SENSOR_DATA_TYPE_ENVIRONMENTAL_GUID, 6);
+
+                // Light
+                probe("lightLevel_Lux", SENSOR_DATA_TYPE_LIGHT_GUID, 2);
+                probe("lightTemperature_Kelvin", SENSOR_DATA_TYPE_LIGHT_GUID, 3);
+
+                // Location
+                probe("latitude_Degrees", SENSOR_DATA_TYPE_LOCATION_GUID, 2);
+                probe("longitude_Degrees", SENSOR_DATA_TYPE_LOCATION_GUID, 3);
+                probe("altitudeSeaLevel_Meters", SENSOR_DATA_TYPE_LOCATION_GUID, 4);
+                probe("speed_Knots", SENSOR_DATA_TYPE_LOCATION_GUID, 6);
+                probe("trueHeading_Degrees", SENSOR_DATA_TYPE_LOCATION_GUID, 7);
+                probe("errorRadius_Meters", SENSOR_DATA_TYPE_LOCATION_GUID, 22);
+
+                // Biometric
+                probe("humanPresence", SENSOR_DATA_TYPE_BIOMETRIC_GUID, 2);
+                probe("humanProximity_Meters", SENSOR_DATA_TYPE_BIOMETRIC_GUID, 3);
+                probe("touchState", SENSOR_DATA_TYPE_BIOMETRIC_GUID, 4);
+
+                // Electrical
+                probe("voltage_Volts", SENSOR_DATA_TYPE_ELECTRICAL_GUID, 2);
+                probe("current_Amps", SENSOR_DATA_TYPE_ELECTRICAL_GUID, 3);
+                probe("power_Watts", SENSOR_DATA_TYPE_ELECTRICAL_GUID, 7);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"found\": true, \"hasData\": true, \"sensorId\": \"{0}\", \"friendlyName\": \"{1}\", \"state\": {2}, \"stateName\": \"{3}\", \"category\": \"{4}\", \"type\": \"{5}\", \"timestamp\": \"{6}\", \"data\": {{{7}}}}}",
+                    id, EscapeJson(friendlyName ?? ""), state, EscapeJson(FormatSensorState(state)), EscapeJson(GetSensorCategoryName(cat)), EscapeJson(FormatSensorTypeName(type)), timestampStr, string.Join(", ", fields.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void SensorPropertiesCmd(string sensorIdStr, string action, uint interval) {
+            string act = (action ?? "get").Trim().ToLowerInvariant();
+            try {
+                if (string.IsNullOrEmpty(sensorIdStr)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"action\": \"{0}\", \"error\": \"Sensor ID parameter required\"}}", EscapeJson(act)));
+                    return;
+                }
+
+                Guid id;
+                try {
+                    id = new Guid(sensorIdStr);
+                } catch {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"action\": \"{0}\", \"error\": \"Invalid Sensor ID format\"}}", EscapeJson(act)));
+                    return;
+                }
+
+                ISensorManager mgr = null;
+                try {
+                    mgr = (ISensorManager)new SensorManagerClass();
+                } catch (Exception ex) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"platformActive\": false, \"found\": false, \"action\": \"{0}\", \"error\": \"{1}\"}}", EscapeJson(act), EscapeJson(ex.Message)));
+                    return;
+                }
+
+                ISensor sensor;
+                int hr = mgr.GetSensorByID(ref id, out sensor);
+                if (hr != 0 || sensor == null) {
+                    Console.WriteLine(string.Format("{{\"success\": true, \"found\": false, \"sensorId\": \"{0}\", \"action\": \"{1}\", \"message\": \"Sensor not found\"}}", id, EscapeJson(act)));
+                    return;
+                }
+
+                string friendlyName = "";
+                sensor.GetFriendlyName(out friendlyName);
+                uint state = 1;
+                sensor.GetState(out state);
+                Guid cat, type;
+                sensor.GetCategory(out cat);
+                sensor.GetType(out type);
+
+                if (act == "set") {
+                    try {
+                        IPortableDeviceValues vals = (IPortableDeviceValues)new PortableDeviceValuesClass();
+                        var keyInterval = new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 13);
+                        vals.SetUnsignedIntegerValue(ref keyInterval, interval);
+
+                        IPortableDeviceValues results;
+                        int hrSet = sensor.SetProperties(vals, out results);
+
+                        Console.WriteLine(string.Format(
+                            "{{\"success\": {0}, \"sensorId\": \"{1}\", \"friendlyName\": \"{2}\", \"action\": \"set\", \"currentReportInterval\": {3}, \"hr\": \"0x{4:X8}\"}}",
+                            hrSet == 0 ? "true" : "false", id, EscapeJson(friendlyName ?? ""), interval, hrSet
+                        ));
+                        return;
+                    } catch (Exception setEx) {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"action\": \"set\", \"error\": \"{0}\"}}", EscapeJson(setEx.Message)));
+                        return;
+                    }
+                }
+
+                object manufacturer = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 6));
+                object model = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 7));
+                object serial = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 8));
+                object desc = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 10));
+                object connType = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 11));
+                object minInterval = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 12));
+                object curInterval = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 13));
+                object devPath = GetSensorProperty(sensor, new PROPERTYKEY(SENSOR_PROPERTY_COMMON_GUID, 15));
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"found\": true, \"sensorId\": \"{0}\", \"friendlyName\": \"{1}\", \"category\": \"{2}\", \"categoryName\": \"{3}\", \"type\": \"{4}\", \"typeName\": \"{5}\", \"state\": {6}, \"stateName\": \"{7}\", \"properties\": {{\"manufacturer\": \"{8}\", \"model\": \"{9}\", \"serialNumber\": \"{10}\", \"description\": \"{11}\", \"connectionType\": {12}, \"minReportInterval\": {13}, \"currentReportInterval\": {14}, \"devicePath\": \"{15}\"}}}}",
+                    id,
+                    EscapeJson(friendlyName ?? ""),
+                    cat,
+                    EscapeJson(GetSensorCategoryName(cat)),
+                    type,
+                    EscapeJson(FormatSensorTypeName(type)),
+                    state,
+                    EscapeJson(FormatSensorState(state)),
+                    EscapeJson((manufacturer as string) ?? ""),
+                    EscapeJson((model as string) ?? ""),
+                    EscapeJson((serial as string) ?? ""),
+                    EscapeJson((desc as string) ?? ""),
+                    connType != null ? connType.ToString() : "0",
+                    minInterval != null ? minInterval.ToString() : "0",
+                    curInterval != null ? curInterval.ToString() : "0",
+                    EscapeJson((devPath as string) ?? "")
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -22007,6 +22632,20 @@ namespace GeminiSuperDesktop {
                 string profile = args.Length >= 4 ? args[3] : "";
                 string ssid = args.Length >= 5 ? args[4] : "";
                 WlanConnectionCmd(guid, act, profile, ssid);
+            } else if (cmd == "sensor_manager_info" || cmd == "sensor-manager-info" || cmd == "sensors_info") {
+                SensorManagerInfoCmd();
+            } else if (cmd == "sensor_list" || cmd == "sensor-list" || cmd == "sensors_list") {
+                string cat = args.Length >= 2 ? args[1] : "all";
+                SensorListCmd(cat);
+            } else if (cmd == "sensor_data" || cmd == "sensor-data") {
+                string sensorId = args.Length >= 2 ? args[1] : "";
+                SensorDataCmd(sensorId);
+            } else if (cmd == "sensor_properties" || cmd == "sensor-properties") {
+                string sensorId = args.Length >= 2 ? args[1] : "";
+                string act = args.Length >= 3 ? args[2] : "get";
+                uint interval = 0;
+                if (args.Length >= 4) uint.TryParse(args[3], out interval);
+                SensorPropertiesCmd(sensorId, act, interval);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
