@@ -5215,10 +5215,101 @@ async function run() {
     assert.strictEqual(abortRes.state, "Aborted");
   });
 
-  it("All 260 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 74: Windows Imaging Component (WIC) Subsystem
+  console.log("\n\x1b[1m[Suite 74: Windows Imaging Component (WIC) Subsystem]\x1b[0m");
+
+  await itAsync("getWicCodecs enumerates installed decoders and encoders with metadata", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWicCodecs({ filter: "all" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.totalCodecs === "number" && res.totalCodecs > 0);
+    assert(typeof res.decoders === "number" && res.decoders > 0);
+    assert(typeof res.encoders === "number" && res.encoders > 0);
+    assert(Array.isArray(res.codecs) && res.codecs.length > 0);
+
+    const first = res.codecs[0];
+    assert(typeof first.friendlyName === "string");
+    assert(typeof first.clsid === "string");
+    assert(typeof first.containerFormat === "string");
+    assert(typeof first.supportsLossless === "boolean");
+  });
+
+  await itAsync("inspectWicImage inspects dimensions, container format, and pixel formats", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const path = require("path");
+    const testPath = path.join(__dirname, "fixtures", "sample.png");
+
+    const res = await kb.inspectWicImage({ path: testPath });
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.containerFormat, "PNG");
+    assert(typeof res.width === "number" && res.width > 0);
+    assert(typeof res.height === "number" && res.height > 0);
+    assert(typeof res.dpiX === "number");
+    assert(typeof res.dpiY === "number");
+    assert(typeof res.pixelFormat === "string");
+  });
+
+  await itAsync("convertWicImage transcodes and rescales image format cleanly", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const path = require("path");
+    const os = require("os");
+    const fs = require("fs");
+    const testPath = path.join(__dirname, "fixtures", "sample.png");
+    const outPath = path.join(os.tmpdir(), `wic_test_${Date.now()}.jpg`);
+
+    const res = await kb.convertWicImage({
+      sourcePath: testPath,
+      destinationPath: outPath,
+      targetWidth: 50,
+      targetHeight: 50,
+      quality: 85,
+      maintainAspectRatio: true
+    });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.newWidth === "number" && res.newWidth > 0);
+    assert(typeof res.newHeight === "number" && res.newHeight > 0);
+    assert.strictEqual(res.format, "JPG");
+    assert(typeof res.outputSizeBytes === "number" && res.outputSizeBytes > 0);
+
+    try {
+      if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
+    } catch {}
+  });
+
+  await itAsync("getWicPixelStats computes channel means, luminance, and dominant color", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const path = require("path");
+    const testPath = path.join(__dirname, "fixtures", "sample.png");
+
+    const res = await kb.getWicPixelStats({
+      path: testPath,
+      sampleLimit: 10000
+    });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.width === "number" && res.width > 0);
+    assert(typeof res.height === "number" && res.height > 0);
+    assert(typeof res.perceivedLuminance === "number");
+    assert(typeof res.dominantColor === "string" && res.dominantColor.startsWith("#"));
+    assert(res.channelStats && typeof res.channelStats.red.mean === "number");
+    assert(typeof res.channelStats.green.mean === "number");
+    assert(typeof res.channelStats.blue.mean === "number");
+  });
+
+  it("All 264 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 260);
+    assert.strictEqual(SYSTEM_TOOLS.length, 264);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -5412,6 +5503,10 @@ async function run() {
     assert(toolNames.includes("super_do_jobs"));
     assert(toolNames.includes("super_do_download"));
     assert(toolNames.includes("super_do_manage_job"));
+    assert(toolNames.includes("super_wic_codecs"));
+    assert(toolNames.includes("super_wic_inspect_image"));
+    assert(toolNames.includes("super_wic_convert_image"));
+    assert(toolNames.includes("super_wic_pixel_stats"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

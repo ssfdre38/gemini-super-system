@@ -104,6 +104,7 @@
   - [86. Windows Sensor and Location Platform Subsystem](#86--windows-sensor-and-location-platform-subsystem-sensorsapih--sensorsh--sensorsapidll)
   - [87. Windows DirectX Graphics Infrastructure (DXGI) Subsystem](#87--windows-directx-graphics-infrastructure-dxgi-subsystem-dxgih--dxgi1_2h--dxgi1_3h--dxgidll)
   - [88. Windows Delivery Optimization (DO) Subsystem](#88--windows-delivery-optimization-do-subsystem-deliveryoptimizationh--deliveryoptimizationdll--dosvc)
+  - [89. Windows Imaging Component (WIC) Subsystem](#89-️-windows-imaging-component-wic-subsystem-wincodech--windowscodecsdll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1168,6 +1169,15 @@ Directly interfaces with Microsoft's cloud-assisted, peer-to-peer Windows Delive
 - **Lifecycle & Queue Control (`super_do_manage_job`)**: Manages individual jobs by GUID or URI identifier, orchestrating live execution through `IDODownload` lifecycle methods: query status (`status`), suspend download (`pause`), resume/start transfer (`resume`), abort and discard (`abort`), or finalize downloaded assets (`finalize`).
 - **260 Tools Milestone**: Reaches **260 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **73 comprehensive test suites** and **69 environment health checks**.
 - **Native MCP Tools**: `super_do_status`, `super_do_jobs`, `super_do_download`, `super_do_manage_job`.
+
+### 89. 🖼️ Windows Imaging Component (WIC) Subsystem (`wincodec.h` / `windowscodecs.dll`)
+Directly interfaces with Microsoft's extensible, high-performance bare-metal Windows Imaging Component (WIC) subsystem via COM (`CLSID {317d06e8-5f24-433d-bdf7-79ce68d8abc2}` / `IWICImagingFactory` / `IWICBitmapDecoder` / `IWICBitmapFrameDecode`):
+- **Installed Codecs & Capability Discovery (`super_wic_codecs`)**: Enumerates all registered WIC image decoders and encoders installed on the system (PNG, JPEG, GIF, BMP, TIFF, ICO, WebP, HEIF/AVIF, DDS, RAW Camera, JPEG XL). Reports component types, friendly names, author/vendor, specifications and versions, component CLSIDs, container format GUIDs, MIME types, file extensions, and format flags (multiframe, animation, chromakey, lossless compression).
+- **Deep Image Metadata Inspection (`super_wic_inspect_image`)**: Decodes and inspects any image asset supported by WIC without loading entire bitmap unmanaged arrays into memory. Extracts pixel dimensions (width x height), horizontal and vertical DPI resolutions, container formats, frame counts, exact pixel format GUIDs (e.g. `24bppBGR`, `32bppBGRA`, `64bppRGBA`), alpha transparency channel presence, and embedded color context profiles.
+- **High-Quality Image Transcoding & Scaling (`super_wic_convert_image`)**: Transcodes, rescales, and converts images across formats (PNG, JPEG, BMP, GIF, TIFF, ICO) using native high-quality bicubic interpolation. Supports configurable target bounding dimensions, automatic aspect ratio preservation, and variable JPEG compression quality (1-100).
+- **Sub-Millisecond Unmanaged Pixel Statistics (`super_wic_pixel_stats`)**: Executes high-speed unmanaged raster sampling across millions of pixels using adaptive grid strides. In sub-millisecond durations, calculates per-channel mean/min/max intensities (R, G, B, A), perceived human luminance, transparency percentages, and 12-bit color-bucket quantized dominant hex colors (`#RRGGBB`).
+- **264 Tools Milestone**: Reaches **264 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **74 comprehensive test suites** and **70 environment health checks**.
+- **Native MCP Tools**: `super_wic_codecs`, `super_wic_inspect_image`, `super_wic_convert_image`, `super_wic_pixel_stats`.
 
 ---
 

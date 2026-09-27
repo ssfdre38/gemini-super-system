@@ -20116,6 +20116,590 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 89: Windows Imaging Component Subsystem (wincodec.h / windowscodecs.dll / Wic partition)
+
+        public static readonly Guid CLSID_WICImagingFactory2 = new Guid("317d06e8-5f24-433d-bdf7-79ce68d8abc2");
+        public static readonly Guid CLSID_WICImagingFactory1 = new Guid("cacaf262-9370-4615-a13b-9f5539da4c0a");
+
+        public enum WICComponentType : uint {
+            WICDecoder = 0x00000001,
+            WICEncoder = 0x00000002,
+            WICPixelFormatConverter = 0x00000004,
+            WICMetadataReader = 0x00000008,
+            WICMetadataWriter = 0x00000010,
+            WICPixelFormat = 0x00000020,
+            WICAllComponents = 0x0000003F
+        }
+
+        public enum WICDecodeOptions : uint {
+            WICDecodeMetadataCacheOnDemand = 0x00000000,
+            WICDecodeMetadataCacheOnLoad = 0x00000001
+        }
+
+        [ComImport]
+        [Guid("00000100-0000-0000-C000-000000000046")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IEnumUnknown_WIC {
+            [PreserveSig]
+            int Next(uint celt, [Out, MarshalAs(UnmanagedType.IUnknown)] out object rgelt, out uint pceltFetched);
+            [PreserveSig]
+            int Skip(uint celt);
+            [PreserveSig]
+            int Reset();
+            [PreserveSig]
+            int Clone(out IEnumUnknown_WIC ppenum);
+        }
+
+        [ComImport]
+        [Guid("23BC3F0A-698B-4357-886B-F24D50671334")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IWICComponentInfo_COM {
+            [PreserveSig] int GetComponentType(out uint pType);
+            [PreserveSig] int GetCLSID(out Guid pclsid);
+            [PreserveSig] int GetSigningStatus(out uint pStatus);
+            [PreserveSig] int GetAuthor(uint cchAuthor, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzAuthor, out uint pcchActual);
+            [PreserveSig] int GetVendorGUID(out Guid pguidVendor);
+            [PreserveSig] int GetVersion(uint cchVersion, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzVersion, out uint pcchActual);
+            [PreserveSig] int GetSpecVersion(uint cchSpecVersion, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzSpecVersion, out uint pcchActual);
+            [PreserveSig] int GetFriendlyName(uint cchFriendlyName, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzFriendlyName, out uint pcchActual);
+        }
+
+        [ComImport]
+        [Guid("E87A44C4-B76E-4c47-8B09-298EB12A2714")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IWICBitmapCodecInfo_COM : IWICComponentInfo_COM {
+            [PreserveSig] new int GetComponentType(out uint pType);
+            [PreserveSig] new int GetCLSID(out Guid pclsid);
+            [PreserveSig] new int GetSigningStatus(out uint pStatus);
+            [PreserveSig] new int GetAuthor(uint cchAuthor, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzAuthor, out uint pcchActual);
+            [PreserveSig] new int GetVendorGUID(out Guid pguidVendor);
+            [PreserveSig] new int GetVersion(uint cchVersion, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzVersion, out uint pcchActual);
+            [PreserveSig] new int GetSpecVersion(uint cchSpecVersion, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzSpecVersion, out uint pcchActual);
+            [PreserveSig] new int GetFriendlyName(uint cchFriendlyName, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzFriendlyName, out uint pcchActual);
+            [PreserveSig] int GetContainerFormat(out Guid pguidContainerFormat);
+            [PreserveSig] int GetPixelFormats(uint cFormats, [In, Out, MarshalAs(UnmanagedType.LPArray)] Guid[] pguidPixelFormats, out uint pcActual);
+            [PreserveSig] int GetColorManagementVersion(uint cchColorManagementVersion, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzColorManagementVersion, out uint pcchActual);
+            [PreserveSig] int GetDeviceManufacturer(uint cchDeviceManufacturer, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzDeviceManufacturer, out uint pcchActual);
+            [PreserveSig] int GetDeviceModels(uint cchDeviceModels, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzDeviceModels, out uint pcchActual);
+            [PreserveSig] int GetMimeTypes(uint cchMimeTypes, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzMimeTypes, out uint pcchActual);
+            [PreserveSig] int GetFileExtensions(uint cchFileExtensions, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder wzFileExtensions, out uint pcchActual);
+            [PreserveSig] int DoesSupportAnimation(out bool pfSupportAnimation);
+            [PreserveSig] int DoesSupportChromakey(out bool pfSupportChromakey);
+            [PreserveSig] int DoesSupportLossless(out bool pfSupportLossless);
+            [PreserveSig] int DoesSupportMultiframe(out bool pfSupportMultiframe);
+            [PreserveSig] int MatchesMimeType([MarshalAs(UnmanagedType.LPWStr)] string wzMimeType, out bool pfMatches);
+        }
+
+        [ComImport]
+        [Guid("00000120-a8f2-4877-ba0a-fd2b6645fb94")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IWICBitmapSource_COM {
+            [PreserveSig] int GetSize(out uint puiWidth, out uint puiHeight);
+            [PreserveSig] int GetPixelFormat(out Guid pPixelFormat);
+            [PreserveSig] int GetResolution(out double pDpiX, out double pDpiY);
+            [PreserveSig] int CopyPalette(IntPtr pIPalette);
+            [PreserveSig] int CopyPixels(IntPtr prc, uint cbStride, uint cbBufferSize, IntPtr pbBuffer);
+        }
+
+        [ComImport]
+        [Guid("3B16811B-6A43-4ec9-A813-3D930C13B940")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IWICBitmapFrameDecode_COM : IWICBitmapSource_COM {
+            [PreserveSig] new int GetSize(out uint puiWidth, out uint puiHeight);
+            [PreserveSig] new int GetPixelFormat(out Guid pPixelFormat);
+            [PreserveSig] new int GetResolution(out double pDpiX, out double pDpiY);
+            [PreserveSig] new int CopyPalette(IntPtr pIPalette);
+            [PreserveSig] new int CopyPixels(IntPtr prc, uint cbStride, uint cbBufferSize, IntPtr pbBuffer);
+            [PreserveSig] int GetMetadataQueryReader(out IntPtr ppIMetadataQueryReader);
+            [PreserveSig] int GetColorContexts(uint cCount, IntPtr[] ppIColorContexts, out uint pcActualCount);
+            [PreserveSig] int GetThumbnail(out IWICBitmapSource_COM ppIThumbnail);
+        }
+
+        [ComImport]
+        [Guid("9EDDE9E7-8DEE-47ea-99DF-E6FAF2ED44BF")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IWICBitmapDecoder_COM {
+            [PreserveSig] int QueryCapability(IntPtr pIStream, out uint pdwCapability);
+            [PreserveSig] int Initialize(IntPtr pIStream, WICDecodeOptions cacheOptions);
+            [PreserveSig] int GetContainerFormat(out Guid pguidContainerFormat);
+            [PreserveSig] int GetDecoderInfo(out IWICBitmapCodecInfo_COM ppIDecoderInfo);
+            [PreserveSig] int CopyPalette(IntPtr pIPalette);
+            [PreserveSig] int GetMetadataQueryReader(out IntPtr ppIMetadataQueryReader);
+            [PreserveSig] int GetPreview(out IWICBitmapSource_COM ppIPreview);
+            [PreserveSig] int GetColorContexts(uint cCount, IntPtr[] ppIColorContexts, out uint pcActualCount);
+            [PreserveSig] int GetThumbnail(out IWICBitmapSource_COM ppIThumbnail);
+            [PreserveSig] int GetFrameCount(out uint pCount);
+            [PreserveSig] int GetFrame(uint index, out IWICBitmapFrameDecode_COM ppIBitmapFrame);
+        }
+
+        [ComImport]
+        [Guid("ec5ec8a9-c395-4314-9c77-54d7a935ff70")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IWICImagingFactory_COM {
+            [PreserveSig] int CreateDecoderFromFilename(
+                [MarshalAs(UnmanagedType.LPWStr)] string wzFilename,
+                IntPtr pguidVendor,
+                uint dwDesiredAccess,
+                WICDecodeOptions metadataOptions,
+                out IWICBitmapDecoder_COM ppIDecoder);
+            [PreserveSig] int CreateDecoderFromStream(IntPtr pIStream, IntPtr pguidVendor, WICDecodeOptions metadataOptions, out IWICBitmapDecoder_COM ppIDecoder);
+            [PreserveSig] int CreateDecoderFromFileHandle(UIntPtr hFile, IntPtr pguidVendor, WICDecodeOptions metadataOptions, out IWICBitmapDecoder_COM ppIDecoder);
+            [PreserveSig] int CreateComponentInfo(ref Guid clsidComponent, out IWICComponentInfo_COM ppIInfo);
+            [PreserveSig] int CreateDecoder(ref Guid guidContainerFormat, IntPtr pguidVendor, out IWICBitmapDecoder_COM ppIDecoder);
+            [PreserveSig] int CreateEncoder(ref Guid guidContainerFormat, IntPtr pguidVendor, out IntPtr ppIEncoder);
+            [PreserveSig] int CreatePalette(out IntPtr ppIPalette);
+            [PreserveSig] int CreateFormatConverter(out IntPtr ppIFormatConverter);
+            [PreserveSig] int CreateBitmapScaler(out IntPtr ppIBitmapScaler);
+            [PreserveSig] int CreateBitmapClipper(out IntPtr ppIBitmapClipper);
+            [PreserveSig] int CreateBitmapFlipRotator(out IntPtr ppIBitmapFlipRotator);
+            [PreserveSig] int CreateStream(out IntPtr ppIWICStream);
+            [PreserveSig] int CreateColorContext(out IntPtr ppIColorContext);
+            [PreserveSig] int CreateColorTransformer(out IntPtr ppIColorTransformer);
+            [PreserveSig] int CreateBitmap(uint uiWidth, uint uiHeight, ref Guid pixelFormat, uint option, out IntPtr ppIBitmap);
+            [PreserveSig] int CreateBitmapFromSource(IWICBitmapSource_COM pIBitmapSource, uint option, out IntPtr ppIBitmap);
+            [PreserveSig] int CreateBitmapFromSourceRect(IWICBitmapSource_COM pIBitmapSource, uint x, uint y, uint width, uint height, out IntPtr ppIBitmap);
+            [PreserveSig] int CreateBitmapFromMemory(uint uiWidth, uint uiHeight, ref Guid pixelFormat, uint cbStride, uint cbBufferSize, IntPtr pbBuffer, out IntPtr ppIBitmap);
+            [PreserveSig] int CreateBitmapFromHBITMAP(IntPtr hBitmap, IntPtr hPalette, uint options, out IntPtr ppIBitmap);
+            [PreserveSig] int CreateBitmapFromHICON(IntPtr hIcon, out IntPtr ppIBitmap);
+            [PreserveSig] int CreateComponentEnumerator(uint componentTypes, uint options, out IEnumUnknown_WIC ppIEnumUnknown);
+            [PreserveSig] int CreateFastMetadataEncoderFromDecoder(IWICBitmapDecoder_COM pIDecoder, out IntPtr ppIFastEncoder);
+            [PreserveSig] int CreateFastMetadataEncoderFromFrameDecode(IWICBitmapFrameDecode_COM pIFrameDecoder, out IntPtr ppIFastEncoder);
+            [PreserveSig] int CreateQueryWriter(ref Guid guidMetadataFormat, IntPtr pguidVendor, out IntPtr ppIQueryWriter);
+            [PreserveSig] int CreateQueryWriterFromReader(IntPtr pIQueryReader, IntPtr pguidVendor, out IntPtr ppIQueryWriter);
+        }
+
+        static IWICImagingFactory_COM GetWicImagingFactory() {
+            Type factoryType = Type.GetTypeFromCLSID(CLSID_WICImagingFactory2);
+            if (factoryType == null) {
+                factoryType = Type.GetTypeFromCLSID(CLSID_WICImagingFactory1);
+            }
+            if (factoryType == null) {
+                throw new InvalidOperationException("WIC Imaging Factory COM class not registered.");
+            }
+            return (IWICImagingFactory_COM)Activator.CreateInstance(factoryType);
+        }
+
+        static string GetWicFormatName(Guid guid) {
+            string g = guid.ToString().ToLowerInvariant();
+            if (g == "1b7cfaf4-713f-473c-bbcd-6137425faeaf") return "PNG";
+            if (g == "19e44a4b-138c-4247-a4c6-fa611f0c0132") return "JPEG";
+            if (g == "1f814fd1-a482-4bf0-a106-977da38b2883") return "GIF";
+            if (g == "0af3e2bf-ad42-43ae-b5db-cf204ec8ba6b") return "BMP";
+            if (g == "163bcc30-e2e9-4f0b-961d-a3e9fdb788a3") return "TIFF";
+            if (g == "a3a860c4-338f-4c17-919a-fba4c56a6ced") return "ICO";
+            if (g == "e094b0e2-672a-45aa-96da-01ea19414ff7") return "WebP";
+            if (g == "e1e62e4a-aa03-47af-b05b-b4b359d799e5") return "HEIF/AVIF";
+            if (g == "a705def5-a461-4462-876a-77373f9b85c3") return "WMPhoto/JXR";
+            if (g == "99670726-f180-4114-b44e-cfaf0f7bc088") return "DDS";
+            if (g == "fe99c86a-45aa-472a-a007-0274be9e029e") return "Camera RAW";
+            return "GUID:" + guid.ToString();
+        }
+
+        static string GetWicPixelFormatName(Guid guid) {
+            string g = guid.ToString().ToLowerInvariant();
+            if (g == "6fddc324-4e03-4bfe-b185-3d77768dc90c" || g == "6fddc324-4e03-4b34-b1e1-2f08709143c6") return "24bppBGR";
+            if (g == "6fddc324-4e03-4bfe-b185-3d77768dc90d" || g == "6fddc324-4e03-4b34-b1e1-2f08709143c7") return "24bppRGB";
+            if (g == "6fddc324-4e03-4bfe-b185-3d77768dc90e" || g == "6fddc324-4e03-4b34-b1e1-2f08709143c8") return "32bppBGR";
+            if (g == "6fddc324-4e03-4bfe-b185-3d77768dc90f" || g == "6fddc324-4e03-4b34-b1e1-2f08709143c9") return "32bppBGRA";
+            if (g == "6fddc324-4e03-4bfe-b185-3d77768dc910" || g == "6fddc324-4e03-4b34-b1e1-2f08709143ca") return "32bppPBGRA";
+            if (g == "f5c7ad2d-6a8d-43dd-a7a8-a29935261ae9" || g == "6fddc324-4e03-4b34-b1e1-2f08709143d2") return "32bppRGBA";
+            if (g == "3cc4a650-a527-4d37-a916-3142c7ebeded" || g == "6fddc324-4e03-4b34-b1e1-2f08709143d3") return "32bppPRGBA";
+            if (g == "6fddc324-4e03-4bfe-b185-3d77768dc908" || g == "6fddc324-4e03-4b34-b1e1-2f087091430b") return "8bppGray";
+            if (g == "6fddc324-4e03-4bfe-b185-3d77768dc925" || g == "6fddc324-4e03-4b34-b1e1-2f0870914308") return "8bppIndexed";
+            if (g == "6fddc324-4e03-4bfe-b185-3d77768dc915" || g == "6fddc324-4e03-4b34-b1e1-2f0870914316") return "16bppBGR555";
+            if (g == "6fddc324-4e03-4bfe-b185-3d77768dc916" || g == "6fddc324-4e03-4b34-b1e1-2f0870914317") return "16bppBGR565";
+            if (g == "e605a384-e460-469a-8a21-35c330f15fa1" || g == "6fddc324-4e03-4b34-b1e1-2f0870914319") return "48bppRGB";
+            if (g == "6fddc324-4e03-4b34-b1e1-2f087091431b") return "64bppRGBA";
+            return "GUID:" + guid.ToString();
+        }
+
+        public static void WicCodecsCmd(string filterType) {
+            try {
+                var factory = GetWicImagingFactory();
+                uint flags = 0;
+                string f = (filterType ?? "all").ToLowerInvariant();
+                if (f == "decoder" || f == "decoders") flags = (uint)WICComponentType.WICDecoder;
+                else if (f == "encoder" || f == "encoders") flags = (uint)WICComponentType.WICEncoder;
+                else flags = (uint)(WICComponentType.WICDecoder | WICComponentType.WICEncoder);
+
+                IEnumUnknown_WIC pEnum;
+                int hr = factory.CreateComponentEnumerator(flags, 0, out pEnum);
+                if (hr != 0 || pEnum == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"CreateComponentEnumerator failed with hr 0x{0:X8}\"}}", hr));
+                    return;
+                }
+
+                var list = new List<string>();
+                int decoderCount = 0;
+                int encoderCount = 0;
+
+                object obj;
+                uint fetched;
+                while (pEnum.Next(1, out obj, out fetched) == 0 && fetched > 0) {
+                    var codecInfo = obj as IWICBitmapCodecInfo_COM;
+                    if (codecInfo != null) {
+                        try {
+                            uint compType;
+                            codecInfo.GetComponentType(out compType);
+                            bool isDecoder = (compType & (uint)WICComponentType.WICDecoder) != 0;
+                            if (isDecoder) decoderCount++; else encoderCount++;
+
+                            Guid clsid;
+                            codecInfo.GetCLSID(out clsid);
+
+                            var sbName = new StringBuilder(256);
+                            uint actual;
+                            codecInfo.GetFriendlyName((uint)sbName.Capacity, sbName, out actual);
+
+                            var sbAuthor = new StringBuilder(256);
+                            codecInfo.GetAuthor((uint)sbAuthor.Capacity, sbAuthor, out actual);
+
+                            var sbVer = new StringBuilder(128);
+                            codecInfo.GetVersion((uint)sbVer.Capacity, sbVer, out actual);
+
+                            var sbMimes = new StringBuilder(512);
+                            codecInfo.GetMimeTypes((uint)sbMimes.Capacity, sbMimes, out actual);
+
+                            var sbExts = new StringBuilder(512);
+                            codecInfo.GetFileExtensions((uint)sbExts.Capacity, sbExts, out actual);
+
+                            Guid containerGuid;
+                            codecInfo.GetContainerFormat(out containerGuid);
+
+                            bool anim = false, chroma = false, lossless = false, multi = false;
+                            codecInfo.DoesSupportAnimation(out anim);
+                            codecInfo.DoesSupportChromakey(out chroma);
+                            codecInfo.DoesSupportLossless(out lossless);
+                            codecInfo.DoesSupportMultiframe(out multi);
+
+                            list.Add(string.Format(
+                                "{{\"type\": \"{0}\", \"friendlyName\": \"{1}\", \"author\": \"{2}\", \"version\": \"{3}\", \"clsid\": \"{4}\", \"containerFormat\": \"{5}\", \"containerGuid\": \"{6}\", \"mimeTypes\": \"{7}\", \"fileExtensions\": \"{8}\", \"supportsAnimation\": {9}, \"supportsChromakey\": {10}, \"supportsLossless\": {11}, \"supportsMultiframe\": {12}}}",
+                                isDecoder ? "decoder" : "encoder",
+                                EscapeJson(sbName.ToString()),
+                                EscapeJson(sbAuthor.ToString()),
+                                EscapeJson(sbVer.ToString()),
+                                clsid.ToString(),
+                                GetWicFormatName(containerGuid),
+                                containerGuid.ToString(),
+                                EscapeJson(sbMimes.ToString()),
+                                EscapeJson(sbExts.ToString()),
+                                anim ? "true" : "false",
+                                chroma ? "true" : "false",
+                                lossless ? "true" : "false",
+                                multi ? "true" : "false"
+                            ));
+                        } finally {
+                            Marshal.ReleaseComObject(codecInfo);
+                        }
+                    } else {
+                        Marshal.ReleaseComObject(obj);
+                    }
+                }
+                Marshal.ReleaseComObject(pEnum);
+                Marshal.ReleaseComObject(factory);
+
+                Console.WriteLine(string.Format(
+                    "{{\"success\": true, \"filter\": \"{0}\", \"totalCodecs\": {1}, \"decoders\": {2}, \"encoders\": {3}, \"codecs\": [{4}]}}",
+                    EscapeJson(f), list.Count, decoderCount, encoderCount, string.Join(",", list.ToArray())
+                ));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        public static void WicInspectImageCmd(string imagePath) {
+            try {
+                if (string.IsNullOrEmpty(imagePath) || !File.Exists(imagePath)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Image file not found\"}");
+                    return;
+                }
+                var fi = new FileInfo(imagePath);
+                var factory = GetWicImagingFactory();
+                IWICBitmapDecoder_COM decoder;
+                int hr = factory.CreateDecoderFromFilename(imagePath, IntPtr.Zero, 0x80000000 /* GENERIC_READ */, WICDecodeOptions.WICDecodeMetadataCacheOnDemand, out decoder);
+                if (hr != 0 || decoder == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"CreateDecoderFromFilename failed with hr 0x{0:X8}\"}}", hr));
+                    return;
+                }
+
+                try {
+                    uint frameCount;
+                    decoder.GetFrameCount(out frameCount);
+
+                    Guid containerGuid;
+                    decoder.GetContainerFormat(out containerGuid);
+                    string containerFormat = GetWicFormatName(containerGuid);
+
+                    uint width = 0, height = 0;
+                    double dpiX = 96.0, dpiY = 96.0;
+                    Guid pixelFormatGuid = Guid.Empty;
+                    uint colorContextsCount = 0;
+                    bool hasAlpha = false;
+
+                    if (frameCount > 0) {
+                        IWICBitmapFrameDecode_COM frame;
+                        if (decoder.GetFrame(0, out frame) == 0 && frame != null) {
+                            try {
+                                frame.GetSize(out width, out height);
+                                frame.GetResolution(out dpiX, out dpiY);
+                                frame.GetPixelFormat(out pixelFormatGuid);
+                                frame.GetColorContexts(0, null, out colorContextsCount);
+
+                                string pfName = GetWicPixelFormatName(pixelFormatGuid).ToLowerInvariant();
+                                if (pfName.Contains("alpha") || pfName.Contains("rgba") || pfName.Contains("bgra") || pfName.Contains("prgba")) {
+                                    hasAlpha = true;
+                                }
+                            } finally {
+                                Marshal.ReleaseComObject(frame);
+                            }
+                        }
+                    }
+
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"path\": \"{0}\", \"fileSizeBytes\": {1}, \"containerFormat\": \"{2}\", \"containerGuid\": \"{3}\", \"frameCount\": {4}, \"width\": {5}, \"height\": {6}, \"dpiX\": {7:F1}, \"dpiY\": {8:F1}, \"pixelFormat\": \"{9}\", \"pixelFormatGuid\": \"{10}\", \"hasAlpha\": {11}, \"colorContextsCount\": {12}}}",
+                        EscapeJson(imagePath),
+                        fi.Length,
+                        EscapeJson(containerFormat),
+                        containerGuid.ToString(),
+                        frameCount,
+                        width,
+                        height,
+                        dpiX,
+                        dpiY,
+                        EscapeJson(GetWicPixelFormatName(pixelFormatGuid)),
+                        pixelFormatGuid.ToString(),
+                        hasAlpha ? "true" : "false",
+                        colorContextsCount
+                    ));
+                } finally {
+                    Marshal.ReleaseComObject(decoder);
+                    Marshal.ReleaseComObject(factory);
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        public static void WicConvertImageCmd(string sourcePath, string destPath, int targetWidth, int targetHeight, int quality, bool maintainAspect) {
+            try {
+                if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Source image not found\"}");
+                    return;
+                }
+                if (string.IsNullOrEmpty(destPath)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Destination path must be specified\"}");
+                    return;
+                }
+
+                if (quality <= 0 || quality > 100) quality = 90;
+
+                string destDir = Path.GetDirectoryName(destPath);
+                if (!string.IsNullOrEmpty(destDir) && !Directory.Exists(destDir)) {
+                    Directory.CreateDirectory(destDir);
+                }
+
+                using (Image src = Image.FromFile(sourcePath)) {
+                    int origW = src.Width;
+                    int origH = src.Height;
+                    int newW = targetWidth > 0 ? targetWidth : origW;
+                    int newH = targetHeight > 0 ? targetHeight : origH;
+
+                    if (maintainAspect && targetWidth > 0 && targetHeight > 0) {
+                        double ratioX = (double)targetWidth / origW;
+                        double ratioY = (double)targetHeight / origH;
+                        double ratio = Math.Min(ratioX, ratioY);
+                        newW = (int)Math.Round(origW * ratio);
+                        newH = (int)Math.Round(origH * ratio);
+                    } else if (maintainAspect && targetWidth > 0 && targetHeight <= 0) {
+                        double ratio = (double)targetWidth / origW;
+                        newH = (int)Math.Round(origH * ratio);
+                    } else if (maintainAspect && targetHeight > 0 && targetWidth <= 0) {
+                        double ratio = (double)targetHeight / origH;
+                        newW = (int)Math.Round(origW * ratio);
+                    }
+
+                    if (newW <= 0) newW = 1;
+                    if (newH <= 0) newH = 1;
+
+                    using (Bitmap destBmp = new Bitmap(newW, newH, PixelFormat.Format32bppArgb)) {
+                        destBmp.SetResolution(src.HorizontalResolution, src.VerticalResolution);
+                        using (Graphics g = Graphics.FromImage(destBmp)) {
+                            g.CompositingMode = System.Drawing.Drawing2D.CompositingMode.SourceOver;
+                            g.CompositingQuality = System.Drawing.Drawing2D.CompositingQuality.HighQuality;
+                            g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                            g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.HighQuality;
+                            g.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+
+                            g.Clear(Color.Transparent);
+                            g.DrawImage(src, new Rectangle(0, 0, newW, newH), 0, 0, origW, origH, GraphicsUnit.Pixel);
+                        }
+
+                        string ext = Path.GetExtension(destPath).ToLowerInvariant();
+                        ImageFormat outFmt = ImageFormat.Png;
+                        ImageCodecInfo encoderInfo = null;
+
+                        if (ext == ".jpg" || ext == ".jpeg") {
+                            outFmt = ImageFormat.Jpeg;
+                            foreach (var enc in ImageCodecInfo.GetImageEncoders()) {
+                                if (enc.FormatID == ImageFormat.Jpeg.Guid) {
+                                    encoderInfo = enc;
+                                    break;
+                                }
+                            }
+                        } else if (ext == ".bmp") {
+                            outFmt = ImageFormat.Bmp;
+                        } else if (ext == ".gif") {
+                            outFmt = ImageFormat.Gif;
+                        } else if (ext == ".tiff" || ext == ".tif") {
+                            outFmt = ImageFormat.Tiff;
+                        } else if (ext == ".ico") {
+                            outFmt = ImageFormat.Icon;
+                        }
+
+                        if (encoderInfo != null) {
+                            using (var encParams = new EncoderParameters(1)) {
+                                encParams.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)quality);
+                                destBmp.Save(destPath, encoderInfo, encParams);
+                            }
+                        } else {
+                            destBmp.Save(destPath, outFmt);
+                        }
+                    }
+
+                    var fi = new FileInfo(destPath);
+                    Console.WriteLine(string.Format(
+                        "{{\"success\": true, \"sourcePath\": \"{0}\", \"destinationPath\": \"{1}\", \"originalWidth\": {2}, \"originalHeight\": {3}, \"newWidth\": {4}, \"newHeight\": {5}, \"format\": \"{6}\", \"outputSizeBytes\": {7}}}",
+                        EscapeJson(sourcePath),
+                        EscapeJson(destPath),
+                        origW,
+                        origH,
+                        newW,
+                        newH,
+                        EscapeJson(Path.GetExtension(destPath).TrimStart('.').ToUpperInvariant()),
+                        fi.Length
+                    ));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        public static void WicPixelStatsCmd(string imagePath, int maxSamples) {
+            try {
+                if (string.IsNullOrEmpty(imagePath) || !File.Exists(imagePath)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Image file not found\"}");
+                    return;
+                }
+                if (maxSamples <= 0) maxSamples = 40000;
+
+                var sw = Stopwatch.StartNew();
+                using (Bitmap bmp = new Bitmap(imagePath)) {
+                    int w = bmp.Width;
+                    int h = bmp.Height;
+                    int totalPixels = w * h;
+
+                    BitmapData bd = bmp.LockBits(new Rectangle(0, 0, w, h), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+                    try {
+                        int step = 1;
+                        if (totalPixels > maxSamples) {
+                            step = (int)Math.Max(1, Math.Sqrt((double)totalPixels / maxSamples));
+                        }
+
+                        long sumR = 0, sumG = 0, sumB = 0, sumA = 0;
+                        int minR = 255, maxR = 0;
+                        int minG = 255, maxG = 0;
+                        int minB = 255, maxB = 0;
+                        int minA = 255, maxA = 0;
+                        int transparentCount = 0;
+                        int samplesTaken = 0;
+
+                        var colorBins = new Dictionary<int, int>();
+
+                        byte[] pixels = new byte[Math.Abs(bd.Stride) * h];
+                        Marshal.Copy(bd.Scan0, pixels, 0, pixels.Length);
+                        int stride = bd.Stride;
+
+                        for (int y = 0; y < h; y += step) {
+                            int rowOffset = y * stride;
+                            for (int x = 0; x < w; x += step) {
+                                int idx = rowOffset + (x * 4);
+                                if (idx + 3 >= pixels.Length) continue;
+
+                                byte b = pixels[idx];
+                                byte g = pixels[idx + 1];
+                                byte r = pixels[idx + 2];
+                                byte a = pixels[idx + 3];
+
+                                sumB += b;
+                                sumG += g;
+                                sumR += r;
+                                sumA += a;
+
+                                if (r < minR) minR = r; if (r > maxR) maxR = r;
+                                if (g < minG) minG = g; if (g > maxG) maxG = g;
+                                if (b < minB) minB = b; if (b > maxB) maxB = b;
+                                if (a < minA) minA = a; if (a > maxA) maxA = a;
+
+                                if (a < 255) transparentCount++;
+
+                                if (a > 64) {
+                                    int qr = r >> 4;
+                                    int qg = g >> 4;
+                                    int qb = b >> 4;
+                                    int binKey = (qr << 8) | (qg << 4) | qb;
+                                    int binCount = 0;
+                                    colorBins.TryGetValue(binKey, out binCount);
+                                    colorBins[binKey] = binCount + 1;
+                                }
+
+                                samplesTaken++;
+                            }
+                        }
+
+                        sw.Stop();
+
+                        double avgR = samplesTaken > 0 ? Math.Round((double)sumR / samplesTaken, 2) : 0;
+                        double avgG = samplesTaken > 0 ? Math.Round((double)sumG / samplesTaken, 2) : 0;
+                        double avgB = samplesTaken > 0 ? Math.Round((double)sumB / samplesTaken, 2) : 0;
+                        double avgA = samplesTaken > 0 ? Math.Round((double)sumA / samplesTaken, 2) : 0;
+                        double perceivedLuminance = Math.Round(0.299 * avgR + 0.587 * avgG + 0.114 * avgB, 2);
+                        double transparencyPct = samplesTaken > 0 ? Math.Round((double)transparentCount * 100.0 / samplesTaken, 2) : 0;
+
+                        int dominantKey = 0;
+                        int dominantMax = -1;
+                        foreach (var kvp in colorBins) {
+                            if (kvp.Value > dominantMax) {
+                                dominantMax = kvp.Value;
+                                dominantKey = kvp.Key;
+                            }
+                        }
+
+                        int domR = ((dominantKey >> 8) & 0xF) * 17;
+                        int domG = ((dominantKey >> 4) & 0xF) * 17;
+                        int domB = (dominantKey & 0xF) * 17;
+                        string dominantHex = string.Format("#{0:X2}{1:X2}{2:X2}", domR, domG, domB);
+
+                        Console.WriteLine(string.Format(
+                            "{{\"success\": true, \"path\": \"{0}\", \"width\": {1}, \"height\": {2}, \"totalPixels\": {3}, \"samplesTaken\": {4}, \"samplingStep\": {5}, \"samplingElapsedMs\": {6}, \"perceivedLuminance\": {7}, \"transparencyPercent\": {8}, \"dominantColor\": \"{9}\", \"channelStats\": {{\"red\": {{\"mean\": {10}, \"min\": {11}, \"max\": {12}}}, \"green\": {{\"mean\": {13}, \"min\": {14}, \"max\": {15}}}, \"blue\": {{\"mean\": {16}, \"min\": {17}, \"max\": {18}}}, \"alpha\": {{\"mean\": {19}, \"min\": {20}, \"max\": {21}}}}}}}",
+                            EscapeJson(imagePath),
+                            w, h, totalPixels, samplesTaken, step, sw.ElapsedMilliseconds,
+                            perceivedLuminance, transparencyPct, dominantHex,
+                            avgR, minR, maxR,
+                            avgG, minG, maxG,
+                            avgB, minB, maxB,
+                            avgA, minA, maxA
+                        ));
+                    } finally {
+                        bmp.UnlockBits(bd);
+                    }
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -23635,6 +24219,27 @@ namespace GeminiSuperDesktop {
                 string jobId = args.Length >= 2 ? args[1] : "";
                 string action = args.Length >= 3 ? args[2] : "status";
                 DoManageJobCmd(jobId, action);
+            } else if (cmd == "wic_codecs" || cmd == "wic-codecs") {
+                string filter = args.Length >= 2 ? args[1] : "all";
+                WicCodecsCmd(filter);
+            } else if (cmd == "wic_inspect_image" || cmd == "wic-inspect-image" || cmd == "wic_inspect" || cmd == "wic-inspect") {
+                string imgPath = args.Length >= 2 ? args[1] : "";
+                WicInspectImageCmd(imgPath);
+            } else if (cmd == "wic_convert_image" || cmd == "wic-convert-image" || cmd == "wic_convert" || cmd == "wic-convert") {
+                string src = args.Length >= 2 ? args[1] : "";
+                string dst = args.Length >= 3 ? args[2] : "";
+                int w = 0, h = 0, q = 90;
+                bool maintain = true;
+                if (args.Length >= 4) int.TryParse(args[3], out w);
+                if (args.Length >= 5) int.TryParse(args[4], out h);
+                if (args.Length >= 6) int.TryParse(args[5], out q);
+                if (args.Length >= 7) bool.TryParse(args[6], out maintain);
+                WicConvertImageCmd(src, dst, w, h, q, maintain);
+            } else if (cmd == "wic_pixel_stats" || cmd == "wic-pixel-stats" || cmd == "wic_stats" || cmd == "wic-stats") {
+                string imgPath = args.Length >= 2 ? args[1] : "";
+                int maxSamples = 40000;
+                if (args.Length >= 3) int.TryParse(args[2], out maxSamples);
+                WicPixelStatsCmd(imgPath, maxSamples);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

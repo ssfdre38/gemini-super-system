@@ -4896,6 +4896,92 @@ const SYSTEM_TOOLS = [
           },
           required: ["jobId"]
         }
+      },
+      {
+        name: "super_wic_codecs",
+        description: "Enumerates installed Windows Imaging Component (WIC) image codecs, decoders, and encoders (PNG, JPEG, TIFF, GIF, BMP, WebP, HEIF/AVIF, DDS, RAW, JPEG XL) with format capabilities, metadata support, and container GUIDs.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              enum: ["all", "decoder", "encoder"],
+              default: "all",
+              description: "Filter codec enumeration by component type: 'all' (default), 'decoder', or 'encoder'."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wic_inspect_image",
+        description: "Inspects metadata, dimensions, DPI resolution, container format, alpha channel presence, and pixel formats of any image using native Windows Imaging Component (WIC).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Absolute path to the image file to inspect."
+            }
+          },
+          required: ["path"]
+        }
+      },
+      {
+        name: "super_wic_convert_image",
+        description: "Converts, rescales, and transcodes images across formats (PNG, JPEG, BMP, GIF, TIFF, ICO) using native Windows Imaging Component (WIC) high-quality bicubic interpolation and configurable compression.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            sourcePath: {
+              type: "string",
+              description: "Absolute path of the source image file."
+            },
+            destinationPath: {
+              type: "string",
+              description: "Absolute path for the converted output image file."
+            },
+            targetWidth: {
+              type: "number",
+              default: 0,
+              description: "Target width in pixels (0 to retain original width or scale proportionally)."
+            },
+            targetHeight: {
+              type: "number",
+              default: 0,
+              description: "Target height in pixels (0 to retain original height or scale proportionally)."
+            },
+            quality: {
+              type: "number",
+              default: 90,
+              description: "JPEG compression quality level from 1 to 100 (default: 90)."
+            },
+            maintainAspectRatio: {
+              type: "boolean",
+              default: true,
+              description: "Whether to maintain aspect ratio when resizing (default: true)."
+            }
+          },
+          required: ["sourcePath", "destinationPath"]
+        }
+      },
+      {
+        name: "super_wic_pixel_stats",
+        description: "Calculates high-speed pixel statistics, mean RGB color channels, min/max intensities, perceived luminance, transparency percentage, and dominant hex color via native unmanaged WIC raster sampling.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Absolute path of the image to analyze."
+            },
+            sampleLimit: {
+              type: "number",
+              default: 40000,
+              description: "Maximum number of pixels to sample using adaptive grid spacing (default: 40000)."
+            }
+          },
+          required: ["path"]
+        }
       }
 ];
 
@@ -8613,6 +8699,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚙️ [Delivery Optimization Job Management]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wic_codecs") {
+    const res = await orch.getWicCodecs(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🖼️ [WIC Installed Codecs]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wic_inspect_image") {
+    const res = await orch.inspectWicImage(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔍 [WIC Image Inspection]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wic_convert_image") {
+    const res = await orch.convertWicImage(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔄 [WIC Image Conversion]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wic_pixel_stats") {
+    const res = await orch.getWicPixelStats(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📊 [WIC Pixel Statistics]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
