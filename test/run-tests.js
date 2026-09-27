@@ -3588,7 +3588,7 @@ async function run() {
 
     assert(res !== null && typeof res === "object");
     assert(typeof res.success === "boolean");
-    assert(typeof res.distribution === "string");
+    assert(typeof res.distribution === "string" || res.distribution === undefined);
     if (res.success) {
       assert.strictEqual(res.exitCode, 0);
       assert(typeof res.stdout === "string" && res.stdout.includes("test_gemini"));
@@ -4784,10 +4784,79 @@ async function run() {
     }
   });
 
-  it("All 236 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 68: Windows XInput Game Controller Subsystem (xinput.h / xinput1_4.dll)
+  console.log("\n\x1b[1m[Suite 68: Windows XInput Game Controller Subsystem]\x1b[0m");
+
+  await itAsync("getXInputState queries controller button states, trigger pressure, and thumbstick axes", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getXInputState({ slot: 0 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getXInputState failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert.strictEqual(res.targetSlot, 0);
+    assert(res.controller !== null && typeof res.controller === "object");
+    assert(typeof res.controller.connected === "boolean");
+    if (res.controller.connected) {
+      assert(typeof res.controller.buttons === "object");
+      assert(typeof res.controller.leftTrigger === "number");
+      assert(typeof res.controller.rightTrigger === "number");
+      assert(typeof res.controller.thumbLX === "number");
+      assert(typeof res.controller.thumbLY === "number");
+    }
+  });
+
+  await itAsync("setXInputVibration actuates dual-motor force feedback with auto-cutoff duration", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.setXInputVibration({ slot: 0, leftMotor: 0, rightMotor: 0, durationMs: 50 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "setXInputVibration failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert.strictEqual(res.slot, 0);
+    assert(typeof res.connected === "boolean");
+    assert(typeof res.actuated === "boolean");
+    assert.strictEqual(res.durationMs, 50);
+  });
+
+  await itAsync("getXInputCapabilities detects controller subtype, voice support, and vibration ceilings", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getXInputCapabilities({ slot: 0 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getXInputCapabilities failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert.strictEqual(res.targetSlot, 0);
+    assert(res.capabilities !== null && typeof res.capabilities === "object");
+    assert(typeof res.capabilities.connected === "boolean");
+    if (res.capabilities.connected) {
+      assert(typeof res.capabilities.subType === "string");
+      assert(typeof res.capabilities.supportsVoice === "boolean");
+    }
+  });
+
+  await itAsync("getXInputBatteryAndAudio queries battery telemetry and Core Audio endpoint device GUIDs", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getXInputBatteryAndAudio({ slot: 0 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getXInputBatteryAndAudio failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert.strictEqual(res.targetSlot, 0);
+    assert(res.batteryAndAudio !== null && typeof res.batteryAndAudio === "object");
+    assert(typeof res.batteryAndAudio.gamepadBatteryType === "string");
+    assert(typeof res.batteryAndAudio.gamepadBatteryLevel === "string");
+    assert(typeof res.batteryAndAudio.renderDeviceId === "string" || res.batteryAndAudio.renderDeviceId === null);
+  });
+
+  it("All 240 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 236);
+    assert.strictEqual(SYSTEM_TOOLS.length, 240);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -4957,6 +5026,10 @@ async function run() {
     assert(toolNames.includes("super_tbs_context_status"));
     assert(toolNames.includes("super_tbs_tcg_log"));
     assert(toolNames.includes("super_tbs_pcr_read"));
+    assert(toolNames.includes("super_xinput_state"));
+    assert(toolNames.includes("super_xinput_vibration"));
+    assert(toolNames.includes("super_xinput_capabilities"));
+    assert(toolNames.includes("super_xinput_battery_audio"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

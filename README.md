@@ -98,6 +98,7 @@
   - [80. Windows Security Center (WSC) Subsystem](#80-️-windows-security-center-wsc-subsystem-wscapih--wscapidll--rootsecuritycenter2)
   - [81. Windows Magnification API Subsystem](#81--windows-magnification-api-subsystem-magnificationh--magnificationdll)
   - [82. Trusted Platform Module Base Services (TBS) Subsystem](#82-️-trusted-platform-module-base-services-tbs-subsystem-tbsh--tbsdll)
+  - [83. Windows XInput Game Controller Subsystem](#83--windows-xinput-game-controller-subsystem-xinputh--xinput1_4dll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1092,6 +1093,18 @@ Directly interfaces with the hardware Trusted Platform Module (TPM 2.0 / 1.2) cr
 - **Platform Configuration Register (PCR) Hardware Inspection (`super_tbs_pcr_read`)**: Submits raw binary TPM 2.0 command packets (`TPM2_PCR_Read` `0x017E`) directly to the TPM coprocessor via `Tbsip_Submit_Command`. Decodes the live cryptographic PCR digests (SHA-256 / SHA-1) across registers 0-23 without requiring elevated privileges for read-only hardware attestation.
 - **236 Tools Milestone**: Reaches **236 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **67 comprehensive test suites** and **63 environment health checks**.
 - **Native MCP Tools**: `super_tbs_device_info`, `super_tbs_context_status`, `super_tbs_tcg_log`, `super_tbs_pcr_read`.
+
+---
+
+## 83. 🎮 Windows XInput Game Controller Subsystem (`xinput.h` / `xinput1_4.dll`)
+
+Directly interfaces with physical and virtual Xbox and DirectInput-compatible game controllers, gamepads, flight sticks, arcade sticks, and wheels via the Microsoft DirectX XInput 1.4 API:
+- **Controller Button & Analog Thumbstick Telemetry (`super_xinput_state`)**: Queries live input states via `XInputGetState` across user slots 0-3 (or `all`). Decodes the complete 16-bit digital button mask (`A`, `B`, `X`, `Y`, `D-pad`, bumpers, stick clicks, `Start`, `Back`), left/right analog trigger pressure (normalized 0.0 to 1.0, threshold flags), and dual analog thumbstick displacement with built-in deadzone filtering (`XINPUT_THUMB_LEFT_DEADZONE = 7849`, `XINPUT_THUMB_RIGHT_DEADZONE = 8689`).
+- **Dual-Motor Haptic Force-Feedback Actuator (`super_xinput_vibration`)**: Actuates low-frequency heavy rumble (left motor) and high-frequency light buzz (right motor) via `XInputSetState`. Supports granular speed percentages (0-100%), raw 16-bit values (0-65535), vibration presets (`heavy`, `medium`, `light`, `pulse`), and self-timed background cutoff threads (up to 10,000ms duration) for haptic feedback during AI actions.
+- **Controller Hardware Capabilities & Subtypes (`super_xinput_capabilities`)**: Decodes hardware device profiles via `XInputGetCapabilities`. Identifies controller device subtypes (`GAMEPAD`, `WHEEL`, `ARCADE_STICK`, `FLIGHT_STICK`, `DANCE_PAD`, `GUITAR`), feature flags (`supportsVoice`, `isWireless`, `supportsForceFeedback`, `noNavigation`), and maximum vibration motor ceilings.
+- **Battery Health & Core Audio Device GUID Telemetry (`super_xinput_battery_audio`)**: Interrogates controller and headset battery types (`WIRED`, `ALKALINE`, `NIMH`) and charge states (`EMPTY`, `LOW`, `MEDIUM`, `FULL`) via `XInputGetBatteryInformation`. In addition, maps linked Windows Core Audio endpoint GUID strings (`renderDeviceId`, `captureDeviceId`) via `XInputGetAudioDeviceIds` to link physical gamepad headset jacks directly to WASAPI audio capture/render pipelines.
+- **240 Tools Milestone**: Reaches **240 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **68 comprehensive test suites** and **64 environment health checks**.
+- **Native MCP Tools**: `super_xinput_state`, `super_xinput_vibration`, `super_xinput_capabilities`, `super_xinput_battery_audio`.
 
 ---
 

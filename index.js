@@ -4444,6 +4444,77 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_xinput_state",
+        description: "Queries Windows XInput gamepad connection state, button bitmasks (A, B, X, Y, D-pad, Bumpers, Sticks, Start, Back), analog trigger pressure, and dual thumbstick coordinates with hardware deadzone telemetry via XInputGetState.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            slot: {
+              type: "string",
+              default: "all",
+              description: "Target controller slot: '0', '1', '2', '3', or 'all' to probe all 4 slots (default: 'all')."
+            }
+          }
+        }
+      },
+      {
+        name: "super_xinput_vibration",
+        description: "Actuates dual-rumble force-feedback haptic vibration motors on a target game controller via XInputSetState. Supports custom motor speeds (0-65535, percentages, presets 'heavy', 'medium', 'light', 'pulse') and self-timed auto-cutoff durations.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            slot: {
+              type: "integer",
+              default: 0,
+              description: "Target controller user index (0-3, default: 0)."
+            },
+            leftMotor: {
+              type: "string",
+              default: "0",
+              description: "Low-frequency heavy rumble motor speed (0-65535, percentage like '50%', or preset 'heavy', 'medium', 'light', 'pulse', default: '0')."
+            },
+            rightMotor: {
+              type: "string",
+              default: "0",
+              description: "High-frequency sharp buzz motor speed (0-65535, percentage, or preset, default: '0')."
+            },
+            durationMs: {
+              type: "integer",
+              default: 500,
+              description: "Duration in milliseconds before automatically shutting off motors (default: 500ms, max: 10000ms, 0 for continuous)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_xinput_capabilities",
+        description: "Queries hardware controller capabilities, subtypes (gamepad, wheel, arcade stick, flight stick, dance pad, guitar), features, and voice/wireless flags via XInputGetCapabilities.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            slot: {
+              type: "string",
+              default: "all",
+              description: "Target controller slot: '0', '1', '2', '3', or 'all' (default: 'all')."
+            }
+          }
+        }
+      },
+      {
+        name: "super_xinput_battery_audio",
+        description: "Queries gamepad and headset battery types (wired, alkaline, NiMH) and charge levels (empty, low, medium, full) via XInputGetBatteryInformation, and resolves linked Core Audio device endpoint IDs via XInputGetAudioDeviceIds.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            slot: {
+              type: "string",
+              default: "all",
+              description: "Target controller slot: '0', '1', '2', '3', or 'all' (default: 'all')."
+            }
+          }
+        }
       }
 ];
 
@@ -7873,6 +7944,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🔒 [TPM Hardware Platform Configuration Register (PCR) Read]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_xinput_state") {
+    const res = await orch.getXInputState(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎮 [Windows XInput Controller State Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_xinput_vibration") {
+    const res = await orch.setXInputVibration(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📳 [Windows XInput Dual-Rumble Vibration Actuation]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_xinput_capabilities") {
+    const res = await orch.getXInputCapabilities(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🕹️ [Windows XInput Hardware Capabilities]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_xinput_battery_audio") {
+    const res = await orch.getXInputBatteryAndAudio(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔋 [Windows XInput Battery & Headset Audio Telemetry]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

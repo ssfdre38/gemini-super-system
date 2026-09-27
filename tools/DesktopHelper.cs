@@ -17102,6 +17102,452 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 83: Windows XInput Game Controller Subsystem (xinput.h / xinput1_4.dll)
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct XINPUT_GAMEPAD {
+            public ushort wButtons;
+            public byte bLeftTrigger;
+            public byte bRightTrigger;
+            public short sThumbLX;
+            public short sThumbLY;
+            public short sThumbRX;
+            public short sThumbRY;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct XINPUT_STATE {
+            public uint dwPacketNumber;
+            public XINPUT_GAMEPAD Gamepad;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct XINPUT_VIBRATION {
+            public ushort wLeftMotorSpeed;
+            public ushort wRightMotorSpeed;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct XINPUT_CAPABILITIES {
+            public byte Type;
+            public byte SubType;
+            public ushort Flags;
+            public XINPUT_GAMEPAD Gamepad;
+            public XINPUT_VIBRATION Vibration;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct XINPUT_BATTERY_INFORMATION {
+            public byte BatteryType;
+            public byte BatteryLevel;
+        }
+
+        const uint XINPUT_ERROR_SUCCESS = 0;
+        const uint XINPUT_ERROR_DEVICE_NOT_CONNECTED = 1167; // 0x48F
+
+        const ushort XINPUT_BUTTON_DPAD_UP        = 0x0001;
+        const ushort XINPUT_BUTTON_DPAD_DOWN      = 0x0002;
+        const ushort XINPUT_BUTTON_DPAD_LEFT      = 0x0004;
+        const ushort XINPUT_BUTTON_DPAD_RIGHT     = 0x0008;
+        const ushort XINPUT_BUTTON_START          = 0x0010;
+        const ushort XINPUT_BUTTON_BACK           = 0x0020;
+        const ushort XINPUT_BUTTON_LEFT_THUMB     = 0x0040;
+        const ushort XINPUT_BUTTON_RIGHT_THUMB    = 0x0080;
+        const ushort XINPUT_BUTTON_LEFT_SHOULDER  = 0x0100;
+        const ushort XINPUT_BUTTON_RIGHT_SHOULDER = 0x0200;
+        const ushort XINPUT_BUTTON_A              = 0x1000;
+        const ushort XINPUT_BUTTON_B              = 0x2000;
+        const ushort XINPUT_BUTTON_X              = 0x4000;
+        const ushort XINPUT_BUTTON_Y              = 0x8000;
+
+        const short XINPUT_THUMB_LEFT_DEADZONE = 7849;
+        const short XINPUT_THUMB_RIGHT_DEADZONE = 8689;
+        const byte XINPUT_TRIGGER_THRESHOLD = 30;
+
+        [DllImport("xinput1_4.dll", EntryPoint = "XInputGetState")]
+        static extern uint XInputGetState(uint dwUserIndex, out XINPUT_STATE pState);
+
+        [DllImport("xinput1_4.dll", EntryPoint = "XInputSetState")]
+        static extern uint XInputSetState(uint dwUserIndex, ref XINPUT_VIBRATION pVibration);
+
+        [DllImport("xinput1_4.dll", EntryPoint = "XInputGetCapabilities")]
+        static extern uint XInputGetCapabilities(uint dwUserIndex, uint dwFlags, out XINPUT_CAPABILITIES pCapabilities);
+
+        [DllImport("xinput1_4.dll", EntryPoint = "XInputGetBatteryInformation")]
+        static extern uint XInputGetBatteryInformation(uint dwUserIndex, byte devType, out XINPUT_BATTERY_INFORMATION pBatteryInformation);
+
+        [DllImport("xinput1_4.dll", EntryPoint = "XInputEnable")]
+        static extern void XInputEnable(bool enable);
+
+        [DllImport("xinput1_4.dll", EntryPoint = "XInputGetAudioDeviceIds", CharSet = CharSet.Unicode)]
+        static extern uint XInputGetAudioDeviceIds(
+            uint dwUserIndex,
+            [Out] char[] pRenderDeviceId,
+            ref uint pRenderCount,
+            [Out] char[] pCaptureDeviceId,
+            ref uint pCaptureCount);
+
+        static string DecodeXInputSubType(byte subType) {
+            switch (subType) {
+                case 1: return "Gamepad";
+                case 2: return "Wheel";
+                case 3: return "ArcadeStick";
+                case 4: return "FlightStick";
+                case 5: return "DancePad";
+                case 6: return "Guitar";
+                case 7: return "GuitarAlternate";
+                case 8: return "DrumKit";
+                case 11: return "GuitarBass";
+                case 19: return "ArcadePad";
+                default: return "Unknown (" + subType + ")";
+            }
+        }
+
+        static string DecodeXInputBatteryType(byte bType) {
+            switch (bType) {
+                case 0: return "Disconnected";
+                case 1: return "Wired";
+                case 2: return "Alkaline";
+                case 3: return "NiMH";
+                case 255: return "Unknown";
+                default: return "Other (" + bType + ")";
+            }
+        }
+
+        static string DecodeXInputBatteryLevel(byte bLevel) {
+            switch (bLevel) {
+                case 0: return "Empty";
+                case 1: return "Low";
+                case 2: return "Medium";
+                case 3: return "Full";
+                default: return "Unknown (" + bLevel + ")";
+            }
+        }
+
+        static void XInputStateCmd(string slotStr) {
+            try {
+                int targetSlot = -1;
+                if (!string.IsNullOrEmpty(slotStr) && slotStr.ToLowerInvariant() != "all") {
+                    int.TryParse(slotStr, out targetSlot);
+                    if (targetSlot < 0) targetSlot = 0;
+                    if (targetSlot > 3) targetSlot = 3;
+                }
+
+                int startSlot = targetSlot >= 0 ? targetSlot : 0;
+                int endSlot = targetSlot >= 0 ? targetSlot : 3;
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+
+                int connectedCount = 0;
+                var slotEntries = new List<string>();
+
+                for (int slot = startSlot; slot <= endSlot; slot++) {
+                    XINPUT_STATE state = new XINPUT_STATE();
+                    uint hr = 0xFFFFFFFF;
+                    try {
+                        hr = XInputGetState((uint)slot, out state);
+                    } catch (Exception ex) {
+                        slotEntries.Add(string.Format("{{\"slot\": {0}, \"connected\": false, \"error\": \"{1}\"}}", slot, EscapeJson(ex.Message)));
+                        continue;
+                    }
+
+                    if (hr == XINPUT_ERROR_SUCCESS) {
+                        connectedCount++;
+                        var e = new StringBuilder();
+                        e.Append(string.Format("{{\"slot\": {0}, \"connected\": true, \"packetNumber\": {1}, ", slot, state.dwPacketNumber));
+
+                        // Buttons
+                        ushort b = state.Gamepad.wButtons;
+                        e.Append("\"buttons\": {");
+                        e.Append(string.Format("\"a\": {0}, \"b\": {1}, \"x\": {2}, \"y\": {3}, ",
+                            (b & XINPUT_BUTTON_A) != 0 ? "true" : "false",
+                            (b & XINPUT_BUTTON_B) != 0 ? "true" : "false",
+                            (b & XINPUT_BUTTON_X) != 0 ? "true" : "false",
+                            (b & XINPUT_BUTTON_Y) != 0 ? "true" : "false"));
+                        e.Append(string.Format("\"dpadUp\": {0}, \"dpadDown\": {1}, \"dpadLeft\": {2}, \"dpadRight\": {3}, ",
+                            (b & XINPUT_BUTTON_DPAD_UP) != 0 ? "true" : "false",
+                            (b & XINPUT_BUTTON_DPAD_DOWN) != 0 ? "true" : "false",
+                            (b & XINPUT_BUTTON_DPAD_LEFT) != 0 ? "true" : "false",
+                            (b & XINPUT_BUTTON_DPAD_RIGHT) != 0 ? "true" : "false"));
+                        e.Append(string.Format("\"leftShoulder\": {0}, \"rightShoulder\": {1}, ",
+                            (b & XINPUT_BUTTON_LEFT_SHOULDER) != 0 ? "true" : "false",
+                            (b & XINPUT_BUTTON_RIGHT_SHOULDER) != 0 ? "true" : "false"));
+                        e.Append(string.Format("\"leftThumb\": {0}, \"rightThumb\": {1}, ",
+                            (b & XINPUT_BUTTON_LEFT_THUMB) != 0 ? "true" : "false",
+                            (b & XINPUT_BUTTON_RIGHT_THUMB) != 0 ? "true" : "false"));
+                        e.Append(string.Format("\"start\": {0}, \"back\": {1}}}, ",
+                            (b & XINPUT_BUTTON_START) != 0 ? "true" : "false",
+                            (b & XINPUT_BUTTON_BACK) != 0 ? "true" : "false"));
+
+                        // Triggers
+                        e.Append("\"triggers\": {");
+                        e.Append(string.Format("\"left\": {0}, \"leftNormalized\": {1}, \"leftPressed\": {2}, ",
+                            state.Gamepad.bLeftTrigger,
+                            (state.Gamepad.bLeftTrigger / 255.0).ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                            state.Gamepad.bLeftTrigger > XINPUT_TRIGGER_THRESHOLD ? "true" : "false"));
+                        e.Append(string.Format("\"right\": {0}, \"rightNormalized\": {1}, \"rightPressed\": {2}}}, ",
+                            state.Gamepad.bRightTrigger,
+                            (state.Gamepad.bRightTrigger / 255.0).ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                            state.Gamepad.bRightTrigger > XINPUT_TRIGGER_THRESHOLD ? "true" : "false"));
+
+                        // Thumbsticks
+                        bool leftDead = Math.Abs(state.Gamepad.sThumbLX) <= XINPUT_THUMB_LEFT_DEADZONE && Math.Abs(state.Gamepad.sThumbLY) <= XINPUT_THUMB_LEFT_DEADZONE;
+                        bool rightDead = Math.Abs(state.Gamepad.sThumbRX) <= XINPUT_THUMB_RIGHT_DEADZONE && Math.Abs(state.Gamepad.sThumbRY) <= XINPUT_THUMB_RIGHT_DEADZONE;
+
+                        e.Append("\"thumbsticks\": {");
+                        e.Append(string.Format("\"leftX\": {0}, \"leftY\": {1}, \"leftNormX\": {2}, \"leftNormY\": {3}, \"leftInDeadzone\": {4}, ",
+                            state.Gamepad.sThumbLX, state.Gamepad.sThumbLY,
+                            (state.Gamepad.sThumbLX / 32767.0).ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                            (state.Gamepad.sThumbLY / 32767.0).ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                            leftDead ? "true" : "false"));
+                        e.Append(string.Format("\"rightX\": {0}, \"rightY\": {1}, \"rightNormX\": {2}, \"rightNormY\": {3}, \"rightInDeadzone\": {4}}}}}",
+                            state.Gamepad.sThumbRX, state.Gamepad.sThumbRY,
+                            (state.Gamepad.sThumbRX / 32767.0).ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                            (state.Gamepad.sThumbRY / 32767.0).ToString("F3", System.Globalization.CultureInfo.InvariantCulture),
+                            rightDead ? "true" : "false"));
+
+                        slotEntries.Add(e.ToString());
+                    } else {
+                        slotEntries.Add(string.Format("{{\"slot\": {0}, \"connected\": false, \"status\": \"Not Connected\", \"hresult\": \"0x{1:X8}\"}}", slot, hr));
+                    }
+                }
+
+                if (targetSlot >= 0 && slotEntries.Count == 1) {
+                    sb.Append("\"targetSlot\": " + targetSlot + ", ");
+                    sb.Append("\"controller\": " + slotEntries[0]);
+                } else {
+                    sb.Append("\"connectedCount\": " + connectedCount + ", ");
+                    sb.Append("\"slots\": [" + string.Join(", ", slotEntries.ToArray()) + "]");
+                }
+                sb.Append("}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void XInputVibrationCmd(string slotStr, string leftStr, string rightStr, string durationMsStr) {
+            try {
+                int slot = 0;
+                if (!string.IsNullOrEmpty(slotStr)) int.TryParse(slotStr, out slot);
+                if (slot < 0) slot = 0;
+                if (slot > 3) slot = 3;
+
+                ushort leftSpeed = 0;
+                ushort rightSpeed = 0;
+
+                string left = (leftStr ?? "").Trim().ToLowerInvariant();
+                string right = (rightStr ?? "").Trim().ToLowerInvariant();
+
+                if (left == "heavy" || left == "max") leftSpeed = 65535;
+                else if (left == "medium" || left == "half") leftSpeed = 32767;
+                else if (left == "light" || left == "low") leftSpeed = 16384;
+                else if (left == "pulse") { leftSpeed = 48000; rightSpeed = 48000; }
+                else if (left.EndsWith("%")) {
+                    double p;
+                    if (double.TryParse(left.TrimEnd('%'), out p)) leftSpeed = (ushort)(Math.Max(0.0, Math.Min(100.0, p)) / 100.0 * 65535.0);
+                } else {
+                    ushort val;
+                    if (ushort.TryParse(left, out val)) leftSpeed = val;
+                    else {
+                        double d;
+                        if (double.TryParse(left, out d) && d >= 0.0 && d <= 1.0) leftSpeed = (ushort)(d * 65535.0);
+                    }
+                }
+
+                if (right == "heavy" || right == "max") rightSpeed = 65535;
+                else if (right == "medium" || right == "half") rightSpeed = 32767;
+                else if (right == "light" || right == "low") rightSpeed = 16384;
+                else if (right.EndsWith("%")) {
+                    double p;
+                    if (double.TryParse(right.TrimEnd('%'), out p)) rightSpeed = (ushort)(Math.Max(0.0, Math.Min(100.0, p)) / 100.0 * 65535.0);
+                } else if (!string.IsNullOrEmpty(right)) {
+                    ushort val;
+                    if (ushort.TryParse(right, out val)) rightSpeed = val;
+                    else {
+                        double d;
+                        if (double.TryParse(right, out d) && d >= 0.0 && d <= 1.0) rightSpeed = (ushort)(d * 65535.0);
+                    }
+                }
+
+                int durationMs = 0;
+                if (!string.IsNullOrEmpty(durationMsStr)) int.TryParse(durationMsStr, out durationMs);
+                if (durationMs < 0) durationMs = 0;
+                if (durationMs > 10000) durationMs = 10000;
+
+                var vib = new XINPUT_VIBRATION {
+                    wLeftMotorSpeed = leftSpeed,
+                    wRightMotorSpeed = rightSpeed
+                };
+
+                uint hr = XInputSetState((uint)slot, ref vib);
+                bool connected = (hr == XINPUT_ERROR_SUCCESS);
+
+                if (connected && durationMs > 0 && (leftSpeed > 0 || rightSpeed > 0)) {
+                    System.Threading.Thread.Sleep(durationMs);
+                    var zeroVib = new XINPUT_VIBRATION { wLeftMotorSpeed = 0, wRightMotorSpeed = 0 };
+                    XInputSetState((uint)slot, ref zeroVib);
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"slot\": {0}, ", slot));
+                sb.Append(string.Format("\"connected\": {0}, ", connected ? "true" : "false"));
+                sb.Append(string.Format("\"leftMotorSpeed\": {0}, ", leftSpeed));
+                sb.Append(string.Format("\"rightMotorSpeed\": {0}, ", rightSpeed));
+                sb.Append(string.Format("\"durationMs\": {0}, ", durationMs));
+                sb.Append(string.Format("\"actuated\": {0}, ", connected ? "true" : "false"));
+                sb.Append(string.Format("\"hresult\": \"0x{0:X8}\"}}", hr));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void XInputCapabilitiesCmd(string slotStr) {
+            try {
+                int targetSlot = -1;
+                if (!string.IsNullOrEmpty(slotStr) && slotStr.ToLowerInvariant() != "all") {
+                    int.TryParse(slotStr, out targetSlot);
+                    if (targetSlot < 0) targetSlot = 0;
+                    if (targetSlot > 3) targetSlot = 3;
+                }
+
+                int startSlot = targetSlot >= 0 ? targetSlot : 0;
+                int endSlot = targetSlot >= 0 ? targetSlot : 3;
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+
+                int connectedCount = 0;
+                var slotEntries = new List<string>();
+
+                for (int slot = startSlot; slot <= endSlot; slot++) {
+                    XINPUT_CAPABILITIES caps = new XINPUT_CAPABILITIES();
+                    uint hr = 0xFFFFFFFF;
+                    try {
+                        hr = XInputGetCapabilities((uint)slot, 1, out caps);
+                    } catch (Exception ex) {
+                        slotEntries.Add(string.Format("{{\"slot\": {0}, \"connected\": false, \"error\": \"{1}\"}}", slot, EscapeJson(ex.Message)));
+                        continue;
+                    }
+
+                    if (hr == XINPUT_ERROR_SUCCESS) {
+                        connectedCount++;
+                        var e = new StringBuilder();
+                        e.Append(string.Format("{{\"slot\": {0}, \"connected\": true, ", slot));
+                        e.Append(string.Format("\"type\": \"{0}\", ", caps.Type == 1 ? "GAMEPAD" : ("Unknown (" + caps.Type + ")")));
+                        e.Append(string.Format("\"subType\": \"{0}\", ", DecodeXInputSubType(caps.SubType)));
+                        e.Append(string.Format("\"subTypeCode\": {0}, ", caps.SubType));
+                        e.Append(string.Format("\"flags\": \"0x{0:X4}\", ", caps.Flags));
+                        e.Append(string.Format("\"supportsVoice\": {0}, ", (caps.Flags & 0x0004) != 0 ? "true" : "false"));
+                        e.Append(string.Format("\"isWireless\": {0}, ", (caps.Flags & 0x0002) != 0 ? "true" : "false"));
+                        e.Append(string.Format("\"supportsForceFeedback\": {0}, ", (caps.Flags & 0x0001) != 0 ? "true" : "false"));
+                        e.Append(string.Format("\"noNavigation\": {0}, ", (caps.Flags & 0x0010) != 0 ? "true" : "false"));
+                        e.Append(string.Format("\"maxVibrationLeft\": {0}, \"maxVibrationRight\": {1}}}", caps.Vibration.wLeftMotorSpeed, caps.Vibration.wRightMotorSpeed));
+
+                        slotEntries.Add(e.ToString());
+                    } else {
+                        slotEntries.Add(string.Format("{{\"slot\": {0}, \"connected\": false, \"status\": \"Not Connected\", \"hresult\": \"0x{1:X8}\"}}", slot, hr));
+                    }
+                }
+
+                if (targetSlot >= 0 && slotEntries.Count == 1) {
+                    sb.Append("\"targetSlot\": " + targetSlot + ", ");
+                    sb.Append("\"capabilities\": " + slotEntries[0]);
+                } else {
+                    sb.Append("\"connectedCount\": " + connectedCount + ", ");
+                    sb.Append("\"slots\": [" + string.Join(", ", slotEntries.ToArray()) + "]");
+                }
+                sb.Append("}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void XInputBatteryAndAudioCmd(string slotStr) {
+            try {
+                int targetSlot = -1;
+                if (!string.IsNullOrEmpty(slotStr) && slotStr.ToLowerInvariant() != "all") {
+                    int.TryParse(slotStr, out targetSlot);
+                    if (targetSlot < 0) targetSlot = 0;
+                    if (targetSlot > 3) targetSlot = 3;
+                }
+
+                int startSlot = targetSlot >= 0 ? targetSlot : 0;
+                int endSlot = targetSlot >= 0 ? targetSlot : 3;
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+
+                var slotEntries = new List<string>();
+
+                for (int slot = startSlot; slot <= endSlot; slot++) {
+                    XINPUT_BATTERY_INFORMATION batPad = new XINPUT_BATTERY_INFORMATION();
+                    XINPUT_BATTERY_INFORMATION batHeadset = new XINPUT_BATTERY_INFORMATION();
+
+                    uint padHr = 0xFFFFFFFF;
+                    uint headsetHr = 0xFFFFFFFF;
+
+                    try {
+                        padHr = XInputGetBatteryInformation((uint)slot, 0, out batPad);
+                    } catch {}
+                    try {
+                        headsetHr = XInputGetBatteryInformation((uint)slot, 1, out batHeadset);
+                    } catch {}
+
+                    char[] renderBuf = new char[512];
+                    char[] captureBuf = new char[512];
+                    uint renderLen = (uint)renderBuf.Length;
+                    uint captureLen = (uint)captureBuf.Length;
+                    uint audioHr = 0xFFFFFFFF;
+                    string renderId = "";
+                    string captureId = "";
+
+                    try {
+                        audioHr = XInputGetAudioDeviceIds((uint)slot, renderBuf, ref renderLen, captureBuf, ref captureLen);
+                        if (audioHr == 0) {
+                            if (renderLen > 0) renderId = new string(renderBuf, 0, (int)renderLen).TrimEnd('\0');
+                            if (captureLen > 0) captureId = new string(captureBuf, 0, (int)captureLen).TrimEnd('\0');
+                        }
+                    } catch {}
+
+                    var e = new StringBuilder();
+                    e.Append(string.Format("{{\"slot\": {0}, ", slot));
+                    e.Append(string.Format("\"gamepadBatteryType\": \"{0}\", ", DecodeXInputBatteryType(batPad.BatteryType)));
+                    e.Append(string.Format("\"gamepadBatteryLevel\": \"{0}\", ", DecodeXInputBatteryLevel(batPad.BatteryLevel)));
+                    e.Append(string.Format("\"headsetBatteryType\": \"{0}\", ", DecodeXInputBatteryType(batHeadset.BatteryType)));
+                    e.Append(string.Format("\"headsetBatteryLevel\": \"{0}\", ", DecodeXInputBatteryLevel(batHeadset.BatteryLevel)));
+                    e.Append(string.Format("\"audioConnected\": {0}, ", (!string.IsNullOrEmpty(renderId) || !string.IsNullOrEmpty(captureId)) ? "true" : "false"));
+                    e.Append(string.Format("\"renderDeviceId\": \"{0}\", ", EscapeJson(renderId)));
+                    e.Append(string.Format("\"captureDeviceId\": \"{0}\", ", EscapeJson(captureId)));
+                    e.Append(string.Format("\"batteryHresult\": \"0x{0:X8}\", ", padHr));
+                    e.Append(string.Format("\"audioHresult\": \"0x{0:X8}\"}}", audioHr));
+
+                    slotEntries.Add(e.ToString());
+                }
+
+                if (targetSlot >= 0 && slotEntries.Count == 1) {
+                    sb.Append("\"targetSlot\": " + targetSlot + ", ");
+                    sb.Append("\"batteryAndAudio\": " + slotEntries[0]);
+                } else {
+                    sb.Append("\"slots\": [" + string.Join(", ", slotEntries.ToArray()) + "]");
+                }
+                sb.Append("}");
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -20516,6 +20962,21 @@ namespace GeminiSuperDesktop {
                 string pcrIdx = args.Length >= 2 ? args[1] : "0";
                 string alg = args.Length >= 3 ? args[2] : "sha256";
                 TbsPcrReadCmd(pcrIdx, alg);
+            } else if (cmd == "xinput_state" || cmd == "gamepad_state" || cmd == "xinput-state") {
+                string slot = args.Length >= 2 ? args[1] : "all";
+                XInputStateCmd(slot);
+            } else if (cmd == "xinput_vibration" || cmd == "gamepad_rumble" || cmd == "xinput-vibration") {
+                string slot = args.Length >= 2 ? args[1] : "0";
+                string left = args.Length >= 3 ? args[2] : "0";
+                string right = args.Length >= 4 ? args[3] : "0";
+                string dur = args.Length >= 5 ? args[4] : "0";
+                XInputVibrationCmd(slot, left, right, dur);
+            } else if (cmd == "xinput_capabilities" || cmd == "gamepad_caps" || cmd == "xinput-capabilities") {
+                string slot = args.Length >= 2 ? args[1] : "all";
+                XInputCapabilitiesCmd(slot);
+            } else if (cmd == "xinput_battery_audio" || cmd == "gamepad_battery" || cmd == "xinput-battery-audio") {
+                string slot = args.Length >= 2 ? args[1] : "all";
+                XInputBatteryAndAudioCmd(slot);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
