@@ -106,6 +106,7 @@
   - [88. Windows Delivery Optimization (DO) Subsystem](#88--windows-delivery-optimization-do-subsystem-deliveryoptimizationh--deliveryoptimizationdll--dosvc)
   - [89. Windows Imaging Component (WIC) Subsystem](#89-️-windows-imaging-component-wic-subsystem-wincodech--windowscodecsdll)
   - [90. Windows Media Foundation (MF) Subsystem](#90--windows-media-foundation-mf-subsystem-mfapih--mfidlh--mfreadwriteh--mfplatdll--mfdll--mfreadwritedll)
+  - [91. Windows Cryptography Next Generation (CNG) Subsystem](#91--windows-cryptography-next-generation-cng-subsystem-bcrypth--bcryptdll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1188,6 +1189,15 @@ Directly interfaces with Microsoft's bare-metal, hardware-accelerated Windows Me
 - **Bare-Metal Audio Decoding & Transcoding (`super_mf_transcode_audio`)**: Decodes and transcodes audio from ANY container or codec directly into an uncompressed, standard 16-bit PCM RIFF WAV file in ~100ms. Leverages hardware decoders and unmanaged buffer locks (`IMFMediaBuffer::Lock`) for bit-perfect output with configurable destination paths.
 - **268 Tools Milestone**: Reaches **268 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **75 comprehensive test suites** and **71 environment health checks**.
 - **Native MCP Tools**: `super_mf_transforms`, `super_mf_capture_devices`, `super_mf_media_info`, `super_mf_transcode_audio`.
+
+### 91. 🔐 Windows Cryptography Next Generation (CNG) Subsystem (`bcrypt.h` / `bcrypt.dll`)
+Directly interfaces with Microsoft's bare-metal, kernel-grade Windows Cryptography Next Generation (CNG) cryptographic primitive architecture via standard native `bcrypt.dll` P/Invoke:
+- **Comprehensive Algorithm & Provider Discovery (`super_cng_algorithms`)**: Queries the registered CNG algorithm catalog using `BCryptEnumAlgorithms`. Discovers all installed symmetric ciphers (AES, 3DES, XTS-AES, RC4, ChaCha20-Poly1305), cryptographic hashes (SHA256, SHA384, SHA512, SHA3-256, SHA3-512, SHAKE128/256, KMAC128/256, SHA1, MD5, AES-GMAC, AES-CMAC), asymmetric encryption algorithms (RSA), secret agreement engines (DH, ECDH, ECDH_P256/P384/P521), digital signatures (RSA_SIGN, ECDSA, DSA, and Post-Quantum ML-DSA), random number generators (RNG, FIPS186DSARNG, DUALECRNG), and key derivation functions (PBKDF2, HKDF, TLS1_1/1_2 KDF, SP800-108 CTR HMAC).
+- **Hardware-Backed Cryptographic Entropy (`super_cng_random`)**: Generates true cryptographically secure random entropy directly via bare-metal `BCryptGenRandom` leveraging `BCRYPT_USE_SYSTEM_PREFERRED_RNG` (AES-CTR-DRBG per NIST SP 800-90A backed by hardware entropy sources). Supports flexible formatting across hex, base64, raw integer byte arrays, or typed integer values.
+- **Bare-Metal Cryptographic Digests & HMAC Signatures (`super_cng_hash`)**: Calculates high-speed cryptographic digests and HMAC authentication codes via `BCryptOpenAlgorithmProvider`, `BCryptCreateHash`, `BCryptHashData`, and `BCryptFinishHash`. Supports SHA256, SHA384, SHA512, SHA1, and MD5 against inline text strings or directly streaming large files from disk with sub-millisecond execution.
+- **Industrial Key Derivation (`super_cng_kdf_pbkdf2`)**: Derives high-entropy cryptographic keys and password digests using bare-metal `BCryptDeriveKeyPBKDF2`. Supports configurable pseudo-random functions (SHA256, SHA512, SHA384, SHA1), custom or auto-generated random salts, variable iteration counts up to 10,000,000 rounds, and arbitrary key lengths.
+- **272 Tools Milestone**: Reaches **272 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **76 comprehensive test suites** and **72 environment health checks**.
+- **Native MCP Tools**: `super_cng_algorithms`, `super_cng_random`, `super_cng_hash`, `super_cng_kdf_pbkdf2`.
 
 ---
 

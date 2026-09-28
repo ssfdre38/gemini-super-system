@@ -5393,10 +5393,115 @@ async function run() {
     } catch {}
   });
 
-  it("All 268 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 76: Windows Cryptography Next Generation (CNG) Subsystem
+  console.log("\n\x1b[1m[Suite 76: Windows Cryptography Next Generation (CNG) Subsystem]\x1b[0m");
+
+  await itAsync("getCngAlgorithms enumerates registered cryptographic algorithms and classes", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getCngAlgorithms({ operation: "all" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.count === "number" && res.count > 0);
+    assert(Array.isArray(res.algorithms) && res.algorithms.length > 0);
+
+    const first = res.algorithms[0];
+    assert(typeof first.name === "string");
+    assert(typeof first.class === "string");
+    assert(typeof first.classId === "number");
+
+    assert(res.summary && typeof res.summary.ciphers === "number");
+    assert(typeof res.summary.hashes === "number");
+  });
+
+  await itAsync("getCngRandom generates hardware-backed cryptographically secure pseudo-random entropy", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    const hexRes = await kb.getCngRandom({ byteLength: 32, format: "hex" });
+    assert(hexRes && hexRes.success);
+    assert.strictEqual(hexRes.byteLength, 32);
+    assert.strictEqual(hexRes.format, "hex");
+    assert(typeof hexRes.data === "string" && hexRes.data.length === 64);
+
+    const b64Res = await kb.getCngRandom({ byteLength: 16, format: "base64" });
+    assert(b64Res && b64Res.success);
+    assert(typeof b64Res.data === "string" && b64Res.data.length > 0);
+
+    const bytesRes = await kb.getCngRandom({ byteLength: 4, format: "bytes" });
+    assert(bytesRes && bytesRes.success);
+    assert(Array.isArray(bytesRes.data) && bytesRes.data.length === 4);
+
+    const intRes = await kb.getCngRandom({ byteLength: 4, format: "int" });
+    assert(intRes && intRes.success);
+    assert(typeof intRes.data === "number");
+  });
+
+  await itAsync("computeCngHash computes bare-metal cryptographic digest and HMAC signatures", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    // Standard test vector: SHA256("Hello World")
+    const hashRes = await kb.computeCngHash({
+      algorithm: "SHA256",
+      data: "Hello World",
+      isFilePath: false
+    });
+    assert(hashRes && hashRes.success);
+    assert.strictEqual(hashRes.algorithm, "SHA256");
+    assert.strictEqual(hashRes.isHmac, false);
+    assert.strictEqual(hashRes.digestBytes, 32);
+    assert.strictEqual(hashRes.digestHex, "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e");
+
+    // Keyed HMAC-SHA256
+    const hmacRes = await kb.computeCngHash({
+      algorithm: "SHA256",
+      data: "Hello World",
+      hmacKey: "secret_key"
+    });
+    assert(hmacRes && hmacRes.success);
+    assert.strictEqual(hmacRes.isHmac, true);
+    assert.strictEqual(hmacRes.digestBytes, 32);
+    assert(typeof hmacRes.digestHex === "string" && hmacRes.digestHex.length === 64);
+
+    // File hash: hosts file
+    const fileRes = await kb.computeCngHash({
+      algorithm: "SHA512",
+      data: "C:\\Windows\\System32\\drivers\\etc\\hosts",
+      isFilePath: true
+    });
+    if (fileRes.success) {
+      assert.strictEqual(fileRes.digestBytes, 64);
+      assert(typeof fileRes.digestHex === "string" && fileRes.digestHex.length === 128);
+    }
+  });
+
+  await itAsync("deriveCngKeyPbkdf2 derives high-entropy cryptographic keys and password digests", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    const kdfRes = await kb.deriveCngKeyPbkdf2({
+      password: "master_secure_password",
+      salt: "salt_pepper_123",
+      iterations: 2000,
+      keyLength: 32,
+      prf: "SHA256"
+    });
+
+    assert(kdfRes !== null && typeof kdfRes === "object");
+    assert.strictEqual(kdfRes.success, true);
+    assert.strictEqual(kdfRes.keyLength, 32);
+    assert.strictEqual(kdfRes.prf, "SHA256");
+    assert(typeof kdfRes.keyHex === "string" && kdfRes.keyHex.length === 64);
+    assert(typeof kdfRes.keyBase64 === "string" && kdfRes.keyBase64.length > 0);
+    assert(typeof kdfRes.elapsedMs === "number");
+  });
+
+  it("All 272 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 268);
+    assert.strictEqual(SYSTEM_TOOLS.length, 272);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -5598,6 +5703,10 @@ async function run() {
     assert(toolNames.includes("super_mf_capture_devices"));
     assert(toolNames.includes("super_mf_media_info"));
     assert(toolNames.includes("super_mf_transcode_audio"));
+    assert(toolNames.includes("super_cng_algorithms"));
+    assert(toolNames.includes("super_cng_random"));
+    assert(toolNames.includes("super_cng_hash"));
+    assert(toolNames.includes("super_cng_kdf_pbkdf2"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

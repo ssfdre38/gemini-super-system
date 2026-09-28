@@ -5066,6 +5066,115 @@ const SYSTEM_TOOLS = [
           },
           required: ["sourcePath"]
         }
+      },
+      {
+        name: "super_cng_algorithms",
+        description: "Enumerates registered cryptographic algorithm providers in the Windows Cryptography Next Generation (CNG) database using BCryptEnumAlgorithms. Discovers ciphers (AES, DES, RC4), hashes (SHA256, SHA384, SHA512, SHA1, MD5), asymmetric algorithms (RSA, ECDSA, ECDH), RNGs, and KDFs.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            operation: {
+              type: "string",
+              enum: [
+                "all",
+                "cipher",
+                "hash",
+                "asymmetric",
+                "secret_agreement",
+                "signature",
+                "rng",
+                "kdf"
+              ],
+              default: "all",
+              description: "Filter CNG algorithm enumeration by operation (default: 'all')."
+            }
+          }
+        }
+      },
+      {
+        name: "super_cng_random",
+        description: "Generates hardware-backed cryptographically secure pseudo-random entropy via bare-metal BCryptGenRandom with BCRYPT_USE_SYSTEM_PREFERRED_RNG. Supports output in hex, base64, raw byte integers, or parsed integer format.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            byteLength: {
+              type: "number",
+              default: 32,
+              description: "Number of cryptographically random bytes to generate (1 to 65536, default: 32)."
+            },
+            format: {
+              type: "string",
+              enum: ["hex", "base64", "bytes", "int"],
+              default: "hex",
+              description: "Output formatting for generated entropy: 'hex' (default), 'base64', 'bytes' (integer array), or 'int'."
+            }
+          }
+        }
+      },
+      {
+        name: "super_cng_hash",
+        description: "Computes bare-metal cryptographic digests or HMAC message authentication codes via BCryptOpenAlgorithmProvider, BCryptCreateHash, and BCryptHashData supporting SHA256, SHA384, SHA512, SHA1, MD5 against inline text or disk files.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            algorithm: {
+              type: "string",
+              enum: ["SHA256", "SHA384", "SHA512", "SHA1", "MD5"],
+              default: "SHA256",
+              description: "Cryptographic hash algorithm: SHA256 (default), SHA384, SHA512, SHA1, or MD5."
+            },
+            data: {
+              type: "string",
+              default: "",
+              description: "Inline string or text data to hash (or absolute file path if isFilePath is true)."
+            },
+            isFilePath: {
+              type: "boolean",
+              default: false,
+              description: "If true, treats data argument as an absolute file path to hash from disk using streaming chunks."
+            },
+            hmacKey: {
+              type: "string",
+              default: "",
+              description: "Optional HMAC secret key. If specified, computes a keyed HMAC digest instead of an unkeyed hash."
+            }
+          }
+        }
+      },
+      {
+        name: "super_cng_kdf_pbkdf2",
+        description: "Derives high-entropy cryptographic keys and password digests using bare-metal BCryptDeriveKeyPBKDF2 with configurable pseudo-random functions (SHA256, SHA512, SHA384, SHA1), iteration counts, custom or auto-generated salt, and output key length.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            password: {
+              type: "string",
+              description: "Input password or passphrase to derive a key from."
+            },
+            salt: {
+              type: "string",
+              default: "",
+              description: "Cryptographic salt string or hex. If empty, generates 16 cryptographically random salt bytes automatically."
+            },
+            iterations: {
+              type: "number",
+              default: 100000,
+              description: "Number of PBKDF2 hash iterations (default: 100000)."
+            },
+            keyLength: {
+              type: "number",
+              default: 32,
+              description: "Length of derived key in bytes (default: 32 = 256 bits)."
+            },
+            prf: {
+              type: "string",
+              enum: ["SHA256", "SHA384", "SHA512", "SHA1"],
+              default: "SHA256",
+              description: "Underlying pseudorandom HMAC function for PBKDF2."
+            }
+          },
+          required: ["password"]
+        }
       }
 ];
 
@@ -8879,6 +8988,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🎵 [MF Audio Transcode]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_cng_algorithms") {
+    const res = await orch.getCngAlgorithms(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔐 [CNG Cryptographic Algorithms]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_cng_random") {
+    const res = await orch.getCngRandom(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎲 [CNG Hardware-Backed Random Entropy]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_cng_hash") {
+    const res = await orch.computeCngHash(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🏷️ [CNG Cryptographic Digest / HMAC]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_cng_kdf_pbkdf2") {
+    const res = await orch.deriveCngKeyPbkdf2(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔑 [CNG Key Derivation PBKDF2]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

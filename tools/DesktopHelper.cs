@@ -21571,6 +21571,329 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 91: Windows Cryptography Next Generation (CNG) Subsystem (bcrypt.h / bcrypt.dll / Security.Cryptography partition)
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct BCRYPT_ALGORITHM_IDENTIFIER {
+            [MarshalAs(UnmanagedType.LPWStr)]
+            public string pszName;
+            public uint dwClass;
+            public uint dwFlags;
+        }
+
+        const uint BCRYPT_CIPHER_OPERATION = 0x00000001;
+        const uint BCRYPT_HASH_OPERATION = 0x00000002;
+        const uint BCRYPT_ASYMMETRIC_ENCRYPTION_OPERATION = 0x00000004;
+        const uint BCRYPT_SECRET_AGREEMENT_OPERATION = 0x00000008;
+        const uint BCRYPT_SIGNATURE_OPERATION = 0x00000010;
+        const uint BCRYPT_RNG_OPERATION = 0x00000020;
+        const uint BCRYPT_KEY_DERIVATION_OPERATION = 0x00000040;
+        const uint BCRYPT_USE_SYSTEM_PREFERRED_RNG = 0x00000002;
+        const uint BCRYPT_ALG_HANDLE_HMAC_FLAG = 0x00000008;
+
+        [DllImport("bcrypt.dll", CharSet = CharSet.Unicode)]
+        public static extern int BCryptEnumAlgorithms(uint dwAlgOperations, out uint pAlgCount, out IntPtr ppAlgList, uint dwFlags);
+
+        [DllImport("bcrypt.dll")]
+        public static extern void BCryptFreeBuffer(IntPtr pvBuffer);
+
+        [DllImport("bcrypt.dll", CharSet = CharSet.Unicode)]
+        public static extern int BCryptOpenAlgorithmProvider(out IntPtr phAlgorithm, string pszAlgId, string pszImplementation, uint dwFlags);
+
+        [DllImport("bcrypt.dll")]
+        public static extern int BCryptCloseAlgorithmProvider(IntPtr hAlgorithm, uint dwFlags);
+
+        [DllImport("bcrypt.dll", CharSet = CharSet.Unicode)]
+        public static extern int BCryptGetProperty(IntPtr hObject, string pszProperty, byte[] pbOutput, int cbOutput, out int pcbResult, uint dwFlags);
+
+        [DllImport("bcrypt.dll")]
+        public static extern int BCryptGenRandom(IntPtr hAlgorithm, [Out] byte[] pbBuffer, int cbBuffer, uint dwFlags);
+
+        [DllImport("bcrypt.dll")]
+        public static extern int BCryptCreateHash(IntPtr hAlgorithm, out IntPtr phHash, IntPtr pbHashObject, int cbHashObject, byte[] pbSecret, int cbSecret, uint dwFlags);
+
+        [DllImport("bcrypt.dll")]
+        public static extern int BCryptHashData(IntPtr hHash, byte[] pbInput, int cbInput, uint dwFlags);
+
+        [DllImport("bcrypt.dll")]
+        public static extern int BCryptFinishHash(IntPtr hHash, [Out] byte[] pbOutput, int cbOutput, uint dwFlags);
+
+        [DllImport("bcrypt.dll")]
+        public static extern int BCryptDestroyHash(IntPtr hHash);
+
+        [DllImport("bcrypt.dll")]
+        public static extern int BCryptDeriveKeyPBKDF2(IntPtr hPrf, byte[] pbPassword, int cbPassword, byte[] pbSalt, int cbSalt, ulong cIterations, [Out] byte[] pbDerivedKey, int cbDerivedKey, uint dwFlags);
+
+        static string CngClassToString(uint dwClass) {
+            switch (dwClass) {
+                case 1: return "Cipher";
+                case 2: return "Hash";
+                case 3: return "AsymmetricEncryption";
+                case 4: return "SecretAgreement";
+                case 5: return "Signature";
+                case 6: return "RNG";
+                case 7: return "KeyDerivation";
+                default: return "Unknown (" + dwClass + ")";
+            }
+        }
+
+        static void CngAlgorithmsCmd(string operationFilter) {
+            IntPtr pAlgList = IntPtr.Zero;
+            try {
+                uint dwOperations = 0x7F;
+                string op = (operationFilter ?? "all").ToLowerInvariant().Trim();
+                if (op == "cipher") dwOperations = BCRYPT_CIPHER_OPERATION;
+                else if (op == "hash") dwOperations = BCRYPT_HASH_OPERATION;
+                else if (op == "asymmetric") dwOperations = BCRYPT_ASYMMETRIC_ENCRYPTION_OPERATION;
+                else if (op == "secret_agreement") dwOperations = BCRYPT_SECRET_AGREEMENT_OPERATION;
+                else if (op == "signature") dwOperations = BCRYPT_SIGNATURE_OPERATION;
+                else if (op == "rng") dwOperations = BCRYPT_RNG_OPERATION;
+                else if (op == "kdf") dwOperations = BCRYPT_KEY_DERIVATION_OPERATION;
+                else dwOperations = 0x7F;
+
+                uint algCount = 0;
+                int status = BCryptEnumAlgorithms(dwOperations, out algCount, out pAlgList, 0);
+                if (status != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"BCryptEnumAlgorithms failed with NTSTATUS: 0x{0:X8}\"}}", status));
+                    return;
+                }
+
+                int structSize = Marshal.SizeOf(typeof(BCRYPT_ALGORITHM_IDENTIFIER));
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"filter\": \"" + EscapeJson(op) + "\", \"count\": " + algCount + ", \"algorithms\": [");
+
+                int cipherCount = 0, hashCount = 0, asymCount = 0, secretAgreeCount = 0, sigCount = 0, rngCount = 0, kdfCount = 0;
+
+                for (uint i = 0; i < algCount; i++) {
+                    IntPtr ptr = (IntPtr)(pAlgList.ToInt64() + i * structSize);
+                    var alg = (BCRYPT_ALGORITHM_IDENTIFIER)Marshal.PtrToStructure(ptr, typeof(BCRYPT_ALGORITHM_IDENTIFIER));
+
+                    if (alg.dwClass == 1) cipherCount++;
+                    else if (alg.dwClass == 2) hashCount++;
+                    else if (alg.dwClass == 3) asymCount++;
+                    else if (alg.dwClass == 4) secretAgreeCount++;
+                    else if (alg.dwClass == 5) sigCount++;
+                    else if (alg.dwClass == 6) rngCount++;
+                    else if (alg.dwClass == 7) kdfCount++;
+
+                    if (i > 0) sb.Append(",");
+                    sb.Append(string.Format("{{\"name\": \"{0}\", \"class\": \"{1}\", \"classId\": {2}, \"flags\": {3}}}",
+                        EscapeJson(alg.pszName ?? ""), EscapeJson(CngClassToString(alg.dwClass)), alg.dwClass, alg.dwFlags));
+                }
+
+                sb.Append(string.Format("], \"summary\": {{\"ciphers\": {0}, \"hashes\": {1}, \"asymmetric\": {2}, \"secretAgreement\": {3}, \"signatures\": {4}, \"rng\": {5}, \"kdf\": {6}}}}}",
+                    cipherCount, hashCount, asymCount, secretAgreeCount, sigCount, rngCount, kdfCount));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (pAlgList != IntPtr.Zero) BCryptFreeBuffer(pAlgList);
+            }
+        }
+
+        static void CngRandomCmd(int byteLength, string format) {
+            try {
+                if (byteLength <= 0) byteLength = 32;
+                if (byteLength > 65536) byteLength = 65536;
+                string fmt = (format ?? "hex").ToLowerInvariant().Trim();
+                byte[] buf = new byte[byteLength];
+                int status = BCryptGenRandom(IntPtr.Zero, buf, byteLength, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+                if (status != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"BCryptGenRandom failed with NTSTATUS: 0x{0:X8}\"}}", status));
+                    return;
+                }
+
+                string dataOutput = "";
+                if (fmt == "base64") {
+                    dataOutput = "\"" + Convert.ToBase64String(buf) + "\"";
+                } else if (fmt == "bytes") {
+                    var sb = new StringBuilder("[");
+                    for (int i = 0; i < buf.Length; i++) {
+                        if (i > 0) sb.Append(",");
+                        sb.Append(buf[i]);
+                    }
+                    sb.Append("]");
+                    dataOutput = sb.ToString();
+                } else if (fmt == "int" || fmt == "integer") {
+                    if (byteLength == 1) dataOutput = buf[0].ToString();
+                    else if (byteLength == 2) dataOutput = BitConverter.ToUInt16(buf, 0).ToString();
+                    else if (byteLength <= 4) {
+                        byte[] padded = new byte[4];
+                        Array.Copy(buf, padded, Math.Min(byteLength, 4));
+                        dataOutput = BitConverter.ToUInt32(padded, 0).ToString();
+                    } else {
+                        byte[] padded = new byte[8];
+                        Array.Copy(buf, padded, Math.Min(byteLength, 8));
+                        dataOutput = BitConverter.ToUInt64(padded, 0).ToString();
+                    }
+                } else {
+                    fmt = "hex";
+                    var sb = new StringBuilder(byteLength * 2);
+                    for (int i = 0; i < buf.Length; i++) sb.Append(buf[i].ToString("x2"));
+                    dataOutput = "\"" + sb.ToString() + "\"";
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"byteLength\": {0}, \"format\": \"{1}\", \"data\": {2}, \"entropySource\": \"BCryptGenRandom (BCRYPT_USE_SYSTEM_PREFERRED_RNG)\"}}",
+                    byteLength, fmt, dataOutput));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void CngHashCmd(string algorithm, string data, bool isFilePath, string hmacKey) {
+            IntPtr hAlg = IntPtr.Zero;
+            IntPtr hHash = IntPtr.Zero;
+            try {
+                string alg = (algorithm ?? "SHA256").ToUpperInvariant().Trim();
+                if (alg != "SHA256" && alg != "SHA384" && alg != "SHA512" && alg != "SHA1" && alg != "MD5") {
+                    alg = "SHA256";
+                }
+
+                bool isHmac = !string.IsNullOrEmpty(hmacKey);
+                uint openFlags = isHmac ? BCRYPT_ALG_HANDLE_HMAC_FLAG : 0;
+                int status = BCryptOpenAlgorithmProvider(out hAlg, alg, null, openFlags);
+                if (status != 0 || hAlg == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"BCryptOpenAlgorithmProvider failed with NTSTATUS: 0x{0:X8}\"}}", status));
+                    return;
+                }
+
+                byte[] secretBytes = null;
+                int secretLen = 0;
+                if (isHmac) {
+                    secretBytes = Encoding.UTF8.GetBytes(hmacKey);
+                    secretLen = secretBytes.Length;
+                }
+
+                status = BCryptCreateHash(hAlg, out hHash, IntPtr.Zero, 0, secretBytes, secretLen, 0);
+                if (status != 0 || hHash == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"BCryptCreateHash failed with NTSTATUS: 0x{0:X8}\"}}", status));
+                    return;
+                }
+
+                long bytesHashed = 0;
+                var sw = Stopwatch.StartNew();
+
+                if (isFilePath) {
+                    if (!File.Exists(data)) {
+                        Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"File not found: {0}\"}}", EscapeJson(data)));
+                        return;
+                    }
+                    byte[] fileBuf = new byte[65536];
+                    using (var fs = new FileStream(data, FileMode.Open, FileAccess.Read, FileShare.Read)) {
+                        int read;
+                        while ((read = fs.Read(fileBuf, 0, fileBuf.Length)) > 0) {
+                            BCryptHashData(hHash, fileBuf, read, 0);
+                            bytesHashed += read;
+                        }
+                    }
+                } else {
+                    byte[] inputBytes = Encoding.UTF8.GetBytes(data ?? "");
+                    if (inputBytes.Length > 0) {
+                        BCryptHashData(hHash, inputBytes, inputBytes.Length, 0);
+                    }
+                    bytesHashed = inputBytes.Length;
+                }
+
+                byte[] hashLengthBuf = new byte[4];
+                int resLen;
+                int getPropStatus = BCryptGetProperty(hAlg, "HashDigestLength", hashLengthBuf, 4, out resLen, 0);
+                int digestLen = 32;
+                if (getPropStatus == 0) {
+                    digestLen = BitConverter.ToInt32(hashLengthBuf, 0);
+                } else {
+                    if (alg == "SHA512") digestLen = 64;
+                    else if (alg == "SHA384") digestLen = 48;
+                    else if (alg == "SHA1") digestLen = 20;
+                    else if (alg == "MD5") digestLen = 16;
+                    else digestLen = 32;
+                }
+
+                byte[] digest = new byte[digestLen];
+                status = BCryptFinishHash(hHash, digest, digestLen, 0);
+                sw.Stop();
+
+                if (status != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"BCryptFinishHash failed with NTSTATUS: 0x{0:X8}\"}}", status));
+                    return;
+                }
+
+                var sbHex = new StringBuilder(digestLen * 2);
+                for (int i = 0; i < digest.Length; i++) sbHex.Append(digest[i].ToString("x2"));
+                string hex = sbHex.ToString();
+                string b64 = Convert.ToBase64String(digest);
+
+                Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{{\"success\": true, \"algorithm\": \"{0}\", \"isHmac\": {1}, \"digestHex\": \"{2}\", \"digestBase64\": \"{3}\", \"digestBytes\": {4}, \"bytesHashed\": {5}, \"isFilePath\": {6}, \"elapsedMs\": {7}}}",
+                    alg, isHmac.ToString().ToLowerInvariant(), hex, b64, digestLen, bytesHashed, isFilePath.ToString().ToLowerInvariant(), sw.ElapsedMilliseconds));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (hHash != IntPtr.Zero) BCryptDestroyHash(hHash);
+                if (hAlg != IntPtr.Zero) BCryptCloseAlgorithmProvider(hAlg, 0);
+            }
+        }
+
+        static void CngPbkdf2Cmd(string password, string salt, int iterations, int keyLength, string prf) {
+            IntPtr hPrf = IntPtr.Zero;
+            try {
+                string prfAlg = (prf ?? "SHA256").ToUpperInvariant().Trim();
+                if (prfAlg != "SHA256" && prfAlg != "SHA384" && prfAlg != "SHA512" && prfAlg != "SHA1") {
+                    prfAlg = "SHA256";
+                }
+
+                if (iterations <= 0) iterations = 100000;
+                if (iterations > 10000000) iterations = 10000000;
+                if (keyLength <= 0) keyLength = 32;
+                if (keyLength > 1024) keyLength = 1024;
+
+                int status = BCryptOpenAlgorithmProvider(out hPrf, prfAlg, null, BCRYPT_ALG_HANDLE_HMAC_FLAG);
+                if (status != 0 || hPrf == IntPtr.Zero) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"BCryptOpenAlgorithmProvider for PRF failed with NTSTATUS: 0x{0:X8}\"}}", status));
+                    return;
+                }
+
+                byte[] passBytes = Encoding.UTF8.GetBytes(password ?? "");
+                byte[] saltBytes;
+                if (string.IsNullOrEmpty(salt)) {
+                    saltBytes = new byte[16];
+                    BCryptGenRandom(IntPtr.Zero, saltBytes, 16, BCRYPT_USE_SYSTEM_PREFERRED_RNG);
+                } else {
+                    saltBytes = Encoding.UTF8.GetBytes(salt);
+                }
+
+                byte[] derivedKey = new byte[keyLength];
+                var sw = Stopwatch.StartNew();
+                status = BCryptDeriveKeyPBKDF2(hPrf, passBytes, passBytes.Length, saltBytes, saltBytes.Length, (ulong)iterations, derivedKey, keyLength, 0);
+                sw.Stop();
+
+                if (status != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"BCryptDeriveKeyPBKDF2 failed with NTSTATUS: 0x{0:X8}\"}}", status));
+                    return;
+                }
+
+                var sbKeyHex = new StringBuilder(keyLength * 2);
+                for (int i = 0; i < derivedKey.Length; i++) sbKeyHex.Append(derivedKey[i].ToString("x2"));
+                string keyHex = sbKeyHex.ToString();
+                string keyB64 = Convert.ToBase64String(derivedKey);
+
+                var sbSaltHex = new StringBuilder(saltBytes.Length * 2);
+                for (int i = 0; i < saltBytes.Length; i++) sbSaltHex.Append(saltBytes[i].ToString("x2"));
+                string saltHex = sbSaltHex.ToString();
+                string saltB64 = Convert.ToBase64String(saltBytes);
+
+                Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{{\"success\": true, \"prf\": \"{0}\", \"iterations\": {1}, \"keyLength\": {2}, \"keyHex\": \"{3}\", \"keyBase64\": \"{4}\", \"saltHex\": \"{5}\", \"saltBase64\": \"{6}\", \"elapsedMs\": {7}}}",
+                    prfAlg, iterations, keyLength, keyHex, keyB64, saltHex, saltB64, sw.ElapsedMilliseconds));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (hPrf != IntPtr.Zero) BCryptCloseAlgorithmProvider(hPrf, 0);
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -25127,6 +25450,30 @@ namespace GeminiSuperDesktop {
                 if (args.Length >= 4) int.TryParse(args[3], out sr);
                 if (args.Length >= 5) int.TryParse(args[4], out ch);
                 MfTranscodeAudioCmd(src, dst, sr, ch);
+            } else if (cmd == "cng_algorithms" || cmd == "cng-algorithms") {
+                string filter = args.Length >= 2 ? args[1] : "all";
+                CngAlgorithmsCmd(filter);
+            } else if (cmd == "cng_random" || cmd == "cng-random") {
+                int bytes = 32;
+                if (args.Length >= 2) int.TryParse(args[1], out bytes);
+                string fmt = args.Length >= 3 ? args[2] : "hex";
+                CngRandomCmd(bytes, fmt);
+            } else if (cmd == "cng_hash" || cmd == "cng-hash") {
+                string alg = args.Length >= 2 ? args[1] : "SHA256";
+                string data = args.Length >= 3 ? args[2] : "";
+                bool isFile = false;
+                if (args.Length >= 4) bool.TryParse(args[3], out isFile);
+                string hmac = args.Length >= 5 ? args[4] : "";
+                CngHashCmd(alg, data, isFile, hmac);
+            } else if (cmd == "cng_pbkdf2" || cmd == "cng-pbkdf2") {
+                string pwd = args.Length >= 2 ? args[1] : "";
+                string salt = args.Length >= 3 ? args[2] : "";
+                int iters = 100000;
+                if (args.Length >= 4) int.TryParse(args[3], out iters);
+                int keyLen = 32;
+                if (args.Length >= 5) int.TryParse(args[4], out keyLen);
+                string prf = args.Length >= 6 ? args[5] : "SHA256";
+                CngPbkdf2Cmd(pwd, salt, iters, keyLen, prf);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
