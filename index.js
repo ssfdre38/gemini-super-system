@@ -5403,6 +5403,53 @@ const SYSTEM_TOOLS = [
           },
           required: ["source"]
         }
+      },
+      {
+        name: "super_esent_system_parameters",
+        description: "Queries Windows Extensible Storage Engine (ESENT / JET Blue) system parameters, cache limits, page sizes, and engine configuration via esent.h / esent.dll (JetGetSystemParameterW). Audits database page size, max cache size, max instances, configuration mode, and file caching policies.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_esent_database_info",
+        description: "Inspects low-level header, state, page size, total pages, and integrity metrics of an ESENT database file (.edb) via esent.h / esent.dll (JetGetDatabaseFileInfoW). Discovers whether database is in CleanShutdown or DirtyShutdown state, version, and page geometry.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            databasePath: {
+              type: "string",
+              description: "Full file path to the target .edb database file (e.g. C:\\Windows\\SoftwareDistribution\\DataStore\\DataStore.edb)"
+            }
+          },
+          required: ["databasePath"]
+        }
+      },
+      {
+        name: "super_esent_audit_databases",
+        description: "Discovers and audits known Windows OS ESENT database stores across the system (Windows Update DataStore.edb, Windows Search Windows.edb, Cryptographic Catalog CatDB, and AppCache). Interrogates file presence, sizes, page sizes, shutdown states, and active lock contention.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_esent_transient_store",
+        description: "Creates an isolated transient ISAM database, defines schema (Id, Key, Payload, Timestamp), executes ACID transactional inserts, and reads back records via bare-metal ESENT (esent.h / esent.dll). Benchmarks transaction throughput and guarantees ACID persistence.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            payload: {
+              type: "string",
+              description: "Optional text payload for inserted ISAM records (default: Sovereign ISAM Payload)"
+            },
+            recordCount: {
+              type: "integer",
+              description: "Number of records to insert and verify (default: 3, max: 100)"
+            }
+          }
+        }
       }
 ];
 
@@ -9408,6 +9455,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🔎 [Windows XmlLite Streaming Query]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_esent_system_parameters") {
+    const res = await orch.getEsentSystemParameters();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚙️ [Windows ESENT System Parameters]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_esent_database_info") {
+    const res = await orch.getEsentDatabaseInfo(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💾 [Windows ESENT Database Header & State]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_esent_audit_databases") {
+    const res = await orch.auditEsentDatabases();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔍 [Windows ESENT System Database Stores Audit]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_esent_transient_store") {
+    const res = await orch.runEsentTransientStore(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `⚡ [Windows ESENT Transient ISAM Store & Transaction]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

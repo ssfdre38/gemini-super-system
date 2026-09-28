@@ -5719,10 +5719,76 @@ async function run() {
     assert.strictEqual(res.matches[0].attributes.id, "102");
   });
 
-  it("All 284 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 80: Windows Extensible Storage Engine (ESENT / JET Blue) Subsystem (esent.h / esent.dll)
+  console.log("\n\x1b[1m[Suite 80: Windows Extensible Storage Engine (ESENT) Subsystem]\x1b[0m");
+
+  await itAsync("getEsentSystemParameters queries engine configuration, page sizes, and cache telemetry", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    const res = await kb.getEsentSystemParameters();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getEsentSystemParameters failed: " + JSON.stringify(res));
+    assert.strictEqual(typeof res.subsystem, "string");
+    assert(typeof res.databasePageSize === "number" && res.databasePageSize > 0);
+    assert(typeof res.maxInstances === "number");
+    assert(typeof res.configuration === "number");
+    assert(typeof res.is64Bit === "boolean");
+    assert(typeof res.engineVersion === "string");
+  });
+
+  await itAsync("getEsentDatabaseInfo inspects database header, state, page geometry, and page count", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    const dbPath = "C:\\Windows\\SoftwareDistribution\\DataStore\\DataStore.edb";
+    const res = await kb.getEsentDatabaseInfo({ databasePath: dbPath });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getEsentDatabaseInfo failed: " + JSON.stringify(res));
+    assert.strictEqual(res.exists, true);
+    assert(typeof res.fileSizeBytes === "number" && res.fileSizeBytes > 0);
+    assert(typeof res.pageSize === "number" && res.pageSize > 0);
+    assert(typeof res.databaseState === "string");
+    assert(typeof res.totalPages === "number" && res.totalPages > 0);
+  });
+
+  await itAsync("auditEsentDatabases discovers and audits known system EDB database stores", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    const res = await kb.auditEsentDatabases();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "auditEsentDatabases failed: " + JSON.stringify(res));
+    assert(Array.isArray(res.databases) && res.databases.length > 0);
+    assert(typeof res.auditedCount === "number" && res.auditedCount > 0);
+    const wu = res.databases.find(d => d.name === "WindowsUpdate");
+    assert(wu !== undefined);
+    assert.strictEqual(wu.exists, true);
+  });
+
+  await itAsync("runEsentTransientStore creates transient ISAM database, executes ACID inserts and reads back records", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    const res = await kb.runEsentTransientStore({ payload: "Test ISAM Verification 2026", recordCount: 3 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "runEsentTransientStore failed: " + JSON.stringify(res));
+    assert.strictEqual(res.transactionCommitted, true);
+    assert.strictEqual(res.recordsInserted, 3);
+    assert.strictEqual(res.recordsRead, 3);
+    assert.strictEqual(res.sampleKey, "item-0");
+    assert(typeof res.samplePayload === "string" && res.samplePayload.includes("Test ISAM Verification"));
+    assert.strictEqual(res.databaseEngine, "ESENT ISAM");
+  });
+
+  it("All 288 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 284);
+    assert.strictEqual(SYSTEM_TOOLS.length, 288);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -5940,6 +6006,10 @@ async function run() {
     assert(toolNames.includes("super_xmllite_write"));
     assert(toolNames.includes("super_xmllite_inspect"));
     assert(toolNames.includes("super_xmllite_query"));
+    assert(toolNames.includes("super_esent_system_parameters"));
+    assert(toolNames.includes("super_esent_database_info"));
+    assert(toolNames.includes("super_esent_audit_databases"));
+    assert(toolNames.includes("super_esent_transient_store"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

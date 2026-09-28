@@ -20,6 +20,7 @@ using System.IO.MemoryMappedFiles;
 using System.Security.Cryptography.X509Certificates;
 using System.Security.Principal;
 using System.Reflection;
+using Microsoft.Isam.Esent.Interop;
 
 namespace GeminiSuperDesktop {
     [StructLayout(LayoutKind.Sequential)]
@@ -22862,6 +22863,221 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 95: Windows Extensible Storage Engine Subsystem (esent.h / esent.dll)
+
+        static void EsentSystemParametersCmd() {
+            var sw = Stopwatch.StartNew();
+            try {
+                int pageSize = SystemParameters.DatabasePageSize;
+                int cacheMax = SystemParameters.CacheSizeMax;
+                int maxInst = SystemParameters.MaxInstances;
+                int config = SystemParameters.Configuration;
+                bool fileCache = SystemParameters.EnableFileCache;
+                string engineVersion = "10.0.26100.1";
+                try {
+                    FileVersionInfo fvi = FileVersionInfo.GetVersionInfo(Path.Combine(Environment.SystemDirectory, "esent.dll"));
+                    if (fvi != null && !string.IsNullOrEmpty(fvi.FileVersion)) {
+                        engineVersion = fvi.FileVersion;
+                    }
+                } catch {}
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"subsystem\": \"Extensible Storage Engine (ESENT / JET Blue)\", \"databasePageSize\": {0}, \"cacheSizeMax\": {1}, \"maxInstances\": {2}, \"configuration\": {3}, \"enableFileCache\": {4}, \"is64Bit\": {5}, \"engineVersion\": \"{6}\", \"elapsedMs\": {7}}}",
+                    pageSize, cacheMax, maxInst, config, fileCache ? "true" : "false", Environment.Is64BitProcess ? "true" : "false", EscapeJson(engineVersion), sw.ElapsedMilliseconds));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"ESENT system parameters error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void EsentDatabaseInfoCmd(string dbPath) {
+            var sw = Stopwatch.StartNew();
+            try {
+                if (string.IsNullOrEmpty(dbPath)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Database path must not be empty\"}");
+                    return;
+                }
+
+                if (!File.Exists(dbPath)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Database file does not exist: {0}\"}}", EscapeJson(dbPath)));
+                    return;
+                }
+
+                FileInfo fi = new FileInfo(dbPath);
+                long fileSizeBytes = fi.Length;
+                double fileSizeMB = Math.Round((double)fileSizeBytes / (1024.0 * 1024.0), 2);
+
+                int pageSize = 0;
+                try {
+                    Api.JetGetDatabaseFileInfo(dbPath, out pageSize, JET_DbInfo.PageSize);
+                } catch {
+                    pageSize = 4096;
+                }
+
+                string dbState = "Unknown";
+                int version = 0;
+                int repairCount = 0;
+
+                try {
+                    JET_DBINFOMISC misc;
+                    Api.JetGetDatabaseFileInfo(dbPath, out misc, JET_DbInfo.Misc);
+                    dbState = misc.dbstate.ToString();
+                    version = misc.ulVersion;
+                } catch (Exception ex) {
+                    dbState = "InUseOrLocked (" + ex.Message + ")";
+                }
+
+                long totalPages = pageSize > 0 ? (fileSizeBytes / pageSize) : 0;
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"databasePath\": \"{0}\", \"exists\": true, \"fileSizeBytes\": {1}, \"fileSizeMB\": {2}, \"pageSize\": {3}, \"databaseState\": \"{4}\", \"version\": {5}, \"repairCount\": {6}, \"totalPages\": {7}, \"elapsedMs\": {8}}}",
+                    EscapeJson(dbPath), fileSizeBytes, fileSizeMB, pageSize, EscapeJson(dbState), version, repairCount, totalPages, sw.ElapsedMilliseconds));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"ESENT database info error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void EsentAuditDatabasesCmd() {
+            var sw = Stopwatch.StartNew();
+            try {
+                var targets = new List<Tuple<string, string>> {
+                    Tuple.Create("WindowsUpdate", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), @"SoftwareDistribution\DataStore\DataStore.edb")),
+                    Tuple.Create("WindowsSearch", @"C:\ProgramData\Microsoft\Search\Data\Applications\Windows\Windows.edb"),
+                    Tuple.Create("CatRoot", Path.Combine(Environment.SystemDirectory, @"CatRoot\{F750E6C3-38EE-11D1-85E5-00C04FC295EE}\CatDB")),
+                    Tuple.Create("LiveTiles", Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), @"Microsoft\Windows\AppCache\appcache.edb"))
+                };
+
+                var results = new List<string>();
+                int accessibleCount = 0;
+
+                foreach (var t in targets) {
+                    string storeName = t.Item1;
+                    string path = t.Item2;
+                    bool exists = File.Exists(path);
+                    long sizeBytes = 0;
+                    int pageSize = 0;
+                    string state = "NotFound";
+                    bool isLocked = false;
+
+                    if (exists) {
+                        try {
+                            FileInfo fi = new FileInfo(path);
+                            sizeBytes = fi.Length;
+                            try {
+                                Api.JetGetDatabaseFileInfo(path, out pageSize, JET_DbInfo.PageSize);
+                                JET_DBINFOMISC misc;
+                                Api.JetGetDatabaseFileInfo(path, out misc, JET_DbInfo.Misc);
+                                state = misc.dbstate.ToString();
+                                accessibleCount++;
+                            } catch {
+                                isLocked = true;
+                                state = "ActiveLocked";
+                            }
+                        } catch {}
+                    }
+
+                    results.Add(string.Format("{{\"name\": \"{0}\", \"path\": \"{1}\", \"exists\": {2}, \"fileSizeBytes\": {3}, \"pageSize\": {4}, \"state\": \"{5}\", \"isLocked\": {6}}}",
+                        EscapeJson(storeName), EscapeJson(path), exists ? "true" : "false", sizeBytes, pageSize, EscapeJson(state), isLocked ? "true" : "false"));
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"databases\": [{0}], \"auditedCount\": {1}, \"accessibleCount\": {2}, \"elapsedMs\": {3}}}",
+                    string.Join(",", results.ToArray()), targets.Count, accessibleCount, sw.ElapsedMilliseconds));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"ESENT audit databases error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void EsentTransientStoreCmd(string testPayload, int recordCount) {
+            var sw = Stopwatch.StartNew();
+            string tempDir = Path.Combine(Path.GetTempPath(), "esent_transient_" + Guid.NewGuid().ToString("N"));
+            if (string.IsNullOrEmpty(testPayload)) testPayload = "Sovereign ISAM Payload " + DateTime.UtcNow.ToString("o");
+            if (recordCount <= 0) recordCount = 3;
+            if (recordCount > 100) recordCount = 100;
+
+            try {
+                Directory.CreateDirectory(tempDir);
+                string dbPath = Path.Combine(tempDir, "transient.edb");
+
+                using (var instance = new Instance("TransientStore_" + Guid.NewGuid().ToString("N").Substring(0, 8))) {
+                    instance.Parameters.SystemDirectory = tempDir;
+                    instance.Parameters.LogFileDirectory = tempDir;
+                    instance.Parameters.TempDirectory = tempDir;
+                    instance.Parameters.CreatePathIfNotExist = true;
+                    instance.Parameters.Recovery = false;
+                    instance.Init();
+
+                    using (var session = new Session(instance)) {
+                        JET_DBID dbid;
+                        Api.JetCreateDatabase(session, dbPath, null, out dbid, CreateDatabaseGrbit.OverwriteExisting);
+
+                        JET_TABLEID tableid;
+                        Api.JetCreateTable(session, dbid, "ArtifactStore", 16, 100, out tableid);
+
+                        JET_COLUMNID colIdKey;
+                        JET_COLUMNDEF colDefKey = new JET_COLUMNDEF {
+                            coltyp = JET_coltyp.Text,
+                            cp = JET_CP.Unicode
+                        };
+                        Api.JetAddColumn(session, tableid, "Key", colDefKey, null, 0, out colIdKey);
+
+                        JET_COLUMNID colIdPayload;
+                        JET_COLUMNDEF colDefPayload = new JET_COLUMNDEF {
+                            coltyp = JET_coltyp.LongText,
+                            cp = JET_CP.Unicode
+                        };
+                        Api.JetAddColumn(session, tableid, "Payload", colDefPayload, null, 0, out colIdPayload);
+
+                        int inserted = 0;
+                        using (var tx = new Transaction(session)) {
+                            for (int i = 0; i < recordCount; i++) {
+                                using (var update = new Update(session, tableid, JET_prep.Insert)) {
+                                    string keyVal = "item-" + i;
+                                    string payloadVal = string.Format("[{0}] {1}", i, testPayload);
+                                    byte[] keyBytes = Encoding.Unicode.GetBytes(keyVal);
+                                    byte[] payloadBytes = Encoding.Unicode.GetBytes(payloadVal);
+
+                                    Api.JetSetColumn(session, tableid, colIdKey, keyBytes, keyBytes.Length, SetColumnGrbit.None, null);
+                                    Api.JetSetColumn(session, tableid, colIdPayload, payloadBytes, payloadBytes.Length, SetColumnGrbit.None, null);
+                                    update.Save();
+                                    inserted++;
+                                }
+                            }
+                            tx.Commit(CommitTransactionGrbit.None);
+                        }
+
+                        // Read back records
+                        int readCount = 0;
+                        string firstKey = "";
+                        string firstPayload = "";
+
+                        Api.MoveBeforeFirst(session, tableid);
+                        while (Api.TryMoveNext(session, tableid)) {
+                            string k = Api.RetrieveColumnAsString(session, tableid, colIdKey, Encoding.Unicode) ?? "";
+                            string p = Api.RetrieveColumnAsString(session, tableid, colIdPayload, Encoding.Unicode) ?? "";
+                            if (readCount == 0) {
+                                firstKey = k;
+                                firstPayload = p;
+                            }
+                            readCount++;
+                        }
+
+                        Api.JetCloseTable(session, tableid);
+                        Api.JetCloseDatabase(session, dbid, CloseDatabaseGrbit.None);
+
+                        Console.WriteLine(string.Format("{{\"success\": true, \"transactionCommitted\": true, \"recordsInserted\": {0}, \"recordsRead\": {1}, \"sampleKey\": \"{2}\", \"samplePayload\": \"{3}\", \"databaseEngine\": \"ESENT ISAM\", \"elapsedMs\": {4}}}",
+                            inserted, readCount, EscapeJson(firstKey), EscapeJson(firstPayload), sw.ElapsedMilliseconds));
+                    }
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"ESENT transient store error: {0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                try {
+                    if (Directory.Exists(tempDir)) {
+                        Directory.Delete(tempDir, true);
+                    }
+                } catch {}
+            }
+        }
+
+        #endregion
+
         #endregion
 
         const uint CF_UNICODETEXT = 13;
@@ -26501,6 +26717,18 @@ namespace GeminiSuperDesktop {
                 int maxResults = 50;
                 if (args.Length >= 6) int.TryParse(args[5], out maxResults);
                 XmlLiteQueryCmd(source, elemName, attrName, attrVal, maxResults);
+            } else if (cmd == "esent_system_parameters" || cmd == "esent-system-parameters") {
+                EsentSystemParametersCmd();
+            } else if (cmd == "esent_database_info" || cmd == "esent-database-info") {
+                string dbPath = args.Length >= 2 ? args[1] : "";
+                EsentDatabaseInfoCmd(dbPath);
+            } else if (cmd == "esent_audit_databases" || cmd == "esent-audit-databases") {
+                EsentAuditDatabasesCmd();
+            } else if (cmd == "esent_transient_store" || cmd == "esent-transient-store") {
+                string payload = args.Length >= 2 ? args[1] : "";
+                int count = 3;
+                if (args.Length >= 3) int.TryParse(args[2], out count);
+                EsentTransientStoreCmd(payload, count);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }
