@@ -21894,6 +21894,313 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 92 - Windows Event Tracing for Windows (ETW) Subsystem (evntrace.h / advapi32.dll / Etw partition)
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct WNODE_HEADER_ETW {
+            public uint BufferSize;
+            public uint ProviderId;
+            public ulong HistoricalContext;
+            public ulong TimeStamp;
+            public Guid Guid;
+            public uint ClientContext;
+            public uint Flags;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct EVENT_TRACE_PROPERTIES_ETW {
+            public WNODE_HEADER_ETW Wnode;
+            public uint BufferSize;
+            public uint MinimumBuffers;
+            public uint MaximumBuffers;
+            public uint MaximumFileSize;
+            public uint LogFileMode;
+            public uint FlushTimer;
+            public uint EnableFlags;
+            public int AgeLimit;
+            public uint NumberOfBuffers;
+            public uint FreeBuffers;
+            public uint EventsLost;
+            public uint BuffersWritten;
+            public uint LogBuffersLost;
+            public uint RealTimeBuffersLost;
+            public IntPtr LoggerThreadId;
+            public uint LogFileNameOffset;
+            public uint LoggerNameOffset;
+        }
+
+        const uint EVENT_TRACE_CONTROL_QUERY = 0;
+        const uint EVENT_TRACE_CONTROL_STOP = 1;
+        const uint EVENT_TRACE_CONTROL_UPDATE = 2;
+        const uint EVENT_TRACE_CONTROL_FLUSH = 3;
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern int QueryAllTracesW([In, Out] IntPtr[] PropertyArray, uint PropertyArrayCount, out uint SessionCount);
+
+        [DllImport("advapi32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
+        static extern int ControlTraceW(ulong TraceHandle, string InstanceName, IntPtr Properties, uint ControlCode);
+
+        [DllImport("advapi32.dll", SetLastError = true)]
+        static extern int EnumerateTraceGuidsEx(int TraceGuidInfoClass, IntPtr InBuffer, uint InBufferSize, IntPtr OutBuffer, uint OutBufferSize, out uint ReturnLength);
+
+        static void EtwSessionsCmd() {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            const int maxSessions = 64;
+            const int bufSize = 2048;
+            int propSize = Marshal.SizeOf(typeof(EVENT_TRACE_PROPERTIES_ETW));
+
+            IntPtr[] ptrs = new IntPtr[maxSessions];
+            for (int i = 0; i < maxSessions; i++) {
+                ptrs[i] = Marshal.AllocHGlobal(bufSize);
+                byte[] zeros = new byte[bufSize];
+                Marshal.Copy(zeros, 0, ptrs[i], bufSize);
+
+                var p = new EVENT_TRACE_PROPERTIES_ETW();
+                p.Wnode.BufferSize = (uint)bufSize;
+                p.Wnode.Flags = 0x00020000; // WNODE_FLAG_TRACED_GUID
+                p.LoggerNameOffset = (uint)propSize;
+                p.LogFileNameOffset = (uint)(propSize + 512);
+                Marshal.StructureToPtr(p, ptrs[i], false);
+            }
+
+            try {
+                uint sessionCount = 0;
+                int status = QueryAllTracesW(ptrs, (uint)maxSessions, out sessionCount);
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"status\": " + status + ", ");
+                sb.Append(string.Format("\"sessionCount\": {0}, \"sessions\": [", sessionCount));
+
+                uint totalBuffers = 0;
+                uint totalFreeBuffers = 0;
+                uint totalBuffersWritten = 0;
+                uint totalEventsLost = 0;
+
+                for (uint i = 0; i < sessionCount; i++) {
+                    var s = (EVENT_TRACE_PROPERTIES_ETW)Marshal.PtrToStructure(ptrs[i], typeof(EVENT_TRACE_PROPERTIES_ETW));
+                    string sName = "";
+                    if (s.LoggerNameOffset > 0 && s.LoggerNameOffset < bufSize) {
+                        sName = Marshal.PtrToStringUni(new IntPtr(ptrs[i].ToInt64() + s.LoggerNameOffset)) ?? "";
+                    }
+                    string logFile = "";
+                    if (s.LogFileNameOffset > 0 && s.LogFileNameOffset < bufSize) {
+                        logFile = Marshal.PtrToStringUni(new IntPtr(ptrs[i].ToInt64() + s.LogFileNameOffset)) ?? "";
+                    }
+
+                    totalBuffers += s.NumberOfBuffers;
+                    totalFreeBuffers += s.FreeBuffers;
+                    totalBuffersWritten += s.BuffersWritten;
+                    totalEventsLost += s.EventsLost;
+
+                    if (i > 0) sb.Append(",");
+                    sb.Append("{");
+                    sb.Append(string.Format("\"sessionName\": \"{0}\", ", EscapeJson(sName)));
+                    sb.Append(string.Format("\"logFileName\": \"{0}\", ", EscapeJson(logFile)));
+                    sb.Append(string.Format("\"bufferSizeKb\": {0}, ", s.BufferSize));
+                    sb.Append(string.Format("\"minBuffers\": {0}, ", s.MinimumBuffers));
+                    sb.Append(string.Format("\"maxBuffers\": {0}, ", s.MaximumBuffers));
+                    sb.Append(string.Format("\"numberOfBuffers\": {0}, ", s.NumberOfBuffers));
+                    sb.Append(string.Format("\"freeBuffers\": {0}, ", s.FreeBuffers));
+                    sb.Append(string.Format("\"buffersWritten\": {0}, ", s.BuffersWritten));
+                    sb.Append(string.Format("\"eventsLost\": {0}, ", s.EventsLost));
+                    sb.Append(string.Format("\"logBuffersLost\": {0}, ", s.LogBuffersLost));
+                    sb.Append(string.Format("\"realTimeBuffersLost\": {0}, ", s.RealTimeBuffersLost));
+                    sb.Append(string.Format("\"maximumFileSizeMb\": {0}, ", s.MaximumFileSize));
+                    sb.Append(string.Format("\"logFileMode\": {0}, ", s.LogFileMode));
+                    sb.Append(string.Format("\"logFileModeHex\": \"0x{0:X8}\", ", s.LogFileMode));
+                    sb.Append(string.Format("\"flushTimer\": {0}, ", s.FlushTimer));
+                    sb.Append(string.Format("\"ageLimit\": {0}, ", s.AgeLimit));
+                    sb.Append(string.Format("\"loggerThreadId\": {0}", s.LoggerThreadId.ToInt64()));
+                    sb.Append("}");
+                }
+
+                sb.Append("], ");
+                sb.Append(string.Format("\"totalBuffers\": {0}, \"totalFreeBuffers\": {1}, \"totalBuffersWritten\": {2}, \"totalEventsLost\": {3}, \"elapsedMs\": {4}}}",
+                    totalBuffers, totalFreeBuffers, totalBuffersWritten, totalEventsLost, sw.ElapsedMilliseconds));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                for (int i = 0; i < maxSessions; i++) {
+                    if (ptrs[i] != IntPtr.Zero) Marshal.FreeHGlobal(ptrs[i]);
+                }
+            }
+        }
+
+        static void EtwSessionQueryCmd(string sessionName) {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            if (string.IsNullOrEmpty(sessionName)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Session name is required\"}");
+                return;
+            }
+
+            const int bufSize = 2048;
+            int propSize = Marshal.SizeOf(typeof(EVENT_TRACE_PROPERTIES_ETW));
+            IntPtr ptr = Marshal.AllocHGlobal(bufSize);
+            byte[] zeros = new byte[bufSize];
+            Marshal.Copy(zeros, 0, ptr, bufSize);
+
+            var p = new EVENT_TRACE_PROPERTIES_ETW();
+            p.Wnode.BufferSize = (uint)bufSize;
+            p.Wnode.Flags = 0x00020000;
+            p.LoggerNameOffset = (uint)propSize;
+            p.LogFileNameOffset = (uint)(propSize + 512);
+            Marshal.StructureToPtr(p, ptr, false);
+
+            try {
+                int status = ControlTraceW(0, sessionName, ptr, EVENT_TRACE_CONTROL_QUERY);
+                if (status != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"sessionName\": \"{0}\", \"status\": {1}, \"error\": \"ControlTraceW query returned error code {1}\"}}",
+                        EscapeJson(sessionName), status));
+                    return;
+                }
+
+                var s = (EVENT_TRACE_PROPERTIES_ETW)Marshal.PtrToStructure(ptr, typeof(EVENT_TRACE_PROPERTIES_ETW));
+                string sName = "";
+                if (s.LoggerNameOffset > 0 && s.LoggerNameOffset < bufSize) {
+                    sName = Marshal.PtrToStringUni(new IntPtr(ptr.ToInt64() + s.LoggerNameOffset)) ?? "";
+                }
+                string logFile = "";
+                if (s.LogFileNameOffset > 0 && s.LogFileNameOffset < bufSize) {
+                    logFile = Marshal.PtrToStringUni(new IntPtr(ptr.ToInt64() + s.LogFileNameOffset)) ?? "";
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, ");
+                sb.Append(string.Format("\"sessionName\": \"{0}\", ", EscapeJson(string.IsNullOrEmpty(sName) ? sessionName : sName)));
+                sb.Append(string.Format("\"logFileName\": \"{0}\", ", EscapeJson(logFile)));
+                sb.Append(string.Format("\"bufferSizeKb\": {0}, ", s.BufferSize));
+                sb.Append(string.Format("\"minBuffers\": {0}, ", s.MinimumBuffers));
+                sb.Append(string.Format("\"maxBuffers\": {0}, ", s.MaximumBuffers));
+                sb.Append(string.Format("\"numberOfBuffers\": {0}, ", s.NumberOfBuffers));
+                sb.Append(string.Format("\"freeBuffers\": {0}, ", s.FreeBuffers));
+                sb.Append(string.Format("\"buffersWritten\": {0}, ", s.BuffersWritten));
+                sb.Append(string.Format("\"eventsLost\": {0}, ", s.EventsLost));
+                sb.Append(string.Format("\"logBuffersLost\": {0}, ", s.LogBuffersLost));
+                sb.Append(string.Format("\"realTimeBuffersLost\": {0}, ", s.RealTimeBuffersLost));
+                sb.Append(string.Format("\"maximumFileSizeMb\": {0}, ", s.MaximumFileSize));
+                sb.Append(string.Format("\"logFileMode\": {0}, ", s.LogFileMode));
+                sb.Append(string.Format("\"logFileModeHex\": \"0x{0:X8}\", ", s.LogFileMode));
+                sb.Append(string.Format("\"flushTimer\": {0}, ", s.FlushTimer));
+                sb.Append(string.Format("\"ageLimit\": {0}, ", s.AgeLimit));
+                sb.Append(string.Format("\"loggerThreadId\": {0}, ", s.LoggerThreadId.ToInt64()));
+                sb.Append(string.Format("\"elapsedMs\": {0}}}", sw.ElapsedMilliseconds));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (ptr != IntPtr.Zero) Marshal.FreeHGlobal(ptr);
+            }
+        }
+
+        static void EtwSessionFlushCmd(string sessionName) {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            if (string.IsNullOrEmpty(sessionName)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Session name is required\"}");
+                return;
+            }
+
+            const int bufSize = 2048;
+            int propSize = Marshal.SizeOf(typeof(EVENT_TRACE_PROPERTIES_ETW));
+            IntPtr ptr = Marshal.AllocHGlobal(bufSize);
+            byte[] zeros = new byte[bufSize];
+            Marshal.Copy(zeros, 0, ptr, bufSize);
+
+            var p = new EVENT_TRACE_PROPERTIES_ETW();
+            p.Wnode.BufferSize = (uint)bufSize;
+            p.Wnode.Flags = 0x00020000;
+            p.LoggerNameOffset = (uint)propSize;
+            p.LogFileNameOffset = (uint)(propSize + 512);
+            Marshal.StructureToPtr(p, ptr, false);
+
+            try {
+                int status = ControlTraceW(0, sessionName, ptr, EVENT_TRACE_CONTROL_FLUSH);
+                if (status != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"sessionName\": \"{0}\", \"status\": {1}, \"error\": \"ControlTraceW flush returned error code {1}\"}}",
+                        EscapeJson(sessionName), status));
+                    return;
+                }
+
+                var s = (EVENT_TRACE_PROPERTIES_ETW)Marshal.PtrToStructure(ptr, typeof(EVENT_TRACE_PROPERTIES_ETW));
+                Console.WriteLine(string.Format("{{\"success\": true, \"sessionName\": \"{0}\", \"flushed\": true, \"buffersWritten\": {1}, \"freeBuffers\": {2}, \"eventsLost\": {3}, \"elapsedMs\": {4}}}",
+                    EscapeJson(sessionName), s.BuffersWritten, s.FreeBuffers, s.EventsLost, sw.ElapsedMilliseconds));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (ptr != IntPtr.Zero) Marshal.FreeHGlobal(ptr);
+            }
+        }
+
+        static void EtwProvidersCmd(string filter, int maxResults) {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            if (maxResults <= 0) maxResults = 100;
+            string filterLower = string.IsNullOrEmpty(filter) || filter.Equals("all", StringComparison.OrdinalIgnoreCase) ? null : filter.ToLowerInvariant();
+
+            uint reqSize = 0;
+            int status = EnumerateTraceGuidsEx(0, IntPtr.Zero, 0, IntPtr.Zero, 0, out reqSize);
+            if (reqSize == 0) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"EnumerateTraceGuidsEx query returned size 0, status: {0}\"}}", status));
+                return;
+            }
+
+            IntPtr buf = Marshal.AllocHGlobal((int)reqSize);
+            try {
+                uint actualSize = 0;
+                status = EnumerateTraceGuidsEx(0, IntPtr.Zero, 0, buf, reqSize, out actualSize);
+                if (status != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"EnumerateTraceGuidsEx failed with status: {0}\"}}", status));
+                    return;
+                }
+
+                int totalCount = (int)(actualSize / 16);
+                var matched = new List<Tuple<string, string>>();
+
+                for (int i = 0; i < totalCount; i++) {
+                    Guid g = (Guid)Marshal.PtrToStructure(new IntPtr(buf.ToInt64() + i * 16), typeof(Guid));
+                    string guidStr = g.ToString("B").ToUpperInvariant(); // {GUID}
+
+                    string publisherName = "";
+                    try {
+                        using (var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Publishers\" + guidStr)) {
+                            if (key != null) {
+                                publisherName = key.GetValue(null) as string ?? "";
+                            }
+                        }
+                    } catch {}
+
+                    if (filterLower != null) {
+                        bool matches = guidStr.ToLowerInvariant().Contains(filterLower) ||
+                                       (!string.IsNullOrEmpty(publisherName) && publisherName.ToLowerInvariant().Contains(filterLower));
+                        if (!matches) continue;
+                    }
+
+                    matched.Add(new Tuple<string, string>(guidStr, publisherName));
+                    if (matched.Count >= maxResults) break;
+                }
+
+                var sb = new StringBuilder();
+                sb.Append(string.Format("{{\"success\": true, \"totalRegisteredProviders\": {0}, \"returnedCount\": {1}, \"filter\": \"{2}\", \"providers\": [",
+                    totalCount, matched.Count, EscapeJson(filter ?? "all")));
+
+                for (int i = 0; i < matched.Count; i++) {
+                    if (i > 0) sb.Append(",");
+                    sb.Append(string.Format("{{\"guid\": \"{0}\", \"publisherName\": \"{1}\"}}",
+                        matched[i].Item1, EscapeJson(matched[i].Item2)));
+                }
+
+                sb.Append(string.Format("], \"elapsedMs\": {0}}}", sw.ElapsedMilliseconds));
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            } finally {
+                if (buf != IntPtr.Zero) Marshal.FreeHGlobal(buf);
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -25474,6 +25781,19 @@ namespace GeminiSuperDesktop {
                 if (args.Length >= 5) int.TryParse(args[4], out keyLen);
                 string prf = args.Length >= 6 ? args[5] : "SHA256";
                 CngPbkdf2Cmd(pwd, salt, iters, keyLen, prf);
+            } else if (cmd == "etw_sessions" || cmd == "etw-sessions") {
+                EtwSessionsCmd();
+            } else if (cmd == "etw_session_query" || cmd == "etw-session-query") {
+                string sessionName = args.Length >= 2 ? args[1] : "";
+                EtwSessionQueryCmd(sessionName);
+            } else if (cmd == "etw_session_flush" || cmd == "etw-session-flush") {
+                string sessionName = args.Length >= 2 ? args[1] : "";
+                EtwSessionFlushCmd(sessionName);
+            } else if (cmd == "etw_providers" || cmd == "etw-providers") {
+                string filter = args.Length >= 2 ? args[1] : "all";
+                int maxResults = 100;
+                if (args.Length >= 3) int.TryParse(args[2], out maxResults);
+                EtwProvidersCmd(filter, maxResults);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

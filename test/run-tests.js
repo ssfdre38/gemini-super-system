@@ -5498,10 +5498,84 @@ async function run() {
     assert(typeof kdfRes.elapsedMs === "number");
   });
 
-  it("All 272 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 77: Windows Event Tracing for Windows (ETW) Subsystem
+  console.log("\n\x1b[1m[Suite 77: Windows Event Tracing for Windows (ETW) Subsystem]\x1b[0m");
+
+  await itAsync("getEtwSessions enumerates active user and kernel trace sessions with buffer metrics", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getEtwSessions();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.sessionCount === "number" && res.sessionCount > 0);
+    assert(Array.isArray(res.sessions) && res.sessions.length > 0);
+
+    const first = res.sessions[0];
+    assert(typeof first.sessionName === "string");
+    assert(typeof first.bufferSizeKb === "number");
+    assert(typeof first.numberOfBuffers === "number");
+    assert(typeof first.freeBuffers === "number");
+    assert(typeof first.buffersWritten === "number");
+    assert(typeof first.eventsLost === "number");
+
+    assert(typeof res.totalBuffers === "number");
+    assert(typeof res.totalFreeBuffers === "number");
+    assert(typeof res.totalBuffersWritten === "number");
+    assert(typeof res.totalEventsLost === "number");
+  });
+
+  await itAsync("queryEtwSession retrieves runtime telemetry and buffer properties of a specific session", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.queryEtwSession({ sessionName: "UBPM" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.sessionName, "UBPM");
+    assert(typeof res.bufferSizeKb === "number");
+    assert(typeof res.numberOfBuffers === "number");
+    assert(typeof res.freeBuffers === "number");
+    assert(typeof res.buffersWritten === "number");
+    assert(typeof res.logFileModeHex === "string");
+  });
+
+  await itAsync("flushEtwSession flushes active in-memory trace buffers to disk without session interruption", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.flushEtwSession({ sessionName: "WiFiSession" });
+
+    assert(res !== null && typeof res === "object");
+    if (res.success) {
+      assert.strictEqual(res.flushed, true);
+      assert.strictEqual(res.sessionName, "WiFiSession");
+      assert(typeof res.buffersWritten === "number");
+      assert(typeof res.freeBuffers === "number");
+    } else {
+      assert(typeof res.error === "string");
+    }
+  });
+
+  await itAsync("getEtwProviders enumerates registered providers with friendly publisher name resolution", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    const res = await kb.getEtwProviders({ filter: "kernel", maxResults: 10 });
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true);
+    assert(typeof res.totalRegisteredProviders === "number" && res.totalRegisteredProviders > 0);
+    assert(typeof res.returnedCount === "number" && res.returnedCount > 0);
+    assert(Array.isArray(res.providers) && res.providers.length > 0);
+
+    const first = res.providers[0];
+    assert(typeof first.guid === "string" && first.guid.startsWith("{"));
+    assert(typeof first.publisherName === "string");
+  });
+
+  it("All 276 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 272);
+    assert.strictEqual(SYSTEM_TOOLS.length, 276);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -5707,6 +5781,10 @@ async function run() {
     assert(toolNames.includes("super_cng_random"));
     assert(toolNames.includes("super_cng_hash"));
     assert(toolNames.includes("super_cng_kdf_pbkdf2"));
+    assert(toolNames.includes("super_etw_sessions"));
+    assert(toolNames.includes("super_etw_session_query"));
+    assert(toolNames.includes("super_etw_session_flush"));
+    assert(toolNames.includes("super_etw_providers"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

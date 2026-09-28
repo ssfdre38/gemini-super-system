@@ -107,6 +107,7 @@
   - [89. Windows Imaging Component (WIC) Subsystem](#89-️-windows-imaging-component-wic-subsystem-wincodech--windowscodecsdll)
   - [90. Windows Media Foundation (MF) Subsystem](#90--windows-media-foundation-mf-subsystem-mfapih--mfidlh--mfreadwriteh--mfplatdll--mfdll--mfreadwritedll)
   - [91. Windows Cryptography Next Generation (CNG) Subsystem](#91--windows-cryptography-next-generation-cng-subsystem-bcrypth--bcryptdll)
+  - [92. Windows Event Tracing for Windows (ETW) Subsystem](#92--windows-event-tracing-for-windows-etw-subsystem-evntraceh--advapi32dll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1198,6 +1199,15 @@ Directly interfaces with Microsoft's bare-metal, kernel-grade Windows Cryptograp
 - **Industrial Key Derivation (`super_cng_kdf_pbkdf2`)**: Derives high-entropy cryptographic keys and password digests using bare-metal `BCryptDeriveKeyPBKDF2`. Supports configurable pseudo-random functions (SHA256, SHA512, SHA384, SHA1), custom or auto-generated random salts, variable iteration counts up to 10,000,000 rounds, and arbitrary key lengths.
 - **272 Tools Milestone**: Reaches **272 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **76 comprehensive test suites** and **72 environment health checks**.
 - **Native MCP Tools**: `super_cng_algorithms`, `super_cng_random`, `super_cng_hash`, `super_cng_kdf_pbkdf2`.
+
+### 92. 📡 Windows Event Tracing for Windows (ETW) Subsystem (`evntrace.h` / `advapi32.dll`)
+Directly interfaces with Microsoft's bare-metal, kernel-grade Event Tracing for Windows (ETW) architecture via native `advapi32.dll` P/Invoke:
+- **Active Trace Sessions Enumeration (`super_etw_sessions`)**: Queries all running user-mode and kernel-mode trace logger sessions using `QueryAllTracesW`. Delivers real-time telemetry on allocated buffer counts, free buffers, buffers written, events lost, real-time buffer loss, log file mode bitmasks, maximum file size quotas, flush timers, and logger thread IDs.
+- **Deep Session Runtime Query (`super_etw_session_query`)**: Performs deep runtime inspection of individual trace sessions via `ControlTraceW` with `EVENT_TRACE_CONTROL_QUERY` (e.g., `Eventlog-Security`, `UBPM`, `WiFiSession`, `DiagLog`, `UpdateSessionOrchestration`).
+- **Zero-Interruption Session Flush (`super_etw_session_flush`)**: Flushes in-flight memory buffers of an active trace logger session directly to disk using `ControlTraceW` with `EVENT_TRACE_CONTROL_FLUSH`, ensuring forensic data is committed to `.etl` log files without stopping or restarting the session.
+- **Provider Catalog & Registry Resolution (`super_etw_providers`)**: Enumerates registered ETW providers across the operating system via `EnumerateTraceGuidsEx` (`TraceGuidQueryList`) and resolves friendly publisher names directly from `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Publishers`. Discovers GUIDs, system publishers, kernel instrumentation, and security auditing providers with case-insensitive search filtering.
+- **276 Tools Milestone**: Reaches **276 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **77 comprehensive test suites** and **73 environment health checks**.
+- **Native MCP Tools**: `super_etw_sessions`, `super_etw_session_query`, `super_etw_session_flush`, `super_etw_providers`.
 
 ---
 

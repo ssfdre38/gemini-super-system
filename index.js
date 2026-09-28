@@ -5175,6 +5175,61 @@ const SYSTEM_TOOLS = [
           },
           required: ["password"]
         }
+      },
+      {
+        name: "super_etw_sessions",
+        description: "Enumerates all active Event Tracing for Windows (ETW) logger sessions across user and kernel modes via bare-metal QueryAllTracesW. Inspects active buffers, buffer sizes, allocated vs free buffers, events lost, buffers written, log file destinations, and logger thread IDs.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_etw_session_query",
+        description: "Queries deep runtime telemetry, buffer statistics, lost event metrics, and storage paths for a specific active ETW trace session via ControlTraceW with EVENT_TRACE_CONTROL_QUERY (e.g. 'Eventlog-Security', 'UBPM', 'WiFiSession', 'DiagLog').",
+        inputSchema: {
+          type: "object",
+          properties: {
+            sessionName: {
+              type: "string",
+              description: "Name of the active ETW trace session to query (e.g. 'UBPM', 'Eventlog-Security', 'WiFiSession')."
+            }
+          },
+          required: ["sessionName"]
+        }
+      },
+      {
+        name: "super_etw_session_flush",
+        description: "Flushes in-memory trace buffers of an active Event Tracing for Windows (ETW) logger session directly to disk via ControlTraceW with EVENT_TRACE_CONTROL_FLUSH, ensuring all buffered events are committed without stopping the session.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            sessionName: {
+              type: "string",
+              description: "Name of the active ETW trace session to flush (e.g. 'WiFiSession', 'UBPM')."
+            }
+          },
+          required: ["sessionName"]
+        }
+      },
+      {
+        name: "super_etw_providers",
+        description: "Enumerates registered Event Tracing for Windows (ETW) providers and resolves publisher friendly names via EnumerateTraceGuidsEx and Windows Registry (WINEVT\\Publishers). Discovers GUIDs, system publishers, kernel instrumentation, and security auditing providers with search filtering.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              default: "all",
+              description: "Case-insensitive substring filter for provider GUID or friendly publisher name (default: 'all')."
+            },
+            maxResults: {
+              type: "number",
+              default: 100,
+              description: "Maximum number of matching providers to return (default: 100, max: 5000)."
+            }
+          }
+        }
       }
 ];
 
@@ -9036,6 +9091,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🔑 [CNG Key Derivation PBKDF2]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_etw_sessions") {
+    const res = await orch.getEtwSessions();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📡 [ETW Active Trace Sessions]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_etw_session_query") {
+    const res = await orch.queryEtwSession(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔍 [ETW Session Telemetry]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_etw_session_flush") {
+    const res = await orch.flushEtwSession(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💾 [ETW Session Flush]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_etw_providers") {
+    const res = await orch.getEtwProviders(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📋 [ETW Registered Providers]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
