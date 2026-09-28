@@ -105,6 +105,7 @@
   - [87. Windows DirectX Graphics Infrastructure (DXGI) Subsystem](#87--windows-directx-graphics-infrastructure-dxgi-subsystem-dxgih--dxgi1_2h--dxgi1_3h--dxgidll)
   - [88. Windows Delivery Optimization (DO) Subsystem](#88--windows-delivery-optimization-do-subsystem-deliveryoptimizationh--deliveryoptimizationdll--dosvc)
   - [89. Windows Imaging Component (WIC) Subsystem](#89-️-windows-imaging-component-wic-subsystem-wincodech--windowscodecsdll)
+  - [90. Windows Media Foundation (MF) Subsystem](#90--windows-media-foundation-mf-subsystem-mfapih--mfidlh--mfreadwriteh--mfplatdll--mfdll--mfreadwritedll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1178,6 +1179,15 @@ Directly interfaces with Microsoft's extensible, high-performance bare-metal Win
 - **Sub-Millisecond Unmanaged Pixel Statistics (`super_wic_pixel_stats`)**: Executes high-speed unmanaged raster sampling across millions of pixels using adaptive grid strides. In sub-millisecond durations, calculates per-channel mean/min/max intensities (R, G, B, A), perceived human luminance, transparency percentages, and 12-bit color-bucket quantized dominant hex colors (`#RRGGBB`).
 - **264 Tools Milestone**: Reaches **264 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **74 comprehensive test suites** and **70 environment health checks**.
 - **Native MCP Tools**: `super_wic_codecs`, `super_wic_inspect_image`, `super_wic_convert_image`, `super_wic_pixel_stats`.
+
+### 90. 🎬 Windows Media Foundation (MF) Subsystem (`mfapi.h` / `mfidl.h` / `mfreadwrite.h` / `mfplat.dll` / `mf.dll` / `mfreadwrite.dll`)
+Directly interfaces with Microsoft's bare-metal, hardware-accelerated Windows Media Foundation (MF) pipeline via native COM (`CLSID {317d06e8-5f24-433d-bdf7-79ce68d8abc2}` / `IMFSourceReader` / `IMFMediaType` / `IMFSample` / `IMFMediaBuffer`):
+- **Hardware & Software Transforms Enumeration (`super_mf_transforms`)**: Queries all registered Media Foundation Transforms (MFTs) using `MFTEnum`. Discovers video decoders, video encoders, video effects, video processors, audio decoders, audio encoders, audio effects, and multiplexers with component CLSIDs, friendly names, input/output type counts, and hardware acceleration flags.
+- **Hardware Video & Audio Capture Source Discovery (`super_mf_capture_devices`)**: Interrogates physical and virtual video capture endpoints (webcams, HDMI capture cards) and audio input endpoints using `MFEnumDeviceSources`. Enumerates symbolic device links, device friendly names, and endpoint categories.
+- **Deep Container & Stream Introspection (`super_mf_media_info`)**: Inspects any media container or stream (MP4, MKV, AVI, WMV, MOV, MP3, WAV, FLAC, AAC) at bare-metal speed using `IMFSourceReader`. Extracts 100ns precision durations, stream counts, major types (Video, Audio), subtype format GUIDs, video dimensions (width x height), frame rates, aspect ratios, audio channel configurations, bit depths, and sample rates without external FFmpeg dependencies.
+- **Bare-Metal Audio Decoding & Transcoding (`super_mf_transcode_audio`)**: Decodes and transcodes audio from ANY container or codec directly into an uncompressed, standard 16-bit PCM RIFF WAV file in ~100ms. Leverages hardware decoders and unmanaged buffer locks (`IMFMediaBuffer::Lock`) for bit-perfect output with configurable destination paths.
+- **268 Tools Milestone**: Reaches **268 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **75 comprehensive test suites** and **71 environment health checks**.
+- **Native MCP Tools**: `super_mf_transforms`, `super_mf_capture_devices`, `super_mf_media_info`, `super_mf_transcode_audio`.
 
 ---
 

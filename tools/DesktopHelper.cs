@@ -20700,6 +20700,877 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 90: Windows Media Foundation Subsystem (mfapi.h / mfidl.h / mfreadwrite.h / mfplat.dll / mf.dll / mfreadwrite.dll / Mf partition)
+
+        [StructLayout(LayoutKind.Explicit, Size = 24)]
+        public struct MF_PROPVARIANT {
+            [FieldOffset(0)] public ushort vt;
+            [FieldOffset(2)] public ushort wReserved1;
+            [FieldOffset(4)] public ushort wReserved2;
+            [FieldOffset(6)] public ushort wReserved3;
+            [FieldOffset(8)] public sbyte cVal;
+            [FieldOffset(8)] public byte bVal;
+            [FieldOffset(8)] public short iVal;
+            [FieldOffset(8)] public ushort uiVal;
+            [FieldOffset(8)] public int lVal;
+            [FieldOffset(8)] public uint ulVal;
+            [FieldOffset(8)] public int intVal;
+            [FieldOffset(8)] public uint uintVal;
+            [FieldOffset(8)] public long hVal;
+            [FieldOffset(8)] public ulong uhVal;
+            [FieldOffset(8)] public float fltVal;
+            [FieldOffset(8)] public double dblVal;
+            [FieldOffset(8)] public IntPtr pwszVal;
+        }
+
+        [ComImport]
+        [Guid("2cd2d921-c447-44a7-a13c-4adabfc247e3")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IMFAttributes_MF {
+            [PreserveSig] int GetItem(ref Guid guidKey, IntPtr pValue);
+            [PreserveSig] int GetItemType(ref Guid guidKey, out int pType);
+            [PreserveSig] int CompareItem(ref Guid guidKey, IntPtr Value, out bool pbResult);
+            [PreserveSig] int Compare(IMFAttributes_MF pTheirs, int MatchType, out bool pbResult);
+            [PreserveSig] int GetUINT32(ref Guid guidKey, out uint punValue);
+            [PreserveSig] int GetUINT64(ref Guid guidKey, out ulong punValue);
+            [PreserveSig] int GetDouble(ref Guid guidKey, out double pfValue);
+            [PreserveSig] int GetGUID(ref Guid guidKey, out Guid pguidValue);
+            [PreserveSig] int GetStringLength(ref Guid guidKey, out uint pcchLength);
+            [PreserveSig] int GetString(ref Guid guidKey, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pwszValue, uint cchBufSize, out uint pcchLength);
+            [PreserveSig] int GetAllocatedString(ref Guid guidKey, out IntPtr ppwszValue, out uint pcchLength);
+            [PreserveSig] int GetBlobSize(ref Guid guidKey, out uint pcbBlobSize);
+            [PreserveSig] int GetBlob(ref Guid guidKey, [Out, MarshalAs(UnmanagedType.LPArray)] byte[] pBuf, uint cbBufSize, out uint pcbBlobSize);
+            [PreserveSig] int GetAllocatedBlob(ref Guid guidKey, out IntPtr ppBuf, out uint pcbSize);
+            [PreserveSig] int GetUnknown(ref Guid guidKey, ref Guid riid, [Out, MarshalAs(UnmanagedType.IUnknown)] out object ppv);
+            [PreserveSig] int SetItem(ref Guid guidKey, IntPtr Value);
+            [PreserveSig] int DeleteItem(ref Guid guidKey);
+            [PreserveSig] int DeleteAllItems();
+            [PreserveSig] int SetUINT32(ref Guid guidKey, uint unValue);
+            [PreserveSig] int SetUINT64(ref Guid guidKey, ulong unValue);
+            [PreserveSig] int SetDouble(ref Guid guidKey, double fValue);
+            [PreserveSig] int SetGUID(ref Guid guidKey, ref Guid guidValue);
+            [PreserveSig] int SetString(ref Guid guidKey, [MarshalAs(UnmanagedType.LPWStr)] string wszValue);
+            [PreserveSig] int SetBlob(ref Guid guidKey, [MarshalAs(UnmanagedType.LPArray)] byte[] pBuf, uint cbBufSize);
+            [PreserveSig] int SetUnknown(ref Guid guidKey, [MarshalAs(UnmanagedType.IUnknown)] object pUnknown);
+            [PreserveSig] int LockStore();
+            [PreserveSig] int UnlockStore();
+            [PreserveSig] int GetCount(out uint pcItems);
+            [PreserveSig] int GetItemByIndex(uint unIndex, out Guid pguidKey, IntPtr pValue);
+            [PreserveSig] int CopyAllItems(IMFAttributes_MF pDest);
+        }
+
+        [ComImport]
+        [Guid("7FEE9E9A-4A89-47a6-899C-B6A53A70FB67")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IMFActivate_MF : IMFAttributes_MF {
+            [PreserveSig] new int GetItem(ref Guid guidKey, IntPtr pValue);
+            [PreserveSig] new int GetItemType(ref Guid guidKey, out int pType);
+            [PreserveSig] new int CompareItem(ref Guid guidKey, IntPtr Value, out bool pbResult);
+            [PreserveSig] new int Compare(IMFAttributes_MF pTheirs, int MatchType, out bool pbResult);
+            [PreserveSig] new int GetUINT32(ref Guid guidKey, out uint punValue);
+            [PreserveSig] new int GetUINT64(ref Guid guidKey, out ulong punValue);
+            [PreserveSig] new int GetDouble(ref Guid guidKey, out double pfValue);
+            [PreserveSig] new int GetGUID(ref Guid guidKey, out Guid pguidValue);
+            [PreserveSig] new int GetStringLength(ref Guid guidKey, out uint pcchLength);
+            [PreserveSig] new int GetString(ref Guid guidKey, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pwszValue, uint cchBufSize, out uint pcchLength);
+            [PreserveSig] new int GetAllocatedString(ref Guid guidKey, out IntPtr ppwszValue, out uint pcchLength);
+            [PreserveSig] new int GetBlobSize(ref Guid guidKey, out uint pcbBlobSize);
+            [PreserveSig] new int GetBlob(ref Guid guidKey, [Out, MarshalAs(UnmanagedType.LPArray)] byte[] pBuf, uint cbBufSize, out uint pcbBlobSize);
+            [PreserveSig] new int GetAllocatedBlob(ref Guid guidKey, out IntPtr ppBuf, out uint pcbSize);
+            [PreserveSig] new int GetUnknown(ref Guid guidKey, ref Guid riid, [Out, MarshalAs(UnmanagedType.IUnknown)] out object ppv);
+            [PreserveSig] new int SetItem(ref Guid guidKey, IntPtr Value);
+            [PreserveSig] new int DeleteItem(ref Guid guidKey);
+            [PreserveSig] new int DeleteAllItems();
+            [PreserveSig] new int SetUINT32(ref Guid guidKey, uint unValue);
+            [PreserveSig] new int SetUINT64(ref Guid guidKey, ulong unValue);
+            [PreserveSig] new int SetDouble(ref Guid guidKey, double fValue);
+            [PreserveSig] new int SetGUID(ref Guid guidKey, ref Guid guidValue);
+            [PreserveSig] new int SetString(ref Guid guidKey, [MarshalAs(UnmanagedType.LPWStr)] string wszValue);
+            [PreserveSig] new int SetBlob(ref Guid guidKey, [MarshalAs(UnmanagedType.LPArray)] byte[] pBuf, uint cbBufSize);
+            [PreserveSig] new int SetUnknown(ref Guid guidKey, [MarshalAs(UnmanagedType.IUnknown)] object pUnknown);
+            [PreserveSig] new int LockStore();
+            [PreserveSig] new int UnlockStore();
+            [PreserveSig] new int GetCount(out uint pcItems);
+            [PreserveSig] new int GetItemByIndex(uint unIndex, out Guid pguidKey, IntPtr pValue);
+            [PreserveSig] new int CopyAllItems(IMFAttributes_MF pDest);
+
+            [PreserveSig] int ActivateObject(ref Guid riid, [Out, MarshalAs(UnmanagedType.IUnknown)] out object ppv);
+            [PreserveSig] int ShutdownObject();
+            [PreserveSig] int DetachObject();
+        }
+
+        [ComImport]
+        [Guid("44ae0fa8-ea31-4109-8d2e-4cae4997c555")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IMFMediaType_MF {
+            [PreserveSig] int GetItem(ref Guid guidKey, IntPtr pValue);
+            [PreserveSig] int GetItemType(ref Guid guidKey, out int pType);
+            [PreserveSig] int CompareItem(ref Guid guidKey, IntPtr Value, out bool pbResult);
+            [PreserveSig] int Compare(IMFAttributes_MF pTheirs, int MatchType, out bool pbResult);
+            [PreserveSig] int GetUINT32(ref Guid guidKey, out uint punValue);
+            [PreserveSig] int GetUINT64(ref Guid guidKey, out ulong punValue);
+            [PreserveSig] int GetDouble(ref Guid guidKey, out double pfValue);
+            [PreserveSig] int GetGUID(ref Guid guidKey, out Guid pguidValue);
+            [PreserveSig] int GetStringLength(ref Guid guidKey, out uint pcchLength);
+            [PreserveSig] int GetString(ref Guid guidKey, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pwszValue, uint cchBufSize, out uint pcchLength);
+            [PreserveSig] int GetAllocatedString(ref Guid guidKey, out IntPtr ppwszValue, out uint pcchLength);
+            [PreserveSig] int GetBlobSize(ref Guid guidKey, out uint pcbBlobSize);
+            [PreserveSig] int GetBlob(ref Guid guidKey, [Out, MarshalAs(UnmanagedType.LPArray)] byte[] pBuf, uint cbBufSize, out uint pcbBlobSize);
+            [PreserveSig] int GetAllocatedBlob(ref Guid guidKey, out IntPtr ppBuf, out uint pcbSize);
+            [PreserveSig] int GetUnknown(ref Guid guidKey, ref Guid riid, [Out, MarshalAs(UnmanagedType.IUnknown)] out object ppv);
+            [PreserveSig] int SetItem(ref Guid guidKey, IntPtr Value);
+            [PreserveSig] int DeleteItem(ref Guid guidKey);
+            [PreserveSig] int DeleteAllItems();
+            [PreserveSig] int SetUINT32(ref Guid guidKey, uint unValue);
+            [PreserveSig] int SetUINT64(ref Guid guidKey, ulong unValue);
+            [PreserveSig] int SetDouble(ref Guid guidKey, double fValue);
+            [PreserveSig] int SetGUID(ref Guid guidKey, ref Guid guidValue);
+            [PreserveSig] int SetString(ref Guid guidKey, [MarshalAs(UnmanagedType.LPWStr)] string wszValue);
+            [PreserveSig] int SetBlob(ref Guid guidKey, [MarshalAs(UnmanagedType.LPArray)] byte[] pBuf, uint cbBufSize);
+            [PreserveSig] int SetUnknown(ref Guid guidKey, [MarshalAs(UnmanagedType.IUnknown)] object pUnknown);
+            [PreserveSig] int LockStore();
+            [PreserveSig] int UnlockStore();
+            [PreserveSig] int GetCount(out uint pcItems);
+            [PreserveSig] int GetItemByIndex(uint unIndex, out Guid pguidKey, IntPtr pValue);
+            [PreserveSig] int CopyAllItems(IMFAttributes_MF pDest);
+
+            [PreserveSig] int GetMajorType(out Guid pguidMajorType);
+            [PreserveSig] int IsCompressedFormat(out bool pfCompressed);
+            [PreserveSig] int IsEqual(IMFMediaType_MF pIMediaType, out uint pdwFlags);
+            [PreserveSig] int GetRepresentation(Guid guidRepresentation, out IntPtr ppvRepresentation);
+            [PreserveSig] int FreeRepresentation(Guid guidRepresentation, IntPtr pvRepresentation);
+        }
+
+        [ComImport]
+        [Guid("045FA593-8799-42b8-BC8D-8968C6453507")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IMFMediaBuffer_MF {
+            [PreserveSig] int Lock(out IntPtr ppbBuffer, out uint pcbMaxLength, out uint pcbCurrentLength);
+            [PreserveSig] int Unlock();
+            [PreserveSig] int GetCurrentLength(out uint pcbCurrentLength);
+            [PreserveSig] int SetCurrentLength(uint cbCurrentLength);
+            [PreserveSig] int GetMaxLength(out uint pcbMaxLength);
+        }
+
+        [ComImport]
+        [Guid("c40a00f2-b93a-4d80-ae8c-5a1c634f58e4")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IMFSample_MF {
+            [PreserveSig] int GetItem(ref Guid guidKey, IntPtr pValue);
+            [PreserveSig] int GetItemType(ref Guid guidKey, out int pType);
+            [PreserveSig] int CompareItem(ref Guid guidKey, IntPtr Value, out bool pbResult);
+            [PreserveSig] int Compare(IMFAttributes_MF pTheirs, int MatchType, out bool pbResult);
+            [PreserveSig] int GetUINT32(ref Guid guidKey, out uint punValue);
+            [PreserveSig] int GetUINT64(ref Guid guidKey, out ulong punValue);
+            [PreserveSig] int GetDouble(ref Guid guidKey, out double pfValue);
+            [PreserveSig] int GetGUID(ref Guid guidKey, out Guid pguidValue);
+            [PreserveSig] int GetStringLength(ref Guid guidKey, out uint pcchLength);
+            [PreserveSig] int GetString(ref Guid guidKey, [Out, MarshalAs(UnmanagedType.LPWStr)] StringBuilder pwszValue, uint cchBufSize, out uint pcchLength);
+            [PreserveSig] int GetAllocatedString(ref Guid guidKey, out IntPtr ppwszValue, out uint pcchLength);
+            [PreserveSig] int GetBlobSize(ref Guid guidKey, out uint pcbBlobSize);
+            [PreserveSig] int GetBlob(ref Guid guidKey, [Out, MarshalAs(UnmanagedType.LPArray)] byte[] pBuf, uint cbBufSize, out uint pcbBlobSize);
+            [PreserveSig] int GetAllocatedBlob(ref Guid guidKey, out IntPtr ppBuf, out uint pcbSize);
+            [PreserveSig] int GetUnknown(ref Guid guidKey, ref Guid riid, [Out, MarshalAs(UnmanagedType.IUnknown)] out object ppv);
+            [PreserveSig] int SetItem(ref Guid guidKey, IntPtr Value);
+            [PreserveSig] int DeleteItem(ref Guid guidKey);
+            [PreserveSig] int DeleteAllItems();
+            [PreserveSig] int SetUINT32(ref Guid guidKey, uint unValue);
+            [PreserveSig] int SetUINT64(ref Guid guidKey, ulong unValue);
+            [PreserveSig] int SetDouble(ref Guid guidKey, double fValue);
+            [PreserveSig] int SetGUID(ref Guid guidKey, ref Guid guidValue);
+            [PreserveSig] int SetString(ref Guid guidKey, [MarshalAs(UnmanagedType.LPWStr)] string wszValue);
+            [PreserveSig] int SetBlob(ref Guid guidKey, [MarshalAs(UnmanagedType.LPArray)] byte[] pBuf, uint cbBufSize);
+            [PreserveSig] int SetUnknown(ref Guid guidKey, [MarshalAs(UnmanagedType.IUnknown)] object pUnknown);
+            [PreserveSig] int LockStore();
+            [PreserveSig] int UnlockStore();
+            [PreserveSig] int GetCount(out uint pcItems);
+            [PreserveSig] int GetItemByIndex(uint unIndex, out Guid pguidKey, IntPtr pValue);
+            [PreserveSig] int CopyAllItems(IMFAttributes_MF pDest);
+
+            [PreserveSig] int GetSampleFlags(out uint pdwSampleFlags);
+            [PreserveSig] int SetSampleFlags(uint dwSampleFlags);
+            [PreserveSig] int GetSampleTime(out long phnsSampleTime);
+            [PreserveSig] int SetSampleTime(long hnsSampleTime);
+            [PreserveSig] int GetSampleDuration(out long phnsSampleDuration);
+            [PreserveSig] int SetSampleDuration(long hnsSampleDuration);
+            [PreserveSig] int GetBufferCount(out uint pdwBufferCount);
+            [PreserveSig] int GetBufferByIndex(uint dwIndex, out IntPtr ppBuffer);
+            [PreserveSig] int ConvertToContiguousBuffer(out IntPtr ppBuffer);
+            [PreserveSig] int AddBuffer(IntPtr pBuffer);
+            [PreserveSig] int RemoveBufferByIndex(uint dwIndex);
+            [PreserveSig] int RemoveAllBuffers();
+            [PreserveSig] int GetTotalLength(out uint pcbTotalLength);
+            [PreserveSig] int CopyToBuffer(IntPtr pBuffer);
+        }
+
+        [ComImport]
+        [Guid("70ae66f2-c809-4e4f-8915-bdcb406b7993")]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        public interface IMFSourceReader_MF {
+            [PreserveSig] int GetStreamSelection(uint dwStreamIndex, out bool pfSelected);
+            [PreserveSig] int SetStreamSelection(uint dwStreamIndex, bool fSelected);
+            [PreserveSig] int GetNativeMediaType(uint dwStreamIndex, uint dwMediaTypeIndex, out IntPtr ppMediaType);
+            [PreserveSig] int GetCurrentMediaType(uint dwStreamIndex, out IntPtr ppMediaType);
+            [PreserveSig] int SetCurrentMediaType(uint dwStreamIndex, IntPtr pdwReserved, IntPtr pMediaType);
+            [PreserveSig] int SetCurrentPosition(ref Guid guidTimeFormat, ref MF_PROPVARIANT varPosition);
+            [PreserveSig] int ReadSample(uint dwStreamIndex, uint dwControlFlags, out uint pdwActualStreamIndex, out uint pdwStreamFlags, out long pllTimestamp, out IntPtr ppSample);
+            [PreserveSig] int Flush(uint dwStreamIndex);
+            [PreserveSig] int GetServiceForStream(uint dwStreamIndex, ref Guid guidService, ref Guid riid, out IntPtr ppvObject);
+            [PreserveSig] int GetPresentationAttribute(uint dwStreamIndex, ref Guid guidAttribute, out MF_PROPVARIANT pvarAttribute);
+        }
+
+        [DllImport("mfplat.dll", ExactSpelling = true)]
+        static extern int MFStartup(uint dwVersion, uint dwFlags);
+
+        [DllImport("mfplat.dll", ExactSpelling = true)]
+        static extern int MFShutdown();
+
+        [DllImport("mfplat.dll", ExactSpelling = true)]
+        static extern int MFCreateAttributes(out IMFAttributes_MF ppMFAttributes, uint cInitialSize);
+
+        [DllImport("mfplat.dll", ExactSpelling = true)]
+        static extern int MFCreateMediaType(out IntPtr ppMFType);
+
+        [DllImport("mfplat.dll", ExactSpelling = true)]
+        static extern int MFTEnum(
+            Guid guidCategory,
+            uint Flags,
+            IntPtr pInputType,
+            IntPtr pOutputType,
+            IntPtr pAttributes,
+            out IntPtr ppclsidMFT,
+            out uint pcMFTs);
+
+        [DllImport("mfplat.dll", ExactSpelling = true)]
+        static extern int MFTGetInfo(
+            Guid clsidMFT,
+            out IntPtr pszName,
+            out IntPtr ppInputTypes,
+            out uint pcInputTypes,
+            out IntPtr ppOutputTypes,
+            out uint pcOutputTypes,
+            out IntPtr ppAttributes);
+
+        [DllImport("mf.dll", ExactSpelling = true)]
+        static extern int MFEnumDeviceSources(IMFAttributes_MF pAttributes, out IntPtr pppSourceActivate, out uint pcSourceActivate);
+
+        [DllImport("mfreadwrite.dll", ExactSpelling = true)]
+        static extern int MFCreateSourceReaderFromURL([MarshalAs(UnmanagedType.LPWStr)] string pwszURL, IntPtr pAttributes, out IMFSourceReader_MF ppSourceReader);
+
+        [DllImport("ole32.dll", ExactSpelling = true)]
+        static extern int PropVariantClear(ref MF_PROPVARIANT pvar);
+
+        public static readonly Guid MFT_CATEGORY_VIDEO_DECODER_GUID = new Guid("d6c02d4b-6833-45b4-971a-05a4b04bab91");
+        public static readonly Guid MFT_CATEGORY_VIDEO_ENCODER_GUID = new Guid("f79eac7d-e545-4387-bdee-d647d7bde42a");
+        public static readonly Guid MFT_CATEGORY_VIDEO_EFFECT_GUID = new Guid("12e17c21-532c-4a6e-8a1c-40825a736397");
+        public static readonly Guid MFT_CATEGORY_VIDEO_PROCESSOR_GUID = new Guid("302ea3fc-aa5f-47f9-9f7a-c2188bb16302");
+        public static readonly Guid MFT_CATEGORY_AUDIO_DECODER_GUID = new Guid("9ea73fb4-ef7a-4559-8d5d-719d8f0426c7");
+        public static readonly Guid MFT_CATEGORY_AUDIO_ENCODER_GUID = new Guid("91c64bd0-f91e-4d8c-9276-db248279d975");
+        public static readonly Guid MFT_CATEGORY_AUDIO_EFFECT_GUID = new Guid("11064c48-3648-4ed0-932e-05ce8ac811b7");
+        public static readonly Guid MFT_CATEGORY_MULTIPLEXER_GUID = new Guid("059c561e-05ae-4b61-b69d-55b61ee54a7b");
+        public static readonly Guid MFT_CATEGORY_DEMULTIPLEXER_GUID = new Guid("a8700a7a-939b-44c5-99d7-76226b23b3f1");
+        public static readonly Guid MFT_CATEGORY_OTHER_GUID = new Guid("90175d57-b7ea-4901-aeb3-933a8747756f");
+
+        public static readonly Guid MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_GUID = new Guid("c60ac5fe-252a-478f-a0ef-bc8fa5f7cad3");
+        public static readonly Guid MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID_VAL = new Guid("8ac3587a-4ae7-42d8-99e0-0a6013eef90f");
+        public static readonly Guid MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_AUDCAP_GUID_VAL = new Guid("14dd9a1c-7cff-41be-b1b9-ba1ac6ecb571");
+        public static readonly Guid MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME_GUID = new Guid("60d0e559-52f8-4fa2-bbce-acdb34a8ec01");
+        public static readonly Guid MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK_GUID = new Guid("58f0aad8-22bf-4f8a-bb3d-d2c4978c6e2f");
+        public static readonly Guid MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_AUDCAP_ENDPOINT_ID_GUID = new Guid("30da9258-feb9-47a7-a453-763a7a8e1c5f");
+        public static readonly Guid MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_HW_SOURCE_GUID = new Guid("de7046ba-54d6-4487-a2a4-ec7c0d1bd163");
+
+        public static readonly Guid MF_PD_DURATION_GUID = new Guid("6c990d33-bb8e-477a-8598-0d5d96fcd88a");
+        public static readonly Guid MF_MT_MAJOR_TYPE_GUID = new Guid("48eba18e-f827-4941-bcd8-197e10d2ee49");
+        public static readonly Guid MF_MT_SUBTYPE_GUID = new Guid("f7e34c9a-42e8-4714-b74b-cb29d72c35e5");
+        public static readonly Guid MFMediaType_Audio_GUID = new Guid("73647561-0000-0010-8000-00aa00389b71");
+        public static readonly Guid MFMediaType_Video_GUID = new Guid("73646976-0000-0010-8000-00aa00389b71");
+        public static readonly Guid MFAudioFormat_PCM_GUID = new Guid("00000001-0000-0010-8000-00aa00389b71");
+        public static readonly Guid MF_MT_AUDIO_NUM_CHANNELS_GUID = new Guid("37e48bf5-645e-4c5b-89de-ada9e29b696a");
+        public static readonly Guid MF_MT_AUDIO_SAMPLES_PER_SECOND_GUID = new Guid("5faeeae7-0290-4c31-9e8a-c534f68d9dba");
+        public static readonly Guid MF_MT_AUDIO_AVG_BYTES_PER_SECOND_GUID = new Guid("1aab75c8-cfef-451c-ab95-ac034b8e1731");
+        public static readonly Guid MF_MT_AUDIO_BLOCK_ALIGNMENT_GUID = new Guid("322de230-9eeb-43bd-ab7a-ff412251541d");
+        public static readonly Guid MF_MT_AUDIO_BITS_PER_SAMPLE_GUID = new Guid("f2deb57f-40fa-4764-aa33-ed4f2d1ff669");
+        public static readonly Guid MF_MT_FRAME_SIZE_GUID = new Guid("1652c33d-d6b2-4012-b834-72030849a37d");
+        public static readonly Guid MF_MT_FRAME_RATE_GUID = new Guid("c459a2e8-3d2c-4e44-b132-fee5156c7bb0");
+        public static readonly Guid MF_MT_PIXEL_ASPECT_RATIO_GUID = new Guid("c63764b2-d808-4ae4-b59c-014473004894");
+        public static readonly Guid MF_MT_AVG_BITRATE_GUID = new Guid("9cd7095e-9e19-4829-ba14-fb5b52f1ec37");
+
+        static string FormatMfSubtype(Guid subtype) {
+            string g = subtype.ToString().ToLowerInvariant();
+            if (g == "00000001-0000-0010-8000-00aa00389b71") return "PCM";
+            if (g == "00000003-0000-0010-8000-00aa00389b71") return "IEEE Float";
+            if (g == "00001610-0000-0010-8000-00aa00389b71") return "AAC";
+            if (g == "00000055-0000-0010-8000-00aa00389b71") return "MP3";
+            if (g == "00000161-0000-0010-8000-00aa00389b71") return "WMA";
+            if (g == "00000162-0000-0010-8000-00aa00389b71") return "WMA Pro";
+            if (g == "00000163-0000-0010-8000-00aa00389b71") return "WMA Lossless";
+            if (g == "0000f1ac-0000-0010-8000-00aa00389b71") return "FLAC";
+            if (g == "00006c61-0000-0010-8000-00aa00389b71") return "ALAC";
+            if (g == "0000704f-0000-0010-8000-00aa00389b71") return "Opus";
+            if (g == "00000006-0000-0010-8000-00aa00389b71") return "A-law";
+            if (g == "00000007-0000-0010-8000-00aa00389b71") return "Mu-law";
+            if (g == "00000092-0000-0010-8000-00aa00389b71") return "AC3";
+
+            if (g == "34363248-0000-0010-8000-00aa00389b71") return "H264";
+            if (g == "43564548-0000-0010-8000-00aa00389b71") return "HEVC";
+            if (g == "30395056-0000-0010-8000-00aa00389b71") return "VP9";
+            if (g == "30385056-0000-0010-8000-00aa00389b71") return "VP8";
+            if (g == "31305641-0000-0010-8000-00aa00389b71") return "AV1";
+            if (g == "33564d57-0000-0010-8000-00aa00389b71") return "WMV3";
+            if (g == "5634504d-0000-0010-8000-00aa00389b71") return "MP4V";
+            if (g == "3231564e-0000-0010-8000-00aa00389b71") return "NV12";
+            if (g == "32595559-0000-0010-8000-00aa00389b71") return "YUY2";
+            if (g == "00000016-0000-0010-8000-00aa00389b71") return "RGB32";
+            if (g == "00000015-0000-0010-8000-00aa00389b71") return "RGB24";
+
+            // FourCC extraction from first 4 bytes if standard MF GUID tail
+            if (g.EndsWith("-0000-0010-8000-00aa00389b71", StringComparison.OrdinalIgnoreCase)) {
+                byte[] b = subtype.ToByteArray();
+                if (b.Length >= 4) {
+                    char c0 = (char)b[0]; char c1 = (char)b[1]; char c2 = (char)b[2]; char c3 = (char)b[3];
+                    if (char.IsLetterOrDigit(c0) && char.IsLetterOrDigit(c1) && char.IsLetterOrDigit(c2) && char.IsLetterOrDigit(c3)) {
+                        return new string(new char[] { c0, c1, c2, c3 });
+                    }
+                }
+            }
+            return subtype.ToString();
+        }
+
+        static void MfTransformsCmd(string categoryFilter) {
+            try {
+                int hr = MFStartup(0x00020070, 0);
+                if (hr != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"MFStartup failed: 0x{0:X8}\"}}", hr));
+                    return;
+                }
+
+                string filter = (categoryFilter ?? "all").ToLowerInvariant().Trim();
+                var catMap = new Dictionary<string, Guid>();
+                catMap["video_decoder"] = MFT_CATEGORY_VIDEO_DECODER_GUID;
+                catMap["video_encoder"] = MFT_CATEGORY_VIDEO_ENCODER_GUID;
+                catMap["video_effect"] = MFT_CATEGORY_VIDEO_EFFECT_GUID;
+                catMap["video_processor"] = MFT_CATEGORY_VIDEO_PROCESSOR_GUID;
+                catMap["audio_decoder"] = MFT_CATEGORY_AUDIO_DECODER_GUID;
+                catMap["audio_encoder"] = MFT_CATEGORY_AUDIO_ENCODER_GUID;
+                catMap["audio_effect"] = MFT_CATEGORY_AUDIO_EFFECT_GUID;
+                catMap["multiplexer"] = MFT_CATEGORY_MULTIPLEXER_GUID;
+                catMap["demultiplexer"] = MFT_CATEGORY_DEMULTIPLEXER_GUID;
+                catMap["other"] = MFT_CATEGORY_OTHER_GUID;
+
+                var targetCats = new List<KeyValuePair<string, Guid>>();
+                if (filter == "all") {
+                    foreach (var kvp in catMap) targetCats.Add(kvp);
+                } else if (catMap.ContainsKey(filter)) {
+                    targetCats.Add(new KeyValuePair<string, Guid>(filter, catMap[filter]));
+                } else {
+                    foreach (var kvp in catMap) {
+                        if (kvp.Key.IndexOf(filter, StringComparison.OrdinalIgnoreCase) >= 0) targetCats.Add(kvp);
+                    }
+                    if (targetCats.Count == 0) {
+                        foreach (var kvp in catMap) targetCats.Add(kvp);
+                    }
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"filter\": \"" + EscapeJson(filter) + "\", \"transforms\": [");
+                bool first = true;
+                int totalCount = 0;
+                var countsByCat = new Dictionary<string, int>();
+
+                foreach (var pair in targetCats) {
+                    string catName = pair.Key;
+                    Guid catGuid = pair.Value;
+                    countsByCat[catName] = 0;
+
+                    IntPtr pclsids;
+                    uint count;
+                    hr = MFTEnum(catGuid, 0, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero, out pclsids, out count);
+                    if (hr == 0 && pclsids != IntPtr.Zero && count > 0) {
+                        for (int i = 0; i < count; i++) {
+                            IntPtr pGuid = new IntPtr(pclsids.ToInt64() + i * 16);
+                            Guid clsid = (Guid)Marshal.PtrToStructure(pGuid, typeof(Guid));
+
+                            IntPtr pName, pInTypes, pOutTypes, pAttrs;
+                            uint cIn, cOut;
+                            int hrInfo = MFTGetInfo(clsid, out pName, out pInTypes, out cIn, out pOutTypes, out cOut, out pAttrs);
+                            string name = "";
+                            if (hrInfo == 0 && pName != IntPtr.Zero) {
+                                name = Marshal.PtrToStringUni(pName) ?? "";
+                                Marshal.FreeCoTaskMem(pName);
+                            }
+                            if (pInTypes != IntPtr.Zero) Marshal.FreeCoTaskMem(pInTypes);
+                            if (pOutTypes != IntPtr.Zero) Marshal.FreeCoTaskMem(pOutTypes);
+                            if (pAttrs != IntPtr.Zero) Marshal.Release(pAttrs);
+
+                            if (!first) sb.Append(",");
+                            first = false;
+                            sb.Append(string.Format("{{\"index\": {0}, \"category\": \"{1}\", \"name\": \"{2}\", \"clsid\": \"{3}\", \"inputTypesCount\": {4}, \"outputTypesCount\": {5}}}",
+                                totalCount, EscapeJson(catName), EscapeJson(name), clsid, cIn, cOut));
+
+                            totalCount++;
+                            countsByCat[catName]++;
+                        }
+                        Marshal.FreeCoTaskMem(pclsids);
+                    }
+                }
+
+                sb.Append("], \"count\": " + totalCount + ", \"byCategory\": {");
+                bool firstCat = true;
+                foreach (var kvp in countsByCat) {
+                    if (!firstCat) sb.Append(", ");
+                    firstCat = false;
+                    sb.Append(string.Format("\"{0}\": {1}", kvp.Key, kvp.Value));
+                }
+                sb.Append("}}");
+
+                Console.WriteLine(sb.ToString());
+                MFShutdown();
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void MfCaptureDevicesCmd(string sourceTypeFilter) {
+            try {
+                int hr = MFStartup(0x00020070, 0);
+                if (hr != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"MFStartup failed: 0x{0:X8}\"}}", hr));
+                    return;
+                }
+
+                string filter = (sourceTypeFilter ?? "all").ToLowerInvariant().Trim();
+                bool includeVideo = filter == "all" || filter == "video";
+                bool includeAudio = filter == "all" || filter == "audio";
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"filter\": \"" + EscapeJson(filter) + "\", \"devices\": [");
+                bool first = true;
+                int totalDevices = 0;
+                int videoCount = 0;
+                int audioCount = 0;
+
+                if (includeVideo) {
+                    IMFAttributes_MF pAttrs;
+                    MFCreateAttributes(out pAttrs, 1);
+                    Guid kType = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_GUID;
+                    Guid valVid = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID_VAL;
+                    pAttrs.SetGUID(ref kType, ref valVid);
+
+                    IntPtr pArray;
+                    uint count;
+                    hr = MFEnumDeviceSources(pAttrs, out pArray, out count);
+                    if (hr == 0 && pArray != IntPtr.Zero && count > 0) {
+                        for (int i = 0; i < count; i++) {
+                            IntPtr pAct = Marshal.ReadIntPtr(pArray, i * IntPtr.Size);
+                            var act = (IMFActivate_MF)Marshal.GetObjectForIUnknown(pAct);
+                            Guid kName = MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME_GUID;
+                            IntPtr pName;
+                            uint nameLen;
+                            act.GetAllocatedString(ref kName, out pName, out nameLen);
+                            string name = pName != IntPtr.Zero ? (Marshal.PtrToStringUni(pName) ?? "") : "";
+                            if (pName != IntPtr.Zero) Marshal.FreeCoTaskMem(pName);
+
+                            Guid kLink = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK_GUID;
+                            IntPtr pLink;
+                            uint linkLen;
+                            act.GetAllocatedString(ref kLink, out pLink, out linkLen);
+                            string link = pLink != IntPtr.Zero ? (Marshal.PtrToStringUni(pLink) ?? "") : "";
+                            if (pLink != IntPtr.Zero) Marshal.FreeCoTaskMem(pLink);
+
+                            Guid kHw = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_HW_SOURCE_GUID;
+                            uint isHw = 0;
+                            act.GetUINT32(ref kHw, out isHw);
+
+                            if (!first) sb.Append(",");
+                            first = false;
+                            sb.Append(string.Format("{{\"index\": {0}, \"sourceType\": \"video\", \"name\": \"{1}\", \"symbolicLink\": \"{2}\", \"isHardwareSource\": {3}}}",
+                                totalDevices, EscapeJson(name), EscapeJson(link), isHw != 0 ? "true" : "false"));
+
+                            totalDevices++;
+                            videoCount++;
+                            Marshal.ReleaseComObject(act);
+                            Marshal.Release(pAct);
+                        }
+                        Marshal.FreeCoTaskMem(pArray);
+                    }
+                    Marshal.ReleaseComObject(pAttrs);
+                }
+
+                if (includeAudio) {
+                    IMFAttributes_MF pAttrs;
+                    MFCreateAttributes(out pAttrs, 1);
+                    Guid kType = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_GUID;
+                    Guid valAud = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_AUDCAP_GUID_VAL;
+                    pAttrs.SetGUID(ref kType, ref valAud);
+
+                    IntPtr pArray;
+                    uint count;
+                    hr = MFEnumDeviceSources(pAttrs, out pArray, out count);
+                    if (hr == 0 && pArray != IntPtr.Zero && count > 0) {
+                        for (int i = 0; i < count; i++) {
+                            IntPtr pAct = Marshal.ReadIntPtr(pArray, i * IntPtr.Size);
+                            var act = (IMFActivate_MF)Marshal.GetObjectForIUnknown(pAct);
+                            Guid kName = MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME_GUID;
+                            IntPtr pName;
+                            uint nameLen;
+                            act.GetAllocatedString(ref kName, out pName, out nameLen);
+                            string name = pName != IntPtr.Zero ? (Marshal.PtrToStringUni(pName) ?? "") : "";
+                            if (pName != IntPtr.Zero) Marshal.FreeCoTaskMem(pName);
+
+                            Guid kEp = MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_AUDCAP_ENDPOINT_ID_GUID;
+                            IntPtr pEp;
+                            uint epLen;
+                            act.GetAllocatedString(ref kEp, out pEp, out epLen);
+                            string endpoint = pEp != IntPtr.Zero ? (Marshal.PtrToStringUni(pEp) ?? "") : "";
+                            if (pEp != IntPtr.Zero) Marshal.FreeCoTaskMem(pEp);
+
+                            if (!first) sb.Append(",");
+                            first = false;
+                            sb.Append(string.Format("{{\"index\": {0}, \"sourceType\": \"audio\", \"name\": \"{1}\", \"endpointId\": \"{2}\", \"isHardwareSource\": true}}",
+                                totalDevices, EscapeJson(name), EscapeJson(endpoint)));
+
+                            totalDevices++;
+                            audioCount++;
+                            Marshal.ReleaseComObject(act);
+                            Marshal.Release(pAct);
+                        }
+                        Marshal.FreeCoTaskMem(pArray);
+                    }
+                    Marshal.ReleaseComObject(pAttrs);
+                }
+
+                sb.Append(string.Format("], \"count\": {0}, \"videoCount\": {1}, \"audioCount\": {2}}}", totalDevices, videoCount, audioCount));
+                Console.WriteLine(sb.ToString());
+                MFShutdown();
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void MfMediaInfoCmd(string mediaPath) {
+            try {
+                if (string.IsNullOrEmpty(mediaPath)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Media file path is required\"}");
+                    return;
+                }
+                string fullPath = Path.GetFullPath(mediaPath);
+                if (!File.Exists(fullPath)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"File not found: {0}\"}}", EscapeJson(fullPath)));
+                    return;
+                }
+
+                FileInfo fi = new FileInfo(fullPath);
+
+                int hr = MFStartup(0x00020070, 0);
+                if (hr != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"MFStartup failed: 0x{0:X8}\"}}", hr));
+                    return;
+                }
+
+                IMFSourceReader_MF reader;
+                hr = MFCreateSourceReaderFromURL(fullPath, IntPtr.Zero, out reader);
+                if (hr != 0 || reader == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"MFCreateSourceReaderFromURL failed: 0x{0:X8}\"}}", hr));
+                    MFShutdown();
+                    return;
+                }
+
+                double durationSec = 0.0;
+                ulong durationHns = 0;
+                MF_PROPVARIANT varDur;
+                Guid keyDur = MF_PD_DURATION_GUID;
+                if (reader.GetPresentationAttribute(0xFFFFFFFF, ref keyDur, out varDur) == 0) {
+                    durationHns = varDur.uhVal;
+                    durationSec = (double)durationHns / 10000000.0;
+                    PropVariantClear(ref varDur);
+                }
+
+                var sbStreams = new StringBuilder();
+                sbStreams.Append("[");
+                bool firstStream = true;
+                int streamCount = 0;
+
+                for (uint s = 0; s < 16; s++) {
+                    IntPtr pMediaType;
+                    int hrStream = reader.GetCurrentMediaType(s, out pMediaType);
+                    if (hrStream != 0 || pMediaType == IntPtr.Zero) continue;
+
+                    var mediaType = (IMFMediaType_MF)Marshal.GetObjectForIUnknown(pMediaType);
+                    Guid major;
+                    mediaType.GetMajorType(out major);
+                    Guid sub;
+                    Guid keySub = MF_MT_SUBTYPE_GUID;
+                    mediaType.GetGUID(ref keySub, out sub);
+
+                    string majorName = "Other";
+                    if (major == MFMediaType_Audio_GUID) majorName = "Audio";
+                    else if (major == MFMediaType_Video_GUID) majorName = "Video";
+
+                    string friendlySub = FormatMfSubtype(sub);
+
+                    if (!firstStream) sbStreams.Append(",");
+                    firstStream = false;
+
+                    if (major == MFMediaType_Audio_GUID) {
+                        uint channels = 0, sampleRate = 0, bits = 0, byteRate = 0, blockAlign = 0;
+                        Guid kCh = MF_MT_AUDIO_NUM_CHANNELS_GUID;
+                        Guid kSr = MF_MT_AUDIO_SAMPLES_PER_SECOND_GUID;
+                        Guid kBits = MF_MT_AUDIO_BITS_PER_SAMPLE_GUID;
+                        Guid kAvg = MF_MT_AUDIO_AVG_BYTES_PER_SECOND_GUID;
+                        Guid kAlign = MF_MT_AUDIO_BLOCK_ALIGNMENT_GUID;
+                        mediaType.GetUINT32(ref kCh, out channels);
+                        mediaType.GetUINT32(ref kSr, out sampleRate);
+                        mediaType.GetUINT32(ref kBits, out bits);
+                        mediaType.GetUINT32(ref kAvg, out byteRate);
+                        mediaType.GetUINT32(ref kAlign, out blockAlign);
+
+                        sbStreams.Append(string.Format(
+                            "{{\"streamIndex\": {0}, \"majorType\": \"{1}\", \"majorTypeGuid\": \"{2}\", \"subType\": \"{3}\", \"subTypeGuid\": \"{4}\", \"channels\": {5}, \"sampleRate\": {6}, \"bitsPerSample\": {7}, \"avgBytesPerSecond\": {8}, \"blockAlign\": {9}}}",
+                            s, majorName, major, EscapeJson(friendlySub), sub, channels, sampleRate, bits, byteRate, blockAlign
+                        ));
+                    } else if (major == MFMediaType_Video_GUID) {
+                        ulong frameSize = 0, frameRate = 0, aspect = 0;
+                        uint bitrate = 0;
+                        Guid kSize = MF_MT_FRAME_SIZE_GUID;
+                        Guid kRate = MF_MT_FRAME_RATE_GUID;
+                        Guid kAspect = MF_MT_PIXEL_ASPECT_RATIO_GUID;
+                        Guid kBitrate = MF_MT_AVG_BITRATE_GUID;
+                        mediaType.GetUINT64(ref kSize, out frameSize);
+                        mediaType.GetUINT64(ref kRate, out frameRate);
+                        mediaType.GetUINT64(ref kAspect, out aspect);
+                        mediaType.GetUINT32(ref kBitrate, out bitrate);
+
+                        uint width = (uint)(frameSize >> 32);
+                        uint height = (uint)(frameSize & 0xFFFFFFFF);
+                        uint fpsNum = (uint)(frameRate >> 32);
+                        uint fpsDen = (uint)(frameRate & 0xFFFFFFFF);
+                        double fps = fpsDen > 0 ? (double)fpsNum / (double)fpsDen : 0.0;
+                        uint aspNum = (uint)(aspect >> 32);
+                        uint aspDen = (uint)(aspect & 0xFFFFFFFF);
+
+                        sbStreams.Append(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                            "{{\"streamIndex\": {0}, \"majorType\": \"{1}\", \"majorTypeGuid\": \"{2}\", \"subType\": \"{3}\", \"subTypeGuid\": \"{4}\", \"width\": {5}, \"height\": {6}, \"frameRate\": {7:F2}, \"fpsNumerator\": {8}, \"fpsDenominator\": {9}, \"aspectRatio\": \"{10}:{11}\", \"avgBitrate\": {12}}}",
+                            s, majorName, major, EscapeJson(friendlySub), sub, width, height, fps, fpsNum, fpsDen, aspNum, aspDen, bitrate
+                        ));
+                    } else {
+                        sbStreams.Append(string.Format(
+                            "{{\"streamIndex\": {0}, \"majorType\": \"{1}\", \"majorTypeGuid\": \"{2}\", \"subType\": \"{3}\", \"subTypeGuid\": \"{4}\"}}",
+                            s, majorName, major, EscapeJson(friendlySub), sub
+                        ));
+                    }
+
+                    streamCount++;
+                    Marshal.ReleaseComObject(mediaType);
+                    Marshal.Release(pMediaType);
+                }
+
+                sbStreams.Append("]");
+
+                Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{{\"success\": true, \"filePath\": \"{0}\", \"fileSizeBytes\": {1}, \"durationSeconds\": {2:F3}, \"durationHns\": {3}, \"streamCount\": {4}, \"streams\": {5}}}",
+                    EscapeJson(fullPath.Replace("\\", "/")), fi.Length, durationSec, durationHns, streamCount, sbStreams.ToString()
+                ));
+
+                Marshal.ReleaseComObject(reader);
+                MFShutdown();
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void MfTranscodeAudioCmd(string sourcePath, string destWavPath, int targetSampleRate, int targetChannels) {
+            try {
+                if (string.IsNullOrEmpty(sourcePath)) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Source media path is required\"}");
+                    return;
+                }
+                string srcFull = Path.GetFullPath(sourcePath);
+                if (!File.Exists(srcFull)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Source file not found: {0}\"}}", EscapeJson(srcFull)));
+                    return;
+                }
+
+                string dstFull = "";
+                if (string.IsNullOrEmpty(destWavPath)) {
+                    string dir = Path.GetDirectoryName(srcFull);
+                    string nameNoExt = Path.GetFileNameWithoutExtension(srcFull);
+                    dstFull = Path.Combine(dir, nameNoExt + "_transcode.wav");
+                } else {
+                    dstFull = Path.GetFullPath(destWavPath);
+                }
+
+                string outDir = Path.GetDirectoryName(dstFull);
+                if (!string.IsNullOrEmpty(outDir) && !Directory.Exists(outDir)) Directory.CreateDirectory(outDir);
+
+                int hr = MFStartup(0x00020070, 0);
+                if (hr != 0) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"MFStartup failed: 0x{0:X8}\"}}", hr));
+                    return;
+                }
+
+                IMFSourceReader_MF reader;
+                hr = MFCreateSourceReaderFromURL(srcFull, IntPtr.Zero, out reader);
+                if (hr != 0 || reader == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"MFCreateSourceReaderFromURL failed: 0x{0:X8}\"}}", hr));
+                    MFShutdown();
+                    return;
+                }
+
+                // Locate the first audio stream
+                int audioStreamIdx = -1;
+                for (uint s = 0; s < 16; s++) {
+                    IntPtr pM;
+                    if (reader.GetCurrentMediaType(s, out pM) == 0 && pM != IntPtr.Zero) {
+                        var mt = (IMFMediaType_MF)Marshal.GetObjectForIUnknown(pM);
+                        Guid maj;
+                        mt.GetMajorType(out maj);
+                        Marshal.ReleaseComObject(mt);
+                        Marshal.Release(pM);
+                        if (maj == MFMediaType_Audio_GUID) {
+                            audioStreamIdx = (int)s;
+                            break;
+                        }
+                    }
+                }
+
+                if (audioStreamIdx < 0) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"No audio stream found in source file\"}");
+                    Marshal.ReleaseComObject(reader);
+                    MFShutdown();
+                    return;
+                }
+
+                uint targetStream = (uint)audioStreamIdx;
+
+                // Request uncompressed PCM format
+                IntPtr pReqType;
+                MFCreateMediaType(out pReqType);
+                var reqType = (IMFMediaType_MF)Marshal.GetObjectForIUnknown(pReqType);
+                Guid kMaj = MF_MT_MAJOR_TYPE_GUID;
+                Guid valMaj = MFMediaType_Audio_GUID;
+                reqType.SetGUID(ref kMaj, ref valMaj);
+                Guid kSub = MF_MT_SUBTYPE_GUID;
+                Guid valSub = MFAudioFormat_PCM_GUID;
+                reqType.SetGUID(ref kSub, ref valSub);
+                Guid kBits = MF_MT_AUDIO_BITS_PER_SAMPLE_GUID;
+                reqType.SetUINT32(ref kBits, 16);
+
+                if (targetChannels > 0) {
+                    Guid kCh = MF_MT_AUDIO_NUM_CHANNELS_GUID;
+                    reqType.SetUINT32(ref kCh, (uint)targetChannels);
+                }
+                if (targetSampleRate > 0) {
+                    Guid kSr = MF_MT_AUDIO_SAMPLES_PER_SECOND_GUID;
+                    reqType.SetUINT32(ref kSr, (uint)targetSampleRate);
+                }
+
+                reader.SetCurrentMediaType(targetStream, IntPtr.Zero, pReqType);
+                Marshal.ReleaseComObject(reqType);
+                Marshal.Release(pReqType);
+
+                // Read negotiated media type
+                IntPtr pOutType;
+                hr = reader.GetCurrentMediaType(targetStream, out pOutType);
+                if (hr != 0 || pOutType == IntPtr.Zero) {
+                    Console.WriteLine("{\"success\": false, \"error\": \"Failed to negotiate PCM audio stream\"}");
+                    Marshal.ReleaseComObject(reader);
+                    MFShutdown();
+                    return;
+                }
+
+                var outType = (IMFMediaType_MF)Marshal.GetObjectForIUnknown(pOutType);
+                uint channels = 2, sampleRate = 44100, bitsPerSample = 16;
+                Guid kChOut = MF_MT_AUDIO_NUM_CHANNELS_GUID;
+                Guid kSrOut = MF_MT_AUDIO_SAMPLES_PER_SECOND_GUID;
+                Guid kBitsOut = MF_MT_AUDIO_BITS_PER_SAMPLE_GUID;
+                outType.GetUINT32(ref kChOut, out channels);
+                outType.GetUINT32(ref kSrOut, out sampleRate);
+                outType.GetUINT32(ref kBitsOut, out bitsPerSample);
+                Marshal.ReleaseComObject(outType);
+                Marshal.Release(pOutType);
+
+                uint byteRate = sampleRate * channels * (bitsPerSample / 8);
+                ushort blockAlign = (ushort)(channels * (bitsPerSample / 8));
+                uint totalPcmBytes = 0;
+
+                var sw = Stopwatch.StartNew();
+
+                using (var fs = new FileStream(dstFull, FileMode.Create, FileAccess.Write))
+                using (var bw = new BinaryWriter(fs)) {
+                    // Standard 44-byte RIFF WAVE header placeholder
+                    bw.Write(Encoding.ASCII.GetBytes("RIFF"));
+                    bw.Write((uint)0); // file size - 8 placeholder
+                    bw.Write(Encoding.ASCII.GetBytes("WAVE"));
+                    bw.Write(Encoding.ASCII.GetBytes("fmt "));
+                    bw.Write((uint)16); // SubChunk1Size for PCM
+                    bw.Write((ushort)1); // AudioFormat = 1 (PCM)
+                    bw.Write((ushort)channels);
+                    bw.Write((uint)sampleRate);
+                    bw.Write(byteRate);
+                    bw.Write(blockAlign);
+                    bw.Write((ushort)bitsPerSample);
+                    bw.Write(Encoding.ASCII.GetBytes("data"));
+                    bw.Write((uint)0); // SubChunk2Size placeholder
+
+                    while (true) {
+                        uint actStream, flags;
+                        long ts;
+                        IntPtr pSample;
+                        int hrSample = reader.ReadSample(targetStream, 0, out actStream, out flags, out ts, out pSample);
+                        if (hrSample != 0 || (flags & 0x00000002 /* MF_SOURCE_READERF_ENDOFSTREAM */) != 0) {
+                            break;
+                        }
+                        if (pSample == IntPtr.Zero) continue;
+
+                        var sample = (IMFSample_MF)Marshal.GetObjectForIUnknown(pSample);
+                        IntPtr pBuf;
+                        int hrBuf = sample.ConvertToContiguousBuffer(out pBuf);
+                        if (hrBuf == 0 && pBuf != IntPtr.Zero) {
+                            var buf = (IMFMediaBuffer_MF)Marshal.GetObjectForIUnknown(pBuf);
+                            IntPtr pData;
+                            uint maxL, curL;
+                            if (buf.Lock(out pData, out maxL, out curL) == 0) {
+                                if (curL > 0 && pData != IntPtr.Zero) {
+                                    byte[] raw = new byte[curL];
+                                    Marshal.Copy(pData, raw, 0, (int)curL);
+                                    bw.Write(raw);
+                                    totalPcmBytes += curL;
+                                }
+                                buf.Unlock();
+                            }
+                            Marshal.ReleaseComObject(buf);
+                            Marshal.Release(pBuf);
+                        }
+                        Marshal.ReleaseComObject(sample);
+                        Marshal.Release(pSample);
+                    }
+
+                    // Finalize WAV header sizes
+                    long totalLength = fs.Position;
+                    fs.Seek(4, SeekOrigin.Begin);
+                    bw.Write((uint)(totalLength - 8));
+                    fs.Seek(40, SeekOrigin.Begin);
+                    bw.Write(totalPcmBytes);
+                }
+
+                sw.Stop();
+                FileInfo fiOut = new FileInfo(dstFull);
+                double durSec = byteRate > 0 ? (double)totalPcmBytes / (double)byteRate : 0.0;
+
+                Console.WriteLine(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                    "{{\"success\": true, \"sourcePath\": \"{0}\", \"destWavPath\": \"{1}\", \"channels\": {2}, \"sampleRate\": {3}, \"bitsPerSample\": {4}, \"totalPcmBytes\": {5}, \"durationSeconds\": {6:F3}, \"fileSizeBytes\": {7}, \"transcodeElapsedMs\": {8}}}",
+                    EscapeJson(srcFull.Replace("\\", "/")), EscapeJson(dstFull.Replace("\\", "/")), channels, sampleRate, bitsPerSample, totalPcmBytes, durSec, fiOut.Length, sw.ElapsedMilliseconds
+                ));
+
+                Marshal.ReleaseComObject(reader);
+                MFShutdown();
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"{0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -24240,6 +25111,22 @@ namespace GeminiSuperDesktop {
                 int maxSamples = 40000;
                 if (args.Length >= 3) int.TryParse(args[2], out maxSamples);
                 WicPixelStatsCmd(imgPath, maxSamples);
+            } else if (cmd == "mf_transforms" || cmd == "mf-transforms") {
+                string filter = args.Length >= 2 ? args[1] : "all";
+                MfTransformsCmd(filter);
+            } else if (cmd == "mf_capture_devices" || cmd == "mf-capture-devices" || cmd == "mf_devices" || cmd == "mf-devices") {
+                string filter = args.Length >= 2 ? args[1] : "all";
+                MfCaptureDevicesCmd(filter);
+            } else if (cmd == "mf_media_info" || cmd == "mf-media-info" || cmd == "mf_info" || cmd == "mf-info") {
+                string mediaPath = args.Length >= 2 ? args[1] : "";
+                MfMediaInfoCmd(mediaPath);
+            } else if (cmd == "mf_transcode_audio" || cmd == "mf-transcode-audio" || cmd == "mf_transcode" || cmd == "mf-transcode") {
+                string src = args.Length >= 2 ? args[1] : "";
+                string dst = args.Length >= 3 ? args[2] : "";
+                int sr = 0, ch = 0;
+                if (args.Length >= 4) int.TryParse(args[3], out sr);
+                if (args.Length >= 5) int.TryParse(args[4], out ch);
+                MfTranscodeAudioCmd(src, dst, sr, ch);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

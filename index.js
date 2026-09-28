@@ -4982,6 +4982,90 @@ const SYSTEM_TOOLS = [
           },
           required: ["path"]
         }
+      },
+      {
+        name: "super_mf_transforms",
+        description: "Enumerates hardware and software Media Foundation Transforms (MFT) including video decoders/encoders, audio decoders/encoders, video processors, effects, and multiplexers with CLSIDs, category mappings, and stream types.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            category: {
+              type: "string",
+              enum: [
+                "all",
+                "video_decoder",
+                "video_encoder",
+                "video_effect",
+                "video_processor",
+                "audio_decoder",
+                "audio_encoder",
+                "audio_effect",
+                "multiplexer",
+                "demultiplexer",
+                "other"
+              ],
+              default: "all",
+              description: "Filter MFT enumeration by category (default: 'all')."
+            }
+          }
+        }
+      },
+      {
+        name: "super_mf_capture_devices",
+        description: "Enumerates physical and virtual video capture devices (webcams, capture cards) and audio capture endpoints using native Windows Media Foundation device source enumerator.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            sourceType: {
+              type: "string",
+              enum: ["all", "video", "audio"],
+              default: "all",
+              description: "Filter capture devices by source type: 'all' (default), 'video', or 'audio'."
+            }
+          }
+        }
+      },
+      {
+        name: "super_mf_media_info",
+        description: "Inspects media containers and streams (MP4, MKV, AVI, WMV, MOV, MP3, WAV, FLAC, AAC, etc.) using native IMFSourceReader, extracting duration, bitrates, resolutions, framerates, codecs, and channels.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            path: {
+              type: "string",
+              description: "Absolute path to the media file to inspect."
+            }
+          },
+          required: ["path"]
+        }
+      },
+      {
+        name: "super_mf_transcode_audio",
+        description: "Decodes and transcodes audio from any video or audio container/codec directly into a pristine 16-bit uncompressed PCM RIFF WAV file using IMFSourceReader with optional resampling and channel mixing.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            sourcePath: {
+              type: "string",
+              description: "Absolute path of the source audio/video file."
+            },
+            destWavPath: {
+              type: "string",
+              description: "Optional destination .wav file path (defaults to same folder with .wav extension)."
+            },
+            sampleRate: {
+              type: "number",
+              default: 0,
+              description: "Target audio sample rate in Hz (0 to preserve native sample rate)."
+            },
+            channels: {
+              type: "number",
+              default: 0,
+              description: "Target audio channels (1=mono, 2=stereo, 0 to preserve native channels)."
+            }
+          },
+          required: ["sourcePath"]
+        }
       }
 ];
 
@@ -8747,6 +8831,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `📊 [WIC Pixel Statistics]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_mf_transforms") {
+    const res = await orch.getMfTransforms(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎬 [MF Installed Transforms]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_mf_capture_devices") {
+    const res = await orch.getMfCaptureDevices(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📹 [MF Capture Devices]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_mf_media_info") {
+    const res = await orch.getMfMediaInfo(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎞️ [MF Media Container & Stream Info]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_mf_transcode_audio") {
+    const res = await orch.transcodeMfAudio(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🎵 [MF Audio Transcode]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
