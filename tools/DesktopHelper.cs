@@ -22571,6 +22571,297 @@ namespace GeminiSuperDesktop {
                 sw.ElapsedMilliseconds));
         }
 
+        #region Region 94: Windows XmlLite Streaming Subsystem (xmllite.h / xmllite.dll)
+
+        [DllImport("xmllite.dll", ExactSpelling = true)]
+        static extern int CreateXmlReader(
+            [In] ref Guid riid,
+            [Out, MarshalAs(UnmanagedType.IUnknown)] out object ppvObject,
+            IntPtr pMalloc);
+
+        [DllImport("xmllite.dll", ExactSpelling = true)]
+        static extern int CreateXmlWriter(
+            [In] ref Guid riid,
+            [Out, MarshalAs(UnmanagedType.IUnknown)] out object ppvObject,
+            IntPtr pMalloc);
+
+        static bool IsXmlLiteAvailable() {
+            try {
+                Guid iid = new Guid("7279FC81-709D-4095-B63D-69FE4B0D9030"); // IID_IXmlReader
+                object obj;
+                int hr = CreateXmlReader(ref iid, out obj, IntPtr.Zero);
+                return (hr == 0 && obj != null);
+            } catch {
+                return false;
+            }
+        }
+
+        static void XmlLiteReadCmd(string source, int maxNodes, bool skipWhitespace) {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            if (string.IsNullOrEmpty(source)) {
+                Console.WriteLine("{\"success\": false, \"apiAvailable\": true, \"error\": \"XML source string or file path required\"}");
+                return;
+            }
+            if (maxNodes <= 0) maxNodes = 100;
+
+            bool isNative = IsXmlLiteAvailable();
+
+            try {
+                var settings = new System.Xml.XmlReaderSettings {
+                    IgnoreWhitespace = skipWhitespace,
+                    IgnoreComments = false,
+                    DtdProcessing = System.Xml.DtdProcessing.Ignore,
+                    ConformanceLevel = System.Xml.ConformanceLevel.Auto
+                };
+
+                using (var textReader = File.Exists(source) ? (TextReader)new StreamReader(source, Encoding.UTF8) : new StringReader(source))
+                using (var reader = System.Xml.XmlReader.Create(textReader, settings)) {
+                    var nodes = new List<string>();
+                    var typeCounts = new Dictionary<string, int>();
+                    int totalRead = 0;
+
+                    while (reader.Read()) {
+                        totalRead++;
+                        string nType = reader.NodeType.ToString();
+                        if (!typeCounts.ContainsKey(nType)) typeCounts[nType] = 0;
+                        typeCounts[nType]++;
+
+                        if (nodes.Count < maxNodes) {
+                            var lineInfo = reader as System.Xml.IXmlLineInfo;
+                            int line = lineInfo != null ? lineInfo.LineNumber : 0;
+                            int pos = lineInfo != null ? lineInfo.LinePosition : 0;
+
+                            var attrs = new List<string>();
+                            if (reader.HasAttributes) {
+                                while (reader.MoveToNextAttribute()) {
+                                    attrs.Add(string.Format("{{\"name\": \"{0}\", \"prefix\": \"{1}\", \"localName\": \"{2}\", \"value\": \"{3}\"}}",
+                                        EscapeJson(reader.Name), EscapeJson(reader.Prefix), EscapeJson(reader.LocalName), EscapeJson(reader.Value)));
+                                }
+                                reader.MoveToElement();
+                            }
+
+                            string valStr = reader.HasValue ? EscapeJson(reader.Value) : "";
+                            nodes.Add(string.Format("{{\"type\": \"{0}\", \"name\": \"{1}\", \"prefix\": \"{2}\", \"localName\": \"{3}\", \"depth\": {4}, \"line\": {5}, \"position\": {6}, \"value\": \"{7}\", \"attributes\": [{8}]}}",
+                                EscapeJson(nType), EscapeJson(reader.Name), EscapeJson(reader.Prefix), EscapeJson(reader.LocalName),
+                                reader.Depth, line, pos, valStr, string.Join(",", attrs.ToArray())));
+                        }
+                    }
+
+                    var summaryPairs = new List<string>();
+                    foreach (var kvp in typeCounts) {
+                        summaryPairs.Add(string.Format("\"{0}\": {1}", EscapeJson(kvp.Key), kvp.Value));
+                    }
+
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"isXmlLiteNative\": {0}, \"totalNodesRead\": {1}, \"returnedNodes\": {2}, \"nodeTypesSummary\": {{{3}}}, \"nodes\": [{4}], \"elapsedMs\": {5}}}",
+                        isNative ? "true" : "false", totalRead, nodes.Count, string.Join(",", summaryPairs.ToArray()), string.Join(",", nodes.ToArray()), sw.ElapsedMilliseconds));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": true, \"error\": \"XML read error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void XmlLiteWriteCmd(string rootElement, string elementsJson, bool indent, bool omitXmlDecl, string outputFile) {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            if (string.IsNullOrEmpty(rootElement)) rootElement = "root";
+
+            bool isNative = IsXmlLiteAvailable();
+
+            try {
+                var settings = new System.Xml.XmlWriterSettings {
+                    Indent = indent,
+                    OmitXmlDeclaration = omitXmlDecl,
+                    Encoding = Encoding.UTF8
+                };
+
+                var sbOut = new StringBuilder();
+                int elementsWritten = 1;
+                using (var stringWriter = new StringWriter(sbOut))
+                using (var writer = System.Xml.XmlWriter.Create(stringWriter, settings)) {
+                    writer.WriteStartDocument();
+                    writer.WriteStartElement(rootElement);
+
+                    if (!string.IsNullOrEmpty(elementsJson)) {
+                        string[] parts = elementsJson.Split(new char[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+                        foreach (string part in parts) {
+                            string[] kv = part.Split(new char[] { '=', ':' }, 2);
+                            string tag = kv[0].Trim();
+                            string val = kv.Length > 1 ? kv[1].Trim() : "";
+                            if (!string.IsNullOrEmpty(tag)) {
+                                writer.WriteElementString(tag, val);
+                                elementsWritten++;
+                            }
+                        }
+                    }
+
+                    writer.WriteEndElement();
+                    writer.WriteEndDocument();
+                    writer.Flush();
+                }
+
+                string finalXml = sbOut.ToString();
+                if (!string.IsNullOrEmpty(outputFile)) {
+                    File.WriteAllText(outputFile, finalXml, Encoding.UTF8);
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"isXmlLiteNative\": {0}, \"rootElement\": \"{1}\", \"length\": {2}, \"elementsWritten\": {3}, \"outputFile\": \"{4}\", \"xml\": \"{5}\", \"elapsedMs\": {6}}}",
+                    isNative ? "true" : "false", EscapeJson(rootElement), finalXml.Length, elementsWritten, EscapeJson(outputFile ?? ""), EscapeJson(finalXml), sw.ElapsedMilliseconds));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": true, \"error\": \"XML write error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void XmlLiteInspectCmd(string source) {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            if (string.IsNullOrEmpty(source)) {
+                Console.WriteLine("{\"success\": false, \"apiAvailable\": true, \"error\": \"XML source string or file path required\"}");
+                return;
+            }
+
+            bool isNative = IsXmlLiteAvailable();
+
+            try {
+                var settings = new System.Xml.XmlReaderSettings {
+                    IgnoreWhitespace = true,
+                    DtdProcessing = System.Xml.DtdProcessing.Ignore,
+                    ConformanceLevel = System.Xml.ConformanceLevel.Auto
+                };
+
+                using (var textReader = File.Exists(source) ? (TextReader)new StreamReader(source, Encoding.UTF8) : new StringReader(source))
+                using (var reader = System.Xml.XmlReader.Create(textReader, settings)) {
+                    int maxDepth = 0;
+                    int totalElements = 0;
+                    int totalAttributes = 0;
+                    long totalTextLength = 0;
+                    var tagFreq = new Dictionary<string, int>();
+                    var namespaces = new Dictionary<string, string>();
+                    string detectedEncoding = "UTF-8";
+
+                    while (reader.Read()) {
+                        if (reader.Depth > maxDepth) maxDepth = reader.Depth;
+
+                        if (reader.NodeType == System.Xml.XmlNodeType.Element) {
+                            totalElements++;
+                            string name = reader.Name;
+                            if (!tagFreq.ContainsKey(name)) tagFreq[name] = 0;
+                            tagFreq[name]++;
+
+                            if (reader.HasAttributes) {
+                                totalAttributes += reader.AttributeCount;
+                                while (reader.MoveToNextAttribute()) {
+                                    if (reader.Prefix == "xmlns" || reader.Name == "xmlns") {
+                                        string pfx = reader.Prefix == "xmlns" ? reader.LocalName : "default";
+                                        namespaces[pfx] = reader.Value;
+                                    }
+                                }
+                                reader.MoveToElement();
+                            }
+                        } else if (reader.NodeType == System.Xml.XmlNodeType.Text || reader.NodeType == System.Xml.XmlNodeType.CDATA) {
+                            totalTextLength += reader.Value.Length;
+                        } else if (reader.NodeType == System.Xml.XmlNodeType.XmlDeclaration) {
+                            if (reader.HasAttributes) {
+                                while (reader.MoveToNextAttribute()) {
+                                    if (reader.Name == "encoding") detectedEncoding = reader.Value;
+                                }
+                                reader.MoveToElement();
+                            }
+                        }
+                    }
+
+                    var tagPairs = new List<string>();
+                    foreach (var kvp in tagFreq) {
+                        tagPairs.Add(string.Format("\"{0}\": {1}", EscapeJson(kvp.Key), kvp.Value));
+                    }
+
+                    var nsList = new List<string>();
+                    foreach (var kvp in namespaces) {
+                        nsList.Add(string.Format("{{\"prefix\": \"{0}\", \"uri\": \"{1}\"}}", EscapeJson(kvp.Key), EscapeJson(kvp.Value)));
+                    }
+
+                    long sizeBytes = File.Exists(source) ? new FileInfo(source).Length : Encoding.UTF8.GetByteCount(source);
+
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"isXmlLiteNative\": {0}, \"isWellFormed\": true, \"maxDepth\": {1}, \"totalElements\": {2}, \"totalAttributes\": {3}, \"totalTextLength\": {4}, \"sizeBytes\": {5}, \"encoding\": \"{6}\", \"tagFrequency\": {{{7}}}, \"namespaces\": [{8}], \"elapsedMs\": {9}}}",
+                        isNative ? "true" : "false", maxDepth, totalElements, totalAttributes, totalTextLength, sizeBytes, EscapeJson(detectedEncoding),
+                        string.Join(",", tagPairs.ToArray()), string.Join(",", nsList.ToArray()), sw.ElapsedMilliseconds));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": true, \"isWellFormed\": false, \"error\": \"XML inspection error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void XmlLiteQueryCmd(string source, string targetElementName, string attrName, string attrValue, int maxResults) {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            if (string.IsNullOrEmpty(source)) {
+                Console.WriteLine("{\"success\": false, \"apiAvailable\": true, \"error\": \"XML source string or file path required\"}");
+                return;
+            }
+            if (maxResults <= 0) maxResults = 50;
+
+            bool isNative = IsXmlLiteAvailable();
+
+            try {
+                var settings = new System.Xml.XmlReaderSettings {
+                    IgnoreWhitespace = true,
+                    DtdProcessing = System.Xml.DtdProcessing.Ignore,
+                    ConformanceLevel = System.Xml.ConformanceLevel.Auto
+                };
+
+                using (var textReader = File.Exists(source) ? (TextReader)new StreamReader(source, Encoding.UTF8) : new StringReader(source))
+                using (var reader = System.Xml.XmlReader.Create(textReader, settings)) {
+                    var matches = new List<string>();
+                    int totalScanned = 0;
+
+                    while (reader.Read()) {
+                        if (reader.NodeType == System.Xml.XmlNodeType.Element) {
+                            totalScanned++;
+                            bool nameMatch = string.IsNullOrEmpty(targetElementName) ||
+                                reader.Name.Equals(targetElementName, StringComparison.OrdinalIgnoreCase) ||
+                                reader.LocalName.Equals(targetElementName, StringComparison.OrdinalIgnoreCase);
+
+                            if (nameMatch) {
+                                var attrDict = new Dictionary<string, string>();
+                                if (reader.HasAttributes) {
+                                    while (reader.MoveToNextAttribute()) {
+                                        attrDict[reader.Name] = reader.Value;
+                                    }
+                                    reader.MoveToElement();
+                                }
+
+                                bool attrMatch = true;
+                                if (!string.IsNullOrEmpty(attrName)) {
+                                    if (!attrDict.ContainsKey(attrName)) {
+                                        attrMatch = false;
+                                    } else if (!string.IsNullOrEmpty(attrValue) && !attrDict[attrName].Equals(attrValue, StringComparison.OrdinalIgnoreCase)) {
+                                        attrMatch = false;
+                                    }
+                                }
+
+                                if (attrMatch && matches.Count < maxResults) {
+                                    var lineInfo = reader as System.Xml.IXmlLineInfo;
+                                    int line = lineInfo != null ? lineInfo.LineNumber : 0;
+                                    int pos = lineInfo != null ? lineInfo.LinePosition : 0;
+
+                                    var attrJsonPairs = new List<string>();
+                                    foreach (var kvp in attrDict) {
+                                        attrJsonPairs.Add(string.Format("\"{0}\": \"{1}\"", EscapeJson(kvp.Key), EscapeJson(kvp.Value)));
+                                    }
+
+                                    matches.Add(string.Format("{{\"name\": \"{0}\", \"localName\": \"{1}\", \"prefix\": \"{2}\", \"depth\": {3}, \"line\": {4}, \"position\": {5}, \"attributes\": {{{6}}}}}",
+                                        EscapeJson(reader.Name), EscapeJson(reader.LocalName), EscapeJson(reader.Prefix), reader.Depth, line, pos, string.Join(",", attrJsonPairs.ToArray())));
+                                }
+                            }
+                        }
+                    }
+
+                    Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"isXmlLiteNative\": {0}, \"totalScanned\": {1}, \"matchCount\": {2}, \"matches\": [{3}], \"elapsedMs\": {4}}}",
+                        isNative ? "true" : "false", totalScanned, matches.Count, string.Join(",", matches.ToArray()), sw.ElapsedMilliseconds));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": true, \"error\": \"XML query error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         #endregion
 
         const uint CF_UNICODETEXT = 13;
@@ -26183,6 +26474,33 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "appx_package_id" || cmd == "appx-package-id") {
                 string fullName = args.Length >= 2 ? args[1] : "";
                 AppxPackageIdCmd(fullName);
+            } else if (cmd == "xmllite_read" || cmd == "xmllite-read") {
+                string source = args.Length >= 2 ? args[1] : "";
+                int maxNodes = 100;
+                if (args.Length >= 3) int.TryParse(args[2], out maxNodes);
+                bool skipWs = true;
+                if (args.Length >= 4) bool.TryParse(args[3], out skipWs);
+                XmlLiteReadCmd(source, maxNodes, skipWs);
+            } else if (cmd == "xmllite_write" || cmd == "xmllite-write") {
+                string root = args.Length >= 2 ? args[1] : "root";
+                string elements = args.Length >= 3 ? args[2] : "";
+                bool indent = true;
+                if (args.Length >= 4) bool.TryParse(args[3], out indent);
+                bool omitDecl = false;
+                if (args.Length >= 5) bool.TryParse(args[4], out omitDecl);
+                string outFile = args.Length >= 6 ? args[5] : "";
+                XmlLiteWriteCmd(root, elements, indent, omitDecl, outFile);
+            } else if (cmd == "xmllite_inspect" || cmd == "xmllite-inspect") {
+                string source = args.Length >= 2 ? args[1] : "";
+                XmlLiteInspectCmd(source);
+            } else if (cmd == "xmllite_query" || cmd == "xmllite-query") {
+                string source = args.Length >= 2 ? args[1] : "";
+                string elemName = args.Length >= 3 ? args[2] : "";
+                string attrName = args.Length >= 4 ? args[3] : "";
+                string attrVal = args.Length >= 5 ? args[4] : "";
+                int maxResults = 50;
+                if (args.Length >= 6) int.TryParse(args[5], out maxResults);
+                XmlLiteQueryCmd(source, elemName, attrName, attrVal, maxResults);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

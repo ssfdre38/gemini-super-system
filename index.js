@@ -5302,6 +5302,107 @@ const SYSTEM_TOOLS = [
           },
           required: ["packageFullName"]
         }
+      },
+      {
+        name: "super_xmllite_read",
+        description: "Streams and tokenizes XML documents at bare-metal speed using Windows XmlLite (xmllite.h / xmllite.dll) forward-only reader without building an in-memory DOM tree. Traverses nodes, extracting node types (Element, EndElement, Text, CDATA, Comment), qualified and local names, namespace prefixes, depth levels, exact line and column numbers, text values, and attributes.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            source: {
+              type: "string",
+              description: "XML string or absolute file path to read."
+            },
+            maxNodes: {
+              type: "number",
+              default: 100,
+              description: "Maximum sampled nodes to return in results (default: 100, max: 2000)."
+            },
+            skipWhitespace: {
+              type: "boolean",
+              default: true,
+              description: "Whether to omit whitespace-only text nodes."
+            }
+          },
+          required: ["source"]
+        }
+      },
+      {
+        name: "super_xmllite_write",
+        description: "Generates canonical, indented XML streams at bare-metal speed via Windows XmlLite writer with configurable indentation, UTF-8/UTF-16 encoding, and optional direct-to-disk persistence.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            rootElement: {
+              type: "string",
+              default: "root",
+              description: "Root element tag name."
+            },
+            elements: {
+              type: "string",
+              description: "Comma-separated tag=value pairs to generate inside root element (e.g. 'title=Gemini,version=1.0.0,status=ready')."
+            },
+            indent: {
+              type: "boolean",
+              default: true,
+              description: "Whether to format output with clean indentation."
+            },
+            omitXmlDeclaration: {
+              type: "boolean",
+              default: false,
+              description: "Whether to omit <?xml version='1.0'?> declaration header."
+            },
+            outputFile: {
+              type: "string",
+              description: "Optional destination file path to write generated XML to disk."
+            }
+          }
+        }
+      },
+      {
+        name: "super_xmllite_inspect",
+        description: "Performs high-speed structural analysis and telemetry of an XML document via Windows XmlLite streaming engine. Discovers maximum hierarchy depth, element tag frequency histogram, unique namespace URIs, total element and attribute counts, text payload size, encoding, and well-formedness validation without DOM memory overhead.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            source: {
+              type: "string",
+              description: "XML string or absolute file path to inspect."
+            }
+          },
+          required: ["source"]
+        }
+      },
+      {
+        name: "super_xmllite_query",
+        description: "Executes streaming element and attribute search across XML documents via Windows XmlLite without loading into memory. Filters nodes by tag name and attribute name/value criteria, extracting matching elements with depth, line positions, and full attribute dictionaries.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            source: {
+              type: "string",
+              description: "XML string or absolute file path to search."
+            },
+            elementName: {
+              type: "string",
+              description: "Element tag name to match (case-insensitive, e.g. 'Identity', 'user', 'Task')."
+            },
+            attributeName: {
+              type: "string",
+              description: "Optional attribute name filter (e.g. 'id', 'role', 'Name')."
+            },
+            attributeValue: {
+              type: "string",
+              description: "Optional attribute value filter to match."
+            },
+            maxResults: {
+              type: "number",
+              default: 50,
+              description: "Maximum matching elements to return (default: 50)."
+            }
+          },
+          required: ["source"]
+        }
       }
 ];
 
@@ -9259,6 +9360,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🏷️ [AppX Package Identity]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_xmllite_read") {
+    const res = await orch.readXmlLite(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📖 [Windows XmlLite Streaming Reader]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_xmllite_write") {
+    const res = await orch.writeXmlLite(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `✍️ [Windows XmlLite Document Writer]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_xmllite_inspect") {
+    const res = await orch.inspectXmlLite(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔬 [Windows XmlLite Structural Inspection]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_xmllite_query") {
+    const res = await orch.queryXmlLite(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔎 [Windows XmlLite Streaming Query]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

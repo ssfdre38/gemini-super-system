@@ -5642,10 +5642,87 @@ async function run() {
     assert(typeof res.publisherId === "string");
   });
 
-  it("All 280 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 79: Windows XmlLite Streaming Subsystem (xmllite.h / xmllite.dll)
+  console.log("\n\x1b[1m[Suite 79: Windows XmlLite Streaming Subsystem]\x1b[0m");
+
+  await itAsync("readXmlLite streams and tokenizes XML nodes forward-only without DOM overhead", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    const sampleXml = `<Configuration><App id="1" name="Gemini"><Engine active="true">SuperSystem</Engine></App></Configuration>`;
+    const res = await kb.readXmlLite({ source: sampleXml, maxNodes: 20 });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "readXmlLite failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.totalNodesRead === "number" && res.totalNodesRead > 0);
+    assert(typeof res.returnedNodes === "number" && res.returnedNodes > 0);
+    assert(Array.isArray(res.nodes) && res.nodes.length > 0);
+    assert(typeof res.nodeTypesSummary === "object");
+
+    const first = res.nodes[0];
+    assert.strictEqual(first.name, "Configuration");
+    assert.strictEqual(first.type, "Element");
+  });
+
+  await itAsync("writeXmlLite generates formatted canonical XML with configurable indentation", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    const res = await kb.writeXmlLite({
+      rootElement: "Manifest",
+      elements: "title=Gemini,version=2.0,architecture=x64",
+      indent: true
+    });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "writeXmlLite failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert.strictEqual(res.rootElement, "Manifest");
+    assert(typeof res.length === "number" && res.length > 0);
+    assert(typeof res.elementsWritten === "number" && res.elementsWritten >= 4);
+    assert(typeof res.xml === "string" && res.xml.includes("<Manifest>") && res.xml.includes("<title>Gemini</title>"));
+  });
+
+  await itAsync("inspectXmlLite calculates tree depth, tag frequencies, and namespaces", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    const sampleXml = `<?xml version="1.0" encoding="utf-8"?><root xmlns:d="http://gemini.deepmind.com"><d:item id="1">First</d:item><d:item id="2">Second</d:item></root>`;
+    const res = await kb.inspectXmlLite({ source: sampleXml });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "inspectXmlLite failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert.strictEqual(res.isWellFormed, true);
+    assert(typeof res.maxDepth === "number" && res.maxDepth >= 1);
+    assert(typeof res.totalElements === "number" && res.totalElements >= 3);
+    assert(typeof res.totalAttributes === "number" && res.totalAttributes >= 3);
+    assert(typeof res.tagFrequency === "object");
+    assert(Array.isArray(res.namespaces) && res.namespaces.length >= 1);
+  });
+
+  await itAsync("queryXmlLite filters stream by element tag name and attribute key/value", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+
+    const sampleXml = `<Catalog><Item category="book" id="101">Algorithms</Item><Item category="hardware" id="102">FPGA</Item></Catalog>`;
+    const res = await kb.queryXmlLite({ source: sampleXml, elementName: "Item", attributeName: "category", attributeValue: "hardware" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "queryXmlLite failed: " + JSON.stringify(res));
+    assert.strictEqual(res.apiAvailable, true);
+    assert(typeof res.totalScanned === "number" && res.totalScanned > 0);
+    assert.strictEqual(res.matchCount, 1);
+    assert(Array.isArray(res.matches) && res.matches.length === 1);
+    assert.strictEqual(res.matches[0].attributes.category, "hardware");
+    assert.strictEqual(res.matches[0].attributes.id, "102");
+  });
+
+  it("All 284 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 280);
+    assert.strictEqual(SYSTEM_TOOLS.length, 284);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -5859,6 +5936,10 @@ async function run() {
     assert(toolNames.includes("super_appx_manifest"));
     assert(toolNames.includes("super_appx_find"));
     assert(toolNames.includes("super_appx_package_id"));
+    assert(toolNames.includes("super_xmllite_read"));
+    assert(toolNames.includes("super_xmllite_write"));
+    assert(toolNames.includes("super_xmllite_inspect"));
+    assert(toolNames.includes("super_xmllite_query"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));

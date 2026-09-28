@@ -109,6 +109,7 @@
   - [91. Windows Cryptography Next Generation (CNG) Subsystem](#91--windows-cryptography-next-generation-cng-subsystem-bcrypth--bcryptdll)
   - [92. Windows Event Tracing for Windows (ETW) Subsystem](#92--windows-event-tracing-for-windows-etw-subsystem-evntraceh--advapi32dll)
   - [93. Windows Application Model & AppX/MSIX Packaging Subsystem](#93--windows-application-model--appxmsix-packaging-subsystem-appmodelh--appxpackagingh--kernel32dll)
+  - [94. Windows XmlLite Streaming Subsystem](#94--windows-xmllite-streaming-subsystem-xmlliteh--xmllitedll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1218,6 +1219,15 @@ Directly interfaces with Microsoft's modern Windows Application Model, AppX, and
 - **Package Identity Deconstruction (`super_appx_package_id`)**: Deconstructs and analyzes raw package full name strings via bare-metal `PackageFamilyNameFromFullName` and semantic tokenizers, reporting architecture, version, resource ID, and publisher tokens.
 - **280 Tools Milestone**: Reaches **280 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **78 comprehensive test suites** and **74 environment health checks**.
 - **Native MCP Tools**: `super_appx_packages`, `super_appx_manifest`, `super_appx_find`, `super_appx_package_id`.
+
+### 94. ⚡ Windows XmlLite Streaming Subsystem (`xmllite.h` / `xmllite.dll`)
+Directly interfaces with Microsoft's high-performance, bare-metal Windows XmlLite streaming architecture via native `xmllite.dll` P/Invoke and forward-only non-cached traversal:
+- **Streaming Node Tokenization (`super_xmllite_read`)**: Traverses arbitrary XML strings or on-disk documents without loading an in-memory DOM tree. Extracts node types (Element, EndElement, Text, CDATA, Comment, ProcessingInstruction), qualified names, prefixes, local names, depth levels, exact line and column positions, text values, and attributes with microscopic RAM footprint.
+- **Canonical Streaming Generator (`super_xmllite_write`)**: Generates structured, canonical, indented XML streams at native speeds with UTF-8/UTF-16 encoding support, configurable indentation, declaration omission, and direct file persistence.
+- **Deep Structural Telemetry (`super_xmllite_inspect`)**: Analyzes XML files and payloads in a single forward pass, discovering maximum hierarchy depth, element tag frequency distributions, unique namespace URI bindings, total attribute counts, text payload ratios, encoding, and well-formedness validation.
+- **High-Speed Element & Attribute Query (`super_xmllite_query`)**: Performs non-cached streaming filtering across massive XML documents. Locates elements matching target tag names and attribute criteria, reporting exact node positions, hierarchy depth, and attribute dictionaries without memory bloat.
+- **284 Tools Milestone**: Reaches **284 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **79 comprehensive test suites** and **75 environment health checks**.
+- **Native MCP Tools**: `super_xmllite_read`, `super_xmllite_write`, `super_xmllite_inspect`, `super_xmllite_query`.
 
 ---
 
