@@ -108,6 +108,7 @@
   - [90. Windows Media Foundation (MF) Subsystem](#90--windows-media-foundation-mf-subsystem-mfapih--mfidlh--mfreadwriteh--mfplatdll--mfdll--mfreadwritedll)
   - [91. Windows Cryptography Next Generation (CNG) Subsystem](#91--windows-cryptography-next-generation-cng-subsystem-bcrypth--bcryptdll)
   - [92. Windows Event Tracing for Windows (ETW) Subsystem](#92--windows-event-tracing-for-windows-etw-subsystem-evntraceh--advapi32dll)
+  - [93. Windows Application Model & AppX/MSIX Packaging Subsystem](#93--windows-application-model--appxmsix-packaging-subsystem-appmodelh--appxpackagingh--kernel32dll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1208,6 +1209,15 @@ Directly interfaces with Microsoft's bare-metal, kernel-grade Event Tracing for 
 - **Provider Catalog & Registry Resolution (`super_etw_providers`)**: Enumerates registered ETW providers across the operating system via `EnumerateTraceGuidsEx` (`TraceGuidQueryList`) and resolves friendly publisher names directly from `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\WINEVT\Publishers`. Discovers GUIDs, system publishers, kernel instrumentation, and security auditing providers with case-insensitive search filtering.
 - **276 Tools Milestone**: Reaches **276 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **77 comprehensive test suites** and **73 environment health checks**.
 - **Native MCP Tools**: `super_etw_sessions`, `super_etw_session_query`, `super_etw_session_flush`, `super_etw_providers`.
+
+### 93. 📦 Windows Application Model & AppX/MSIX Packaging Subsystem (`appmodel.h` / `appxpackaging.h` / `kernel32.dll`)
+Directly interfaces with Microsoft's modern Windows Application Model, AppX, and MSIX packaging architecture via native `kernel32.dll` P/Invoke and high-speed XML parsing:
+- **Installed Packages Enumeration (`super_appx_packages`)**: Traverses user and system package stores (`HKCU\Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages` and `HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Applications`). Resolves package names, package full names, package family names, semantic versions, processor architectures (x86, x64, Arm, Arm64, Neutral), publisher tokens, physical installation root directories, and installation scopes without PowerShell overhead.
+- **Deep Manifest Inspection (`super_appx_manifest`)**: Parses `AppxManifest.xml` of any installed package or directory using native XML parsing. Extracts package identity, publisher display names, target device families, min/max tested OS versions, declared capabilities (`internetClient`, `runFullTrust`, `documentsLibrary`, etc.), and application entry point definitions.
+- **High-Speed Package Discovery (`super_appx_find`)**: Performs multi-criteria searches across package catalogs and manifests to resolve target executable filenames (e.g., `FilePicker.exe`, `explorer.exe`), protocol handlers, or capability strings directly to their enclosing package family and on-disk paths.
+- **Package Identity Deconstruction (`super_appx_package_id`)**: Deconstructs and analyzes raw package full name strings via bare-metal `PackageFamilyNameFromFullName` and semantic tokenizers, reporting architecture, version, resource ID, and publisher tokens.
+- **280 Tools Milestone**: Reaches **280 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **78 comprehensive test suites** and **74 environment health checks**.
+- **Native MCP Tools**: `super_appx_packages`, `super_appx_manifest`, `super_appx_find`, `super_appx_package_id`.
 
 ---
 

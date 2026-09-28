@@ -22201,6 +22201,378 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Region 93 - Windows Application Model & AppX/MSIX Packaging Subsystem (appmodel.h / appxpackaging.h / kernel32.dll / AppxPackaging partition)
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern int GetPackagePathByFullName(string packageFullName, ref uint pathLength, StringBuilder path);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        static extern int PackageFamilyNameFromFullName(string packageFullName, ref uint packageFamilyNameLength, StringBuilder packageFamilyName);
+
+        static void AppxPackagesCmd(string filter, string typeFilter, int maxResults) {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            if (maxResults <= 0) maxResults = 100;
+            string filterLower = string.IsNullOrEmpty(filter) || filter.Equals("all", StringComparison.OrdinalIgnoreCase) ? null : filter.ToLowerInvariant();
+            string typeLower = string.IsNullOrEmpty(typeFilter) ? "all" : typeFilter.ToLowerInvariant();
+
+            var seenFullNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var packageList = new List<Dictionary<string, object>>();
+
+            // 1. User repository
+            if (typeLower == "all" || typeLower == "user") {
+                try {
+                    using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages")) {
+                        if (key != null) {
+                            foreach (string subName in key.GetSubKeyNames()) {
+                                if (seenFullNames.Add(subName)) {
+                                    var meta = ParseAppxPackage(subName, "user");
+                                    if (MatchesAppxFilter(meta, filterLower)) {
+                                        packageList.Add(meta);
+                                        if (packageList.Count >= maxResults) break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch {}
+            }
+
+            // 2. System / AllUser repository
+            if ((typeLower == "all" || typeLower == "system") && packageList.Count < maxResults) {
+                try {
+                    using (var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\Windows\CurrentVersion\Appx\AppxAllUserStore\Applications")) {
+                        if (key != null) {
+                            foreach (string subName in key.GetSubKeyNames()) {
+                                if (seenFullNames.Add(subName)) {
+                                    var meta = ParseAppxPackage(subName, "system");
+                                    if (MatchesAppxFilter(meta, filterLower)) {
+                                        packageList.Add(meta);
+                                        if (packageList.Count >= maxResults) break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch {}
+            }
+
+            var sb = new StringBuilder();
+            sb.Append(string.Format("{{\"success\": true, \"apiAvailable\": true, \"totalFound\": {0}, \"totalDiscovered\": {0}, \"returnedCount\": {1}, \"filter\": \"{2}\", \"typeFilter\": \"{3}\", \"packages\": [",
+                seenFullNames.Count, packageList.Count, EscapeJson(filter ?? "all"), EscapeJson(typeFilter ?? "all")));
+
+            for (int i = 0; i < packageList.Count; i++) {
+                if (i > 0) sb.Append(",");
+                var p = packageList[i];
+                sb.Append("{");
+                sb.Append(string.Format("\"name\": \"{0}\", ", EscapeJson((string)p["name"])));
+                sb.Append(string.Format("\"fullName\": \"{0}\", ", EscapeJson((string)p["fullName"])));
+                sb.Append(string.Format("\"packageFullName\": \"{0}\", ", EscapeJson((string)p["fullName"])));
+                sb.Append(string.Format("\"family\": \"{0}\", ", EscapeJson((string)p["family"])));
+                sb.Append(string.Format("\"packageFamilyName\": \"{0}\", ", EscapeJson((string)p["family"])));
+                sb.Append(string.Format("\"version\": \"{0}\", ", EscapeJson((string)p["version"])));
+                sb.Append(string.Format("\"architecture\": \"{0}\", ", EscapeJson((string)p["architecture"])));
+                sb.Append(string.Format("\"publisherId\": \"{0}\", ", EscapeJson((string)p["publisherId"])));
+                sb.Append(string.Format("\"rootFolder\": \"{0}\", ", EscapeJson((string)p["rootFolder"])));
+                sb.Append(string.Format("\"scope\": \"{0}\"", EscapeJson((string)p["scope"])));
+                sb.Append("}");
+            }
+
+            sb.Append(string.Format("], \"elapsedMs\": {0}}}", sw.ElapsedMilliseconds));
+            Console.WriteLine(sb.ToString());
+        }
+
+        static Dictionary<string, object> ParseAppxPackage(string fullName, string scope) {
+            var d = new Dictionary<string, object>();
+            d["fullName"] = fullName;
+            d["scope"] = scope;
+
+            // Resolve Family
+            uint famLen = 260;
+            var sbFam = new StringBuilder(260);
+            int retFam = PackageFamilyNameFromFullName(fullName, ref famLen, sbFam);
+            d["family"] = retFam == 0 ? sbFam.ToString() : "";
+
+            // Resolve Path
+            uint pathLen = 260;
+            var sbPath = new StringBuilder(260);
+            int retPath = GetPackagePathByFullName(fullName, ref pathLen, sbPath);
+            d["rootFolder"] = retPath == 0 ? sbPath.ToString() : "";
+
+            // Parse FullName: Name_Version_Architecture_ResourceId_PublisherId
+            string[] parts = fullName.Split('_');
+            if (parts.Length >= 5) {
+                d["name"] = parts[0];
+                d["version"] = parts[1];
+                d["architecture"] = parts[2];
+                d["resourceId"] = parts[3];
+                d["publisherId"] = parts[4];
+            } else if (parts.Length >= 2) {
+                d["name"] = parts[0];
+                d["version"] = "";
+                d["architecture"] = "";
+                d["resourceId"] = "";
+                d["publisherId"] = parts[parts.Length - 1];
+            } else {
+                d["name"] = fullName;
+                d["version"] = "";
+                d["architecture"] = "";
+                d["resourceId"] = "";
+                d["publisherId"] = "";
+            }
+
+            return d;
+        }
+
+        static bool MatchesAppxFilter(Dictionary<string, object> meta, string filterLower) {
+            if (filterLower == null) return true;
+            string fn = (meta["fullName"] as string ?? "").ToLowerInvariant();
+            string nm = (meta["name"] as string ?? "").ToLowerInvariant();
+            string fm = (meta["family"] as string ?? "").ToLowerInvariant();
+            string pub = (meta["publisherId"] as string ?? "").ToLowerInvariant();
+            return fn.Contains(filterLower) || nm.Contains(filterLower) || fm.Contains(filterLower) || pub.Contains(filterLower);
+        }
+
+        static void AppxManifestCmd(string packageIdentifierOrPath) {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            if (string.IsNullOrEmpty(packageIdentifierOrPath)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Package identifier or manifest path required\"}");
+                return;
+            }
+
+            string manifestPath = null;
+            if (File.Exists(packageIdentifierOrPath)) {
+                manifestPath = packageIdentifierOrPath;
+            } else if (Directory.Exists(packageIdentifierOrPath)) {
+                string cand = Path.Combine(packageIdentifierOrPath, "AppxManifest.xml");
+                if (File.Exists(cand)) manifestPath = cand;
+            }
+
+            if (manifestPath == null) {
+                // Try resolving via GetPackagePathByFullName
+                uint pathLen = 260;
+                var sbPath = new StringBuilder(260);
+                if (GetPackagePathByFullName(packageIdentifierOrPath, ref pathLen, sbPath) == 0 && sbPath.Length > 0) {
+                    string cand = Path.Combine(sbPath.ToString(), "AppxManifest.xml");
+                    if (File.Exists(cand)) manifestPath = cand;
+                }
+            }
+
+            if (manifestPath == null) {
+                // Search registry for matching package
+                using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages")) {
+                    if (key != null) {
+                        foreach (string subName in key.GetSubKeyNames()) {
+                            if (subName.IndexOf(packageIdentifierOrPath, StringComparison.OrdinalIgnoreCase) >= 0) {
+                                uint pathLen = 260;
+                                var sbPath = new StringBuilder(260);
+                                if (GetPackagePathByFullName(subName, ref pathLen, sbPath) == 0 && sbPath.Length > 0) {
+                                    string cand = Path.Combine(sbPath.ToString(), "AppxManifest.xml");
+                                    if (File.Exists(cand)) {
+                                        manifestPath = cand;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (manifestPath == null) {
+                try {
+                    string sysApps = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows), "SystemApps");
+                    if (Directory.Exists(sysApps)) {
+                        foreach (string dir in Directory.GetDirectories(sysApps)) {
+                            if (Path.GetFileName(dir).IndexOf(packageIdentifierOrPath, StringComparison.OrdinalIgnoreCase) >= 0) {
+                                string cand = Path.Combine(dir, "AppxManifest.xml");
+                                if (File.Exists(cand)) { manifestPath = cand; break; }
+                            }
+                        }
+                    }
+                    if (manifestPath == null) {
+                        string winApps = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsApps");
+                        if (Directory.Exists(winApps)) {
+                            foreach (string dir in Directory.GetDirectories(winApps)) {
+                                if (Path.GetFileName(dir).IndexOf(packageIdentifierOrPath, StringComparison.OrdinalIgnoreCase) >= 0) {
+                                    string cand = Path.Combine(dir, "AppxManifest.xml");
+                                    if (File.Exists(cand)) { manifestPath = cand; break; }
+                                }
+                            }
+                        }
+                    }
+                } catch {}
+            }
+
+            if (manifestPath == null || !File.Exists(manifestPath)) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"apiAvailable\": true, \"error\": \"AppxManifest.xml not found for '{0}'\"}}", EscapeJson(packageIdentifierOrPath)));
+                return;
+            }
+
+            try {
+                var doc = new System.Xml.XmlDocument();
+                doc.Load(manifestPath);
+
+                var nsmgr = new System.Xml.XmlNamespaceManager(doc.NameTable);
+                nsmgr.AddNamespace("m", doc.DocumentElement.NamespaceURI);
+
+                // Identity
+                var idElem = doc.DocumentElement.SelectSingleNode("//m:Identity", nsmgr) as System.Xml.XmlElement;
+                string idName = idElem != null ? idElem.GetAttribute("Name") : "";
+                string idPub = idElem != null ? idElem.GetAttribute("Publisher") : "";
+                string idVer = idElem != null ? idElem.GetAttribute("Version") : "";
+                string idArch = idElem != null ? idElem.GetAttribute("ProcessorArchitecture") : "";
+
+                // Properties
+                var propElem = doc.DocumentElement.SelectSingleNode("//m:Properties", nsmgr);
+                string dispName = propElem != null && propElem["DisplayName"] != null ? propElem["DisplayName"].InnerText : "";
+                string pubDispName = propElem != null && propElem["PublisherDisplayName"] != null ? propElem["PublisherDisplayName"].InnerText : "";
+                string desc = propElem != null && propElem["Description"] != null ? propElem["Description"].InnerText : "";
+                string logo = propElem != null && propElem["Logo"] != null ? propElem["Logo"].InnerText : "";
+
+                // Dependencies
+                var depNodes = doc.DocumentElement.SelectNodes("//m:Dependencies/*", nsmgr);
+                var depList = new List<string>();
+                if (depNodes != null) {
+                    foreach (System.Xml.XmlElement dep in depNodes) {
+                        string dName = dep.GetAttribute("Name");
+                        string minVer = dep.GetAttribute("MinVersion");
+                        string maxVer = dep.GetAttribute("MaxVersionTested");
+                        depList.Add(string.Format("{{\"name\": \"{0}\", \"minVersion\": \"{1}\", \"maxVersionTested\": \"{2}\"}}",
+                            EscapeJson(dName), EscapeJson(minVer), EscapeJson(maxVer)));
+                    }
+                }
+
+                // Capabilities
+                var capNodes = doc.DocumentElement.SelectNodes("//m:Capabilities/*", nsmgr);
+                var capList = new List<string>();
+                if (capNodes != null) {
+                    foreach (System.Xml.XmlElement cap in capNodes) {
+                        string cName = cap.GetAttribute("Name");
+                        if (!string.IsNullOrEmpty(cName)) capList.Add("\"" + EscapeJson(cName) + "\"");
+                    }
+                }
+
+                // Applications
+                var appNodes = doc.DocumentElement.SelectNodes("//m:Applications/m:Application", nsmgr);
+                var appList = new List<string>();
+                if (appNodes != null) {
+                    foreach (System.Xml.XmlElement app in appNodes) {
+                        string appId = app.GetAttribute("Id");
+                        string appExec = app.GetAttribute("Executable");
+                        string appEntry = app.GetAttribute("EntryPoint");
+                        appList.Add(string.Format("{{\"id\": \"{0}\", \"executable\": \"{1}\", \"entryPoint\": \"{2}\"}}",
+                            EscapeJson(appId), EscapeJson(appExec), EscapeJson(appEntry)));
+                    }
+                }
+
+                var sb = new StringBuilder();
+                sb.Append("{\"success\": true, \"apiAvailable\": true, ");
+                sb.Append(string.Format("\"name\": \"{0}\", \"version\": \"{1}\", \"publisher\": \"{2}\", ",
+                    EscapeJson(idName), EscapeJson(idVer), EscapeJson(idPub)));
+                sb.Append(string.Format("\"manifestPath\": \"{0}\", ", EscapeJson(manifestPath)));
+                sb.Append(string.Format("\"identity\": {{\"name\": \"{0}\", \"publisher\": \"{1}\", \"version\": \"{2}\", \"processorArchitecture\": \"{3}\"}}, ",
+                    EscapeJson(idName), EscapeJson(idPub), EscapeJson(idVer), EscapeJson(idArch)));
+                sb.Append(string.Format("\"properties\": {{\"displayName\": \"{0}\", \"publisherDisplayName\": \"{1}\", \"description\": \"{2}\", \"logo\": \"{3}\"}}, ",
+                    EscapeJson(dispName), EscapeJson(pubDispName), EscapeJson(desc), EscapeJson(logo)));
+                sb.Append(string.Format("\"dependencies\": [{0}], ", string.Join(",", depList.ToArray())));
+                sb.Append(string.Format("\"capabilities\": [{0}], ", string.Join(",", capList.ToArray())));
+                sb.Append(string.Format("\"applications\": [{0}], ", string.Join(",", appList.ToArray())));
+                sb.Append(string.Format("\"elapsedMs\": {0}}}", sw.ElapsedMilliseconds));
+
+                Console.WriteLine(sb.ToString());
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Failed to parse manifest: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void AppxFindCmd(string query, int maxResults) {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            if (string.IsNullOrEmpty(query)) {
+                Console.WriteLine("{\"success\": false, \"error\": \"Query required\"}");
+                return;
+            }
+            if (maxResults <= 0) maxResults = 25;
+
+            var matches = new List<Dictionary<string, string>>();
+            using (var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\Repository\Packages")) {
+                if (key != null) {
+                    foreach (string fullName in key.GetSubKeyNames()) {
+                        uint pathLen = 260;
+                        var sbPath = new StringBuilder(260);
+                        if (GetPackagePathByFullName(fullName, ref pathLen, sbPath) == 0 && sbPath.Length > 0) {
+                            string manifest = Path.Combine(sbPath.ToString(), "AppxManifest.xml");
+                            if (File.Exists(manifest)) {
+                                try {
+                                    string text = File.ReadAllText(manifest);
+                                    if (text.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                        fullName.IndexOf(query, StringComparison.OrdinalIgnoreCase) >= 0) {
+                                        uint famLen = 260;
+                                        var sbFam = new StringBuilder(260);
+                                        PackageFamilyNameFromFullName(fullName, ref famLen, sbFam);
+
+                                        var m = new Dictionary<string, string>();
+                                        m["fullName"] = fullName;
+                                        m["name"] = (string)ParseAppxPackage(fullName, "unknown")["name"];
+                                        m["family"] = sbFam.ToString();
+                                        m["rootFolder"] = sbPath.ToString();
+                                        matches.Add(m);
+                                        if (matches.Count >= maxResults) break;
+                                    }
+                                } catch {}
+                            }
+                        }
+                    }
+                }
+            }
+
+            var sb = new StringBuilder();
+            sb.Append(string.Format("{{\"success\": true, \"apiAvailable\": true, \"query\": \"{0}\", \"totalFound\": {1}, \"matchCount\": {1}, \"matches\": [",
+                EscapeJson(query), matches.Count));
+
+            for (int i = 0; i < matches.Count; i++) {
+                if (i > 0) sb.Append(",");
+                sb.Append(string.Format("{{\"name\": \"{0}\", \"fullName\": \"{1}\", \"packageFullName\": \"{1}\", \"family\": \"{2}\", \"packageFamilyName\": \"{2}\", \"rootFolder\": \"{3}\"}}",
+                    EscapeJson(matches[i].ContainsKey("name") ? matches[i]["name"] : ""),
+                    EscapeJson(matches[i]["fullName"]),
+                    EscapeJson(matches[i]["family"]),
+                    EscapeJson(matches[i]["rootFolder"])));
+            }
+
+            sb.Append(string.Format("], \"elapsedMs\": {0}}}", sw.ElapsedMilliseconds));
+            Console.WriteLine(sb.ToString());
+        }
+
+        static void AppxPackageIdCmd(string packageFullName) {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            if (string.IsNullOrEmpty(packageFullName)) {
+                Console.WriteLine("{\"success\": false, \"apiAvailable\": true, \"error\": \"Package full name required\"}");
+                return;
+            }
+
+            uint famLen = 260;
+            var sbFam = new StringBuilder(260);
+            int retFam = PackageFamilyNameFromFullName(packageFullName, ref famLen, sbFam);
+
+            uint pathLen = 260;
+            var sbPath = new StringBuilder(260);
+            int retPath = GetPackagePathByFullName(packageFullName, ref pathLen, sbPath);
+
+            var meta = ParseAppxPackage(packageFullName, "unknown");
+
+            Console.WriteLine(string.Format("{{\"success\": true, \"apiAvailable\": true, \"fullName\": \"{0}\", \"packageFullName\": \"{0}\", \"name\": \"{1}\", \"family\": \"{2}\", \"packageFamilyName\": \"{2}\", \"version\": \"{3}\", \"architecture\": \"{4}\", \"resourceId\": \"{5}\", \"publisherId\": \"{6}\", \"rootFolder\": \"{7}\", \"elapsedMs\": {8}}}",
+                EscapeJson(packageFullName),
+                EscapeJson((string)meta["name"]),
+                EscapeJson(retFam == 0 ? sbFam.ToString() : (string)meta["family"]),
+                EscapeJson((string)meta["version"]),
+                EscapeJson((string)meta["architecture"]),
+                EscapeJson((string)meta["resourceId"]),
+                EscapeJson((string)meta["publisherId"]),
+                EscapeJson(retPath == 0 ? sbPath.ToString() : (string)meta["rootFolder"]),
+                sw.ElapsedMilliseconds));
+        }
+
+        #endregion
+
         const uint CF_UNICODETEXT = 13;
         const uint GMEM_MOVEABLE = 0x0002;
 
@@ -25794,6 +26166,23 @@ namespace GeminiSuperDesktop {
                 int maxResults = 100;
                 if (args.Length >= 3) int.TryParse(args[2], out maxResults);
                 EtwProvidersCmd(filter, maxResults);
+            } else if (cmd == "appx_packages" || cmd == "appx-packages") {
+                string filter = args.Length >= 2 ? args[1] : "all";
+                string typeFilter = args.Length >= 3 ? args[2] : "all";
+                int maxResults = 100;
+                if (args.Length >= 4) int.TryParse(args[3], out maxResults);
+                AppxPackagesCmd(filter, typeFilter, maxResults);
+            } else if (cmd == "appx_manifest" || cmd == "appx-manifest") {
+                string pkgIdOrPath = args.Length >= 2 ? args[1] : "";
+                AppxManifestCmd(pkgIdOrPath);
+            } else if (cmd == "appx_find" || cmd == "appx-find") {
+                string query = args.Length >= 2 ? args[1] : "";
+                int maxResults = 25;
+                if (args.Length >= 3) int.TryParse(args[2], out maxResults);
+                AppxFindCmd(query, maxResults);
+            } else if (cmd == "appx_package_id" || cmd == "appx-package-id") {
+                string fullName = args.Length >= 2 ? args[1] : "";
+                AppxPackageIdCmd(fullName);
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

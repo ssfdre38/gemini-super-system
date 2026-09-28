@@ -5230,6 +5230,78 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_appx_packages",
+        description: "Enumerates installed Windows App packages (MSIX, AppX, UWP, system apps, store apps) across user and system repositories via bare-metal kernel32.dll AppModel APIs (GetPackagePathByFullName, PackageFamilyNameFromFullName) and registry stores. Discovers package name, full name, family name, version, processor architecture, publisher ID, root directory, and installation scope.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filter: {
+              type: "string",
+              default: "all",
+              description: "Case-insensitive substring filter for package name, family, full name, or publisher ID."
+            },
+            type: {
+              type: "string",
+              enum: ["all", "user", "system"],
+              default: "all",
+              description: "Filter packages by installation scope: 'all', 'user', or 'system'."
+            },
+            maxResults: {
+              type: "number",
+              default: 100,
+              description: "Maximum number of packages to return (default: 100, max: 2000)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_appx_manifest",
+        description: "Inspects and parses the AppxManifest.xml of an installed Windows App package or on-disk directory via native XML engine. Extracts identity metadata (name, publisher, version, processor architecture), properties (display name, publisher display name, description, logo), target device family dependencies, declared capabilities (internetClient, runFullTrust, etc.), and application entry points.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            packageIdentifier: {
+              type: "string",
+              description: "Package full name, family name, or direct path to package root directory or AppxManifest.xml file."
+            }
+          },
+          required: ["packageIdentifier"]
+        }
+      },
+      {
+        name: "super_appx_find",
+        description: "Performs high-speed search across installed AppX/MSIX packages and their on-disk manifests to locate applications by executable filename (e.g. 'FilePicker.exe', 'explorer.exe'), protocol handler, capability, or display name, resolving associated package family and physical installation path.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "Search keyword, executable name (e.g. 'FilePicker.exe'), or capability string."
+            },
+            maxResults: {
+              type: "number",
+              default: 25,
+              description: "Maximum matching packages to return (default: 25)."
+            }
+          },
+          required: ["query"]
+        }
+      },
+      {
+        name: "super_appx_package_id",
+        description: "Parses, analyzes, and formats Windows App package identity strings via kernel32.dll AppModel APIs. Deconstructs package full name into semantic version, processor architecture (x86, x64, Arm, Arm64, Neutral), resource ID, publisher token, family name, and on-disk root folder.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            packageFullName: {
+              type: "string",
+              description: "Full package name string (e.g. '1527c705-839a-4832-9118-54d4Bd6a0c89_10.0.19640.1000_neutral_neutral_cw5n1h2txyewy')."
+            }
+          },
+          required: ["packageFullName"]
+        }
       }
 ];
 
@@ -9139,6 +9211,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `📋 [ETW Registered Providers]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_appx_packages") {
+    const res = await orch.getAppxPackages(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📦 [Windows AppX / MSIX Packages]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_appx_manifest") {
+    const res = await orch.getAppxManifest(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📜 [AppX Manifest Inspection]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_appx_find") {
+    const res = await orch.findAppxPackages(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔍 [AppX Package Search]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_appx_package_id") {
+    const res = await orch.getAppxPackageId(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🏷️ [AppX Package Identity]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };
