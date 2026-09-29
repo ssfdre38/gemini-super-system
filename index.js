@@ -5771,7 +5771,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === "super_desktop_list_windows") {
     const bridge = getDesktopBridge();
-    const windows = bridge.listWindows({ includeCloaked: args?.includeCloaked });
+    const windows = await bridge.listWindowsAsync({ includeCloaked: args?.includeCloaked });
     return {
       content: [
         {
