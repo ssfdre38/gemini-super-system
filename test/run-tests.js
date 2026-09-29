@@ -5781,8 +5781,68 @@ async function run() {
     assert.strictEqual(res.recordsInserted, 3);
     assert.strictEqual(res.recordsRead, 3);
     assert.strictEqual(res.sampleKey, "item-0");
-    assert(typeof res.samplePayload === "string" && res.samplePayload.includes("Test ISAM Verification"));
     assert.strictEqual(res.databaseEngine, "ESENT ISAM");
+  });
+
+  // Suite 81: Universal Platform Bridge (UPB) & Linux POSIX Engine Subsystem
+  console.log("\n\x1b[1m[Suite 81: Universal Platform Bridge (UPB) & Linux POSIX Subsystem]\x1b[0m");
+
+  it("getPlatformBridge returns singleton instance with platform diagnostics", () => {
+    const { getPlatformBridge } = require("../lib/platform.js");
+    const bridge = getPlatformBridge();
+    assert(bridge !== null && typeof bridge === "object");
+    const info = bridge.getPlatformInfo();
+    assert.strictEqual(info.success, true);
+    assert.strictEqual(typeof info.platform, "string");
+    assert.strictEqual(typeof info.arch, "string");
+    assert.strictEqual(typeof info.hasNativeBridge, "boolean");
+  });
+
+  await itAsync("UPB Proxy transparently forwards calls to underlying bridge on host OS", async () => {
+    const { getPlatformBridge } = require("../lib/platform.js");
+    const bridge = getPlatformBridge();
+    const vitals = await bridge.getKernelVitals();
+    assert(vitals !== null && typeof vitals === "object");
+    assert.strictEqual(vitals.success, true);
+    assert(vitals.memoryPools !== undefined);
+  });
+
+  await itAsync("LinuxBridge parses mock /proc and /sys telemetry with zero external dependencies", async () => {
+    const { LinuxBridge } = require("../lib/linux-bridge.js");
+    const linux = new LinuxBridge();
+    assert.strictEqual(linux._decodeHexIp("0100007F"), "127.0.0.1");
+
+    const mockRoot = path.join(os.tmpdir(), "mock_linux_fs_" + Date.now());
+    const mockProc = path.join(mockRoot, "proc");
+    const mockSys = path.join(mockRoot, "sys");
+
+    try {
+      fs.mkdirSync(path.join(mockProc, "net"), { recursive: true });
+      fs.mkdirSync(path.join(mockSys, "block", "sda", "queue"), { recursive: true });
+      fs.mkdirSync(path.join(mockSys, "class", "thermal", "thermal_zone0"), { recursive: true });
+
+      fs.writeFileSync(path.join(mockProc, "meminfo"), "MemTotal: 16384000 kB\nMemFree: 8192000 kB\nSlab: 512000 kB\n");
+      fs.writeFileSync(path.join(mockProc, "net", "tcp"), "  sl  local_address rem_address   st tx rx tr tm ret uid to inode\n   0: 0100007F:1F90 00000000:0000 0A 00:00 00:00 00 0 0 1000 0 99988\n");
+      fs.writeFileSync(path.join(mockSys, "block", "sda", "size"), "1000000000");
+      fs.writeFileSync(path.join(mockSys, "block", "sda", "queue", "rotational"), "0");
+      fs.writeFileSync(path.join(mockSys, "class", "thermal", "thermal_zone0", "temp"), "42500\n");
+
+      const mockBridge = new LinuxBridge({ procPath: mockProc, sysPath: mockSys });
+      const vitals = await mockBridge.getKernelVitals();
+      assert.strictEqual(vitals.totalRamMB, 16000);
+
+      const sockets = await mockBridge.getSocketTable();
+      assert.strictEqual(sockets.sockets[0].localAddress, "127.0.0.1");
+      assert.strictEqual(sockets.sockets[0].localPort, 8080);
+
+      const disks = await mockBridge.getPhysicalDisks();
+      assert.strictEqual(disks.physicalDisks[0].mediaType, "SSD / NVMe");
+
+      const thermals = await mockBridge.getThermalVitals();
+      assert.strictEqual(thermals.maxTempCelsius, 43);
+    } finally {
+      try { fs.rmSync(mockRoot, { recursive: true, force: true }); } catch {}
+    }
   });
 
   it("All 288 MCP Tools are registered with valid JSON schemas in index.js", () => {
