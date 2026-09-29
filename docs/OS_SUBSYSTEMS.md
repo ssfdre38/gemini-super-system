@@ -1,5 +1,5 @@
 # 🛠️ Sovereign AI Operating System: Subsystems & Tool Catalog
-> **Comprehensive Technical Catalog of the 10 Sovereign OS Subsystems and 292 Native MCP System Calls in the Unified Gemini Super System (`gemini-super-system`)**
+> **Comprehensive Technical Catalog of the 10 Sovereign OS Subsystems and 300 Native MCP System Calls in the Unified Gemini Super System (`gemini-super-system`)**
 
 ---
 
@@ -53,6 +53,10 @@ Provides granular NT process control, kernel thread tree analysis, working set o
 | `super_toolhelp_process_tree` | `CreateToolhelp32Snapshot` | Reconstructs the complete OS process tree, parent-child lineages, thread counts, and executable paths. |
 | `super_toolhelp_threads` | `THREADENTRY32` / Win32 | Enumerates active kernel threads within a specific target process with priority levels. |
 | `super_toolhelp_modules` | `MODULEENTRY32` / Win32 | Lists loaded DLL modules, base memory addresses, and file versions for any target process. |
+| `super_dbg_minidump_capture` | `dbghelp.dll` / `MiniDumpWriteDump` | Generates process minidumps with configurable dump types (`normal`, `withData`, `full`) for deep crash analysis. |
+| `super_dbg_pe_info` | PE/COFF Executable Parser | Inspects Portable Executable binary headers, machine architecture, optional headers, and section tables. |
+| `super_dbg_symbol_probe` | CodeView / RSDS Symbol Diagnostics | Probes PE binary debug directories for PDB paths, CodeView signatures, GUIDs, and local symbols. |
+| `super_dbg_process_threads` | `dbghelp.dll` / Process Diagnostics | Deep diagnostic inspection of a target process's thread hierarchy, priority levels, wait states, and execution times. |
 | `super_psapi_performance` | `GetPerformanceInfo` / `psapi.dll` | Retrieves real-time kernel performance counters: commit charge, kernel pool sizes, and handle counts. |
 | `super_psapi_process_memory` | `GetProcessMemoryInfo` | Queries working set, private bytes, peak memory usage, and page fault counters for any process. |
 | `super_psapi_device_drivers` | `EnumDeviceDrivers` | Traverses loaded kernel device drivers, image base addresses, and filenames. |
@@ -206,6 +210,10 @@ Network routing tables, active TCP/UDP socket tracking, DNS cache manipulation, 
 | `super_net_shares` | `NetShareEnum` (`netapi32.dll`) | Enumerates local SMB file shares, administrative shares (`C$`, `ADMIN$`), and share permissions. |
 | `super_net_sessions` | `NetSessionEnum` | Lists active incoming SMB network sessions and client machine hostnames. |
 | `super_net_accounts` | `NetUserEnum` | Queries local operating system user accounts, privilege levels, and account flags. |
+| `super_wfp_engine_status` | `fwpuclnt.dll` / `FwpmEngineOpen0` | Queries Windows Base Filtering Engine (BFE) session connectivity, RPC authentication, and firewall engine status. |
+| `super_wfp_sessions` | `FwpmSessionCreateEnumHandle0` | Enumerates active client sessions registered with the Windows Base Filtering Engine and audits BFE host PID. |
+| `super_wfp_providers` | `FwpmProviderCreateEnumHandle0` | Enumerates registered WFP security providers, filtering policy engines, and security publishers. |
+| `super_wfp_layer_stats` | WFP Layer Matrix / `fwpuclnt.dll` | Audits core Windows Filtering Platform filtering layers (ALE, Inbound/Outbound Transport, Stream, IPPacket). |
 | `super_netbird_status` | WireGuard Mesh Management | Queries NetBird mesh networking status, peer routing, and virtual IP assignments. |
 
 ---

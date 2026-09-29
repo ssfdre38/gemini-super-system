@@ -5487,6 +5487,99 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_dbg_minidump_capture",
+        description: "Captures an in-memory or on-disk process MiniDump using native dbghelp.dll MiniDumpWriteDump. Supports crash forensics, thread state snapshots, and handle table diagnostics without external debuggers.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            pid: {
+              type: "string",
+              description: "Target process ID or process name. Defaults to 'self' (the current agent process)."
+            },
+            dumpPath: {
+              type: "string",
+              description: "Optional destination .dmp file path. Defaults to %TEMP%/gemini_dumps/."
+            },
+            dumpType: {
+              type: "string",
+              enum: ["normal", "withData", "full", "handles"],
+              description: "MiniDump type flag: 'normal' (standard lightweight), 'withData' (includes data segments), 'full' (full user-memory dump), 'handles' (includes handle table)."
+            }
+          }
+        }
+      },
+      {
+        name: "super_dbg_pe_info",
+        description: "Deep binary inspection of Portable Executable (PE/COFF) files (.exe, .dll, .sys). Extracts MZ DOS header, NT signature, Machine architecture (x64/x86/ARM64), compilation timestamp, entry point RVA, image base, subsystem type, and section table (.text, .rdata, .data).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filePath: {
+              type: "string",
+              description: "Path to the PE binary file to inspect. Defaults to desktop_helper.exe."
+            }
+          }
+        }
+      },
+      {
+        name: "super_dbg_symbol_probe",
+        description: "Probes debug directories of PE executable binaries for CodeView / RSDS symbols, PDB file name, GUID signature, age, and verifies whether matching PDB debug symbols exist locally.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            filePath: {
+              type: "string",
+              description: "Path to the binary file to probe. Defaults to desktop_helper.exe."
+            }
+          }
+        }
+      },
+      {
+        name: "super_dbg_process_threads",
+        description: "Inspects thread hierarchy, execution state, priority levels, wait reasons, and processor execution times (user/kernel) for a target process.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            pid: {
+              type: "string",
+              description: "Target process ID or name. Defaults to 'self'."
+            }
+          }
+        }
+      },
+      {
+        name: "super_wfp_engine_status",
+        description: "Queries Windows Base Filtering Engine (BFE) session status, handle connectivity, and firewall filtering engine telemetry via fwpuclnt.dll / fwpmu.h.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_wfp_sessions",
+        description: "Enumerates active client sessions registered with the Windows Base Filtering Engine, auditing BFE host process ID and active security filter sessions.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_wfp_providers",
+        description: "Enumerates registered WFP security providers, filtering policy engines, and system security publishers (e.g. Base Filtering Engine, Windows Defender Firewall, IPsec Policy Agent).",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_wfp_layer_stats",
+        description: "Audits core Windows Filtering Platform layers (Inbound/Outbound IPPacket, Inbound/Outbound Transport, Application-Layer Enforcement ALE, Stream) and layer matrix telemetry.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
       }
 ];
 
@@ -9588,6 +9681,102 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `🔎 [Windows Volume Shadow Copy Readiness Probe]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dbg_minidump_capture") {
+    const res = await orch.captureMinidump(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💥 [Windows Debug Help MiniDump Capture]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dbg_pe_info") {
+    const res = await orch.getPeInfo(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📐 [PE/COFF Executable Header Inspection]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dbg_symbol_probe") {
+    const res = await orch.probeSymbols(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔬 [Debug Symbol & RSDS/PDB Probe]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_dbg_process_threads") {
+    const res = await orch.getDbgProcessThreads(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🧵 [Process Thread Hierarchy & Diagnostics]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wfp_engine_status") {
+    const res = await orch.getWfpEngineStatus();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [Windows Filtering Platform Engine Status]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wfp_sessions") {
+    const res = await orch.getWfpSessions();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `👥 [Windows Filtering Platform Active Sessions]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wfp_providers") {
+    const res = await orch.getWfpProviders();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🏢 [Windows Filtering Platform Security Providers]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_wfp_layer_stats") {
+    const res = await orch.getWfpLayerStats();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🌐 [Windows Filtering Platform Layer Matrix]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

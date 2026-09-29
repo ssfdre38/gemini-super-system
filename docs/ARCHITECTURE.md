@@ -21,7 +21,7 @@ Instead of treating MCP as a collection of disjointed plugins, Gemini Super Syst
                                      ▼
 +---------------------------------------------------------------------------+
 |                 MCP SYSTEM CALL ABI (JSON-RPC 2.0)                        |
-|           292 Sovereign Tools across 62 Developmental Phases              |
+|           300 Sovereign Tools across 64 Developmental Phases              |
 +---------------------------------------------------------------------------+
                                      │
                                      ▼
@@ -64,7 +64,7 @@ The AI model operates as the sovereign executive engine. It receives low-latency
 
 ### Layer 2: MCP System Call ABI (Syscall Gateway)
 Standard operating systems define system call numbers and register conventions (`int 0x80`, `syscall`, `sysenter`). Gemini Super System establishes a structured, JSON-RPC 2.0 system call interface over `stdio` and `SSE`:
-- **Strict Typing**: All 292 system calls provide validated JSON Schemas.
+- **Strict Typing**: All 300 system calls provide validated JSON Schemas.
 - **Microsecond Latency**: Pure compiled native execution without spawning slow intermediate shells or PowerShell instances.
 - **Atomic Operations**: Hardware actuation and kernel queries execute as atomic transactions.
 

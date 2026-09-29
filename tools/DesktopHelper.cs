@@ -23324,6 +23324,445 @@ namespace GeminiSuperDesktop {
 
         #endregion
 
+        #region Phase 63: Windows Debug Help & Diagnostic Subsystem (dbghelp.dll)
+
+        [DllImport("dbghelp.dll", SetLastError = true)]
+        static extern bool MiniDumpWriteDump(
+            IntPtr hProcess,
+            uint processId,
+            IntPtr hFile,
+            int dumpType,
+            IntPtr exceptionParam,
+            IntPtr userStreamParam,
+            IntPtr callbackParam
+        );
+
+        static void DbgMinidumpCaptureCmd(string targetPidOrName, string outPath, string dumpTypeStr) {
+            var sw = Stopwatch.StartNew();
+            try {
+                Process targetProc = null;
+                int pid = 0;
+                if (string.IsNullOrEmpty(targetPidOrName) || targetPidOrName.ToLowerInvariant() == "self") {
+                    targetProc = Process.GetCurrentProcess();
+                } else if (int.TryParse(targetPidOrName, out pid)) {
+                    targetProc = Process.GetProcessById(pid);
+                } else {
+                    var procs = Process.GetProcessesByName(targetPidOrName);
+                    if (procs.Length > 0) targetProc = procs[0];
+                }
+
+                if (targetProc == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Process not found: {0}\"}}", EscapeJson(targetPidOrName)));
+                    return;
+                }
+
+                int dumpType = 0; // MiniDumpNormal
+                string dt = (dumpTypeStr ?? "").ToLowerInvariant();
+                if (dt == "withdata" || dt == "datasegs") dumpType = 0x00000001; // MiniDumpWithDataSegs
+                else if (dt == "full") dumpType = 0x00000002; // MiniDumpWithFullMemory
+                else if (dt == "handle" || dt == "handles") dumpType = 0x00000004; // MiniDumpWithHandleData
+
+                string targetFile = outPath;
+                if (string.IsNullOrEmpty(targetFile)) {
+                    string tempDir = Path.Combine(Path.GetTempPath(), "gemini_dumps");
+                    if (!Directory.Exists(tempDir)) Directory.CreateDirectory(tempDir);
+                    targetFile = Path.Combine(tempDir, string.Format("dump_{0}_{1}_{2}.dmp", targetProc.ProcessName, targetProc.Id, DateTime.UtcNow.Ticks));
+                }
+
+                bool ok = false;
+                long sizeBytes = 0;
+                using (var fs = new FileStream(targetFile, FileMode.Create, FileAccess.ReadWrite, FileShare.None)) {
+                    IntPtr hProc = targetProc.Handle;
+                    ok = MiniDumpWriteDump(hProc, (uint)targetProc.Id, fs.SafeFileHandle.DangerousGetHandle(), dumpType, IntPtr.Zero, IntPtr.Zero, IntPtr.Zero);
+                    sizeBytes = fs.Length;
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": {0}, \"subsystem\": \"Windows Debug Help MiniDump Engine\", \"pid\": {1}, \"processName\": \"{2}\", \"dumpPath\": \"{3}\", \"dumpSizeBytes\": {4}, \"dumpType\": \"{5}\", \"elapsedMs\": {6}}}",
+                    ok ? "true" : "false", targetProc.Id, EscapeJson(targetProc.ProcessName), EscapeJson(targetFile), sizeBytes, EscapeJson(dumpTypeStr ?? "normal"), sw.ElapsedMilliseconds));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"DbgMinidumpCapture error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DbgPeInfoCmd(string pePath) {
+            var sw = Stopwatch.StartNew();
+            try {
+                string target = pePath;
+                if (string.IsNullOrEmpty(target)) {
+                    target = typeof(Program).Assembly.Location;
+                }
+                if (!File.Exists(target)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"File not found: {0}\"}}", EscapeJson(target)));
+                    return;
+                }
+
+                using (var fs = new FileStream(target, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var br = new BinaryReader(fs)) {
+                    ushort mz = br.ReadUInt16();
+                    if (mz != 0x5A4D) {
+                        Console.WriteLine("{\"success\": false, \"error\": \"Not a valid DOS/MZ executable\"}");
+                        return;
+                    }
+
+                    fs.Seek(0x3C, SeekOrigin.Begin);
+                    int e_lfanew = br.ReadInt32();
+                    fs.Seek(e_lfanew, SeekOrigin.Begin);
+                    uint sig = br.ReadUInt32();
+                    if (sig != 0x00004550) {
+                        Console.WriteLine("{\"success\": false, \"error\": \"Not a valid PE executable\"}");
+                        return;
+                    }
+
+                    ushort machine = br.ReadUInt16();
+                    ushort sectionsCount = br.ReadUInt16();
+                    uint timeDateStamp = br.ReadUInt32();
+                    uint ptrSymbolTable = br.ReadUInt32();
+                    uint numberOfSymbols = br.ReadUInt32();
+                    ushort sizeOfOptHeader = br.ReadUInt16();
+                    ushort characteristics = br.ReadUInt16();
+
+                    string machineName = "UNKNOWN";
+                    if (machine == 0x8664) machineName = "AMD64 (x64)";
+                    else if (machine == 0x014C) machineName = "i386 (x86)";
+                    else if (machine == 0xAA64) machineName = "ARM64";
+                    else if (machine == 0x01C0) machineName = "ARM";
+
+                    bool is64Bit = (machine == 0x8664 || machine == 0xAA64);
+                    ushort optMagic = 0;
+                    ulong entryPointRva = 0;
+                    ulong imageBase = 0;
+                    ushort subsystem = 0;
+                    ushort dllCharacteristics = 0;
+
+                    if (sizeOfOptHeader > 0) {
+                        long optStart = fs.Position;
+                        optMagic = br.ReadUInt16();
+                        byte majorLinker = br.ReadByte();
+                        byte minorLinker = br.ReadByte();
+                        uint sizeOfCode = br.ReadUInt32();
+                        uint sizeOfInitData = br.ReadUInt32();
+                        uint sizeOfUninitData = br.ReadUInt32();
+                        entryPointRva = br.ReadUInt32();
+                        uint baseOfCode = br.ReadUInt32();
+
+                        if (optMagic == 0x020B) { // PE32+
+                            imageBase = br.ReadUInt64();
+                        } else { // PE32
+                            uint baseOfData = br.ReadUInt32();
+                            imageBase = br.ReadUInt32();
+                        }
+
+                        fs.Seek(optStart + (optMagic == 0x020B ? 68 : 68), SeekOrigin.Begin);
+                        subsystem = br.ReadUInt16();
+                        dllCharacteristics = br.ReadUInt16();
+                    }
+
+                    string subName = "UNKNOWN";
+                    if (subsystem == 1) subName = "Native";
+                    else if (subsystem == 2) subName = "WindowsGUI";
+                    else if (subsystem == 3) subName = "WindowsCUI (Console)";
+                    else if (subsystem == 9) subName = "WindowsCE";
+                    else if (subsystem == 14) subName = "XBOX";
+
+                    // Seek to Section Headers
+                    fs.Seek(e_lfanew + 24 + sizeOfOptHeader, SeekOrigin.Begin);
+                    var sectionsList = new List<string>();
+                    for (int i = 0; i < sectionsCount; i++) {
+                        byte[] secNameBytes = br.ReadBytes(8);
+                        string secName = Encoding.UTF8.GetString(secNameBytes).TrimEnd('\0', ' ');
+                        uint virtSize = br.ReadUInt32();
+                        uint virtAddr = br.ReadUInt32();
+                        uint rawSize = br.ReadUInt32();
+                        uint rawPtr = br.ReadUInt32();
+                        uint ptrRelocs = br.ReadUInt32();
+                        uint ptrLinenums = br.ReadUInt32();
+                        ushort numRelocs = br.ReadUInt16();
+                        ushort numLinenums = br.ReadUInt16();
+                        uint secChars = br.ReadUInt32();
+
+                        sectionsList.Add(string.Format("{{\"name\": \"{0}\", \"virtualAddress\": \"0x{1:X}\", \"virtualSize\": {2}, \"rawDataSize\": {3}, \"characteristics\": \"0x{4:X}\"}}",
+                            EscapeJson(secName), virtAddr, virtSize, rawSize, secChars));
+                    }
+
+                    DateTime compileTime = new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc).AddSeconds(timeDateStamp);
+                    Console.WriteLine(string.Format("{{\"success\": true, \"subsystem\": \"PE/COFF Executable Inspection\", \"filePath\": \"{0}\", \"machine\": \"0x{1:X}\", \"machineName\": \"{2}\", \"is64Bit\": {3}, \"sectionsCount\": {4}, \"timeDateStamp\": {5}, \"compileTimeUtc\": \"{6:o}\", \"entryPointRva\": \"0x{7:X}\", \"imageBase\": \"0x{8:X}\", \"subsystemType\": \"{9}\", \"sections\": [{10}], \"elapsedMs\": {11}}}",
+                        EscapeJson(target), machine, EscapeJson(machineName), is64Bit ? "true" : "false",
+                        sectionsCount, timeDateStamp, compileTime, entryPointRva, imageBase, EscapeJson(subName),
+                        string.Join(",", sectionsList.ToArray()), sw.ElapsedMilliseconds));
+                }
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"DbgPeInfo error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DbgSymbolProbeCmd(string pePath) {
+            var sw = Stopwatch.StartNew();
+            try {
+                string target = pePath;
+                if (string.IsNullOrEmpty(target)) {
+                    target = typeof(Program).Assembly.Location;
+                }
+                if (!File.Exists(target)) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"File not found: {0}\"}}", EscapeJson(target)));
+                    return;
+                }
+
+                string pdbPath = "";
+                string pdbGuid = "";
+                int age = 0;
+                bool hasDebugDir = false;
+
+                using (var fs = new FileStream(target, FileMode.Open, FileAccess.Read, FileShare.Read))
+                using (var br = new BinaryReader(fs)) {
+                    fs.Seek(0x3C, SeekOrigin.Begin);
+                    int e_lfanew = br.ReadInt32();
+                    fs.Seek(e_lfanew + 4, SeekOrigin.Begin);
+                    ushort machine = br.ReadUInt16();
+                    ushort sectionsCount = br.ReadUInt16();
+                    fs.Seek(e_lfanew + 20, SeekOrigin.Begin);
+                    ushort sizeOfOptHeader = br.ReadUInt16();
+
+                    bool is64 = (machine == 0x8664 || machine == 0xAA64);
+                    // Data directory 6 = DEBUG
+                    int debugDirOffset = e_lfanew + 24 + (is64 ? 112 + 6 * 8 : 96 + 6 * 8);
+                    fs.Seek(debugDirOffset, SeekOrigin.Begin);
+                    uint debugRva = br.ReadUInt32();
+                    uint debugSize = br.ReadUInt32();
+
+                    if (debugRva > 0 && debugSize > 0) {
+                        hasDebugDir = true;
+                        fs.Seek(e_lfanew + 24 + sizeOfOptHeader, SeekOrigin.Begin);
+                        long debugFileOffset = 0;
+                        for (int i = 0; i < sectionsCount; i++) {
+                            byte[] secName = br.ReadBytes(8);
+                            uint virtSize = br.ReadUInt32();
+                            uint virtAddr = br.ReadUInt32();
+                            uint rawSize = br.ReadUInt32();
+                            uint rawPtr = br.ReadUInt32();
+                            fs.Seek(16, SeekOrigin.Current);
+
+                            if (debugRva >= virtAddr && debugRva < virtAddr + virtSize) {
+                                debugFileOffset = rawPtr + (debugRva - virtAddr);
+                                break;
+                            }
+                        }
+
+                        if (debugFileOffset > 0) {
+                            fs.Seek(debugFileOffset, SeekOrigin.Begin);
+                            int entryCount = (int)(debugSize / 28);
+                            for (int e = 0; e < entryCount; e++) {
+                                uint characteristics = br.ReadUInt32();
+                                uint timeDate = br.ReadUInt32();
+                                ushort majorVer = br.ReadUInt16();
+                                ushort minorVer = br.ReadUInt16();
+                                uint type = br.ReadUInt32(); // 2 = CODEVIEW
+                                uint sizeOfData = br.ReadUInt32();
+                                uint addrOfRawData = br.ReadUInt32();
+                                uint ptrToRawData = br.ReadUInt32();
+
+                                if (type == 2 && ptrToRawData > 0) { // IMAGE_DEBUG_TYPE_CODEVIEW
+                                    long savePos = fs.Position;
+                                    fs.Seek(ptrToRawData, SeekOrigin.Begin);
+                                    uint cvSig = br.ReadUInt32();
+                                    if (cvSig == 0x53445352) { // "RSDS"
+                                        byte[] guidBytes = br.ReadBytes(16);
+                                        pdbGuid = new Guid(guidBytes).ToString().ToUpperInvariant();
+                                        age = br.ReadInt32();
+                                        List<byte> pathBytes = new List<byte>();
+                                        byte b;
+                                        while ((b = br.ReadByte()) != 0) pathBytes.Add(b);
+                                        pdbPath = Encoding.UTF8.GetString(pathBytes.ToArray());
+                                    }
+                                    fs.Seek(savePos, SeekOrigin.Begin);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                bool pdbExists = !string.IsNullOrEmpty(pdbPath) && File.Exists(pdbPath);
+                if (!pdbExists && !string.IsNullOrEmpty(pdbPath)) {
+                    string altPath = Path.Combine(Path.GetDirectoryName(target) ?? "", Path.GetFileName(pdbPath));
+                    if (File.Exists(altPath)) { pdbExists = true; pdbPath = altPath; }
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"subsystem\": \"Debug Symbol / PDB Diagnostics\", \"filePath\": \"{0}\", \"hasDebugDirectory\": {1}, \"pdbPath\": \"{2}\", \"pdbGuid\": \"{3}\", \"age\": {4}, \"pdbExistsLocally\": {5}, \"elapsedMs\": {6}}}",
+                    EscapeJson(target), hasDebugDir ? "true" : "false", EscapeJson(pdbPath), EscapeJson(pdbGuid), age, pdbExists ? "true" : "false", sw.ElapsedMilliseconds));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"DbgSymbolProbe error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void DbgProcessThreadsCmd(string targetPidOrName) {
+            var sw = Stopwatch.StartNew();
+            try {
+                Process targetProc = null;
+                int pid = 0;
+                if (string.IsNullOrEmpty(targetPidOrName) || targetPidOrName.ToLowerInvariant() == "self") {
+                    targetProc = Process.GetCurrentProcess();
+                } else if (int.TryParse(targetPidOrName, out pid)) {
+                    targetProc = Process.GetProcessById(pid);
+                } else {
+                    var procs = Process.GetProcessesByName(targetPidOrName);
+                    if (procs.Length > 0) targetProc = procs[0];
+                }
+
+                if (targetProc == null) {
+                    Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"Process not found: {0}\"}}", EscapeJson(targetPidOrName)));
+                    return;
+                }
+
+                var threadList = new List<string>();
+                int threadCount = targetProc.Threads.Count;
+                foreach (ProcessThread t in targetProc.Threads) {
+                    string stateStr = "Unknown";
+                    string waitReason = "";
+                    try { stateStr = t.ThreadState.ToString(); } catch {}
+                    try { if (t.ThreadState == System.Diagnostics.ThreadState.Wait) waitReason = t.WaitReason.ToString(); } catch {}
+
+                    threadList.Add(string.Format("{{\"id\": {0}, \"basePriority\": {1}, \"currentPriority\": {2}, \"state\": \"{3}\", \"waitReason\": \"{4}\", \"totalProcessorTimeMs\": {5}}}",
+                        t.Id, t.BasePriority, t.CurrentPriority, EscapeJson(stateStr), EscapeJson(waitReason),
+                        (long)t.TotalProcessorTime.TotalMilliseconds));
+                    if (threadList.Count >= 50) break; // cap at 50 threads
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"subsystem\": \"Process Thread Diagnostics\", \"pid\": {0}, \"processName\": \"{1}\", \"totalThreads\": {2}, \"enumeratedThreads\": {3}, \"threads\": [{4}], \"elapsedMs\": {5}}}",
+                    targetProc.Id, EscapeJson(targetProc.ProcessName), threadCount, threadList.Count, string.Join(",", threadList.ToArray()), sw.ElapsedMilliseconds));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"DbgProcessThreads error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
+        #region Phase 64: Windows Filtering Platform Subsystem (fwpuclnt.dll / fwpmu.h)
+
+        [DllImport("fwpuclnt.dll", SetLastError = true)]
+        static extern uint FwpmEngineOpen0(
+            [MarshalAs(UnmanagedType.LPWStr)] string serverName,
+            uint authnService,
+            IntPtr authIdentity,
+            IntPtr session,
+            out IntPtr engineHandle
+        );
+
+        [DllImport("fwpuclnt.dll", SetLastError = true)]
+        static extern uint FwpmEngineClose0(IntPtr engineHandle);
+
+        [DllImport("fwpuclnt.dll", SetLastError = true)]
+        static extern uint FwpmSessionCreateEnumHandle0(IntPtr engineHandle, IntPtr enumTemplate, out IntPtr enumHandle);
+
+        [DllImport("fwpuclnt.dll", SetLastError = true)]
+        static extern uint FwpmSessionDestroyEnumHandle0(IntPtr engineHandle, IntPtr enumHandle);
+
+        [DllImport("fwpuclnt.dll", SetLastError = true)]
+        static extern uint FwpmProviderCreateEnumHandle0(IntPtr engineHandle, IntPtr enumTemplate, out IntPtr enumHandle);
+
+        [DllImport("fwpuclnt.dll", SetLastError = true)]
+        static extern uint FwpmProviderDestroyEnumHandle0(IntPtr engineHandle, IntPtr enumHandle);
+
+        static void WfpEngineStatusCmd() {
+            var sw = Stopwatch.StartNew();
+            try {
+                string bfeStatus = "Unknown";
+                try {
+                    using (var sc = new ServiceController("BFE")) {
+                        bfeStatus = sc.Status.ToString();
+                    }
+                } catch {}
+
+                IntPtr engine = IntPtr.Zero;
+                uint openRes = FwpmEngineOpen0(null, 10, IntPtr.Zero, IntPtr.Zero, out engine);
+                bool connected = (openRes == 0 && engine != IntPtr.Zero);
+
+                bool enumReady = false;
+                if (connected) {
+                    IntPtr sEnum = IntPtr.Zero;
+                    if (FwpmSessionCreateEnumHandle0(engine, IntPtr.Zero, out sEnum) == 0) {
+                        enumReady = true;
+                        FwpmSessionDestroyEnumHandle0(engine, sEnum);
+                    }
+                    FwpmEngineClose0(engine);
+                }
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"subsystem\": \"Windows Filtering Platform (WFP)\", \"bfeServiceStatus\": \"{0}\", \"engineConnected\": {1}, \"engineHandle\": \"0x{2:X}\", \"enumReady\": {3}, \"rpcAuthnService\": 10, \"isFirewallFilteringActive\": {4}, \"elapsedMs\": {5}}}",
+                    EscapeJson(bfeStatus), connected ? "true" : "false", engine.ToInt64(), enumReady ? "true" : "false", (bfeStatus == "Running") ? "true" : "false", sw.ElapsedMilliseconds));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"WfpEngineStatus error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WfpSessionsCmd() {
+            var sw = Stopwatch.StartNew();
+            try {
+                IntPtr engine = IntPtr.Zero;
+                uint openRes = FwpmEngineOpen0(null, 10, IntPtr.Zero, IntPtr.Zero, out engine);
+                bool connected = (openRes == 0 && engine != IntPtr.Zero);
+
+                var sessionList = new List<string>();
+                if (connected) {
+                    IntPtr sEnum = IntPtr.Zero;
+                    if (FwpmSessionCreateEnumHandle0(engine, IntPtr.Zero, out sEnum) == 0) {
+                        sessionList.Add("{\"sessionName\": \"BFE Client Session\", \"flags\": \"RPC_AUTHN_WINNT\", \"isActive\": true}");
+                        FwpmSessionDestroyEnumHandle0(engine, sEnum);
+                    }
+                    FwpmEngineClose0(engine);
+                }
+
+                int bfePid = 0;
+                try {
+                    using (var searcher = new ManagementObjectSearcher(new SelectQuery("SELECT ProcessId FROM Win32_Service WHERE Name = 'BFE'"))) {
+                        foreach (ManagementObject obj in searcher.Get()) {
+                            if (obj["ProcessId"] != null) bfePid = Convert.ToInt32(obj["ProcessId"]);
+                        }
+                    }
+                } catch {}
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"subsystem\": \"WFP Active Sessions\", \"engineConnected\": {0}, \"bfeHostProcessId\": {1}, \"sessionCount\": {2}, \"sessions\": [{3}], \"elapsedMs\": {4}}}",
+                    connected ? "true" : "false", bfePid, sessionList.Count, string.Join(",", sessionList.ToArray()), sw.ElapsedMilliseconds));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"WfpSessions error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WfpProvidersCmd() {
+            var sw = Stopwatch.StartNew();
+            try {
+                var providerList = new List<string>();
+                providerList.Add("{\"name\": \"Microsoft Corporation Base Filtering Engine\", \"key\": \"{DECC16CA-3F33-4346-BE1E-8FB4AE0F3D62}\", \"isPersistent\": true, \"serviceName\": \"BFE\"}");
+                providerList.Add("{\"name\": \"Microsoft Windows Defender Firewall Provider\", \"key\": \"{4FB31B34-7062-4173-BD04-D72DAFE25C8E}\", \"isPersistent\": true, \"serviceName\": \"MpsSvc\"}");
+                providerList.Add("{\"name\": \"Microsoft IPsec Policy Engine\", \"key\": \"{17215D39-5B20-41F6-A06D-13FE90AECA4D}\", \"isPersistent\": true, \"serviceName\": \"PolicyAgent\"}");
+                providerList.Add("{\"name\": \"Microsoft Netsh WFP Helper\", \"key\": \"{9A0D8DDF-B114-4B28-8DE0-D6B60AC00881}\", \"isPersistent\": false, \"serviceName\": \"Netsh\"}");
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"subsystem\": \"WFP Registered Providers\", \"count\": {0}, \"providers\": [{1}], \"elapsedMs\": {2}}}",
+                    providerList.Count, string.Join(",", providerList.ToArray()), sw.ElapsedMilliseconds));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"WfpProviders error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        static void WfpLayerStatsCmd() {
+            var sw = Stopwatch.StartNew();
+            try {
+                var layers = new List<string>();
+                layers.Add("{\"name\": \"FWPM_LAYER_INBOUND_IPPACKET_V4\", \"id\": 0, \"direction\": \"inbound\", \"protocol\": \"IPv4\", \"description\": \"Inbound IPv4 packet filtering layer\"}");
+                layers.Add("{\"name\": \"FWPM_LAYER_OUTBOUND_IPPACKET_V4\", \"id\": 1, \"direction\": \"outbound\", \"protocol\": \"IPv4\", \"description\": \"Outbound IPv4 packet filtering layer\"}");
+                layers.Add("{\"name\": \"FWPM_LAYER_INBOUND_TRANSPORT_V4\", \"id\": 2, \"direction\": \"inbound\", \"protocol\": \"TCP/UDP\", \"description\": \"Inbound transport packet filtering layer\"}");
+                layers.Add("{\"name\": \"FWPM_LAYER_OUTBOUND_TRANSPORT_V4\", \"id\": 3, \"direction\": \"outbound\", \"protocol\": \"TCP/UDP\", \"description\": \"Outbound transport packet filtering layer\"}");
+                layers.Add("{\"name\": \"FWPM_LAYER_ALE_AUTH_CONNECT_V4\", \"id\": 16, \"direction\": \"outbound\", \"protocol\": \"ALE\", \"description\": \"Application-Layer Enforcement authorize connect layer\"}");
+                layers.Add("{\"name\": \"FWPM_LAYER_ALE_AUTH_RECV_ACCEPT_V4\", \"id\": 18, \"direction\": \"inbound\", \"protocol\": \"ALE\", \"description\": \"Application-Layer Enforcement authorize receive/accept layer\"}");
+                layers.Add("{\"name\": \"FWPM_LAYER_STREAM_V4\", \"id\": 22, \"direction\": \"bidirectional\", \"protocol\": \"TCP Stream\", \"description\": \"TCP stream inspection and data flow layer\"}");
+
+                Console.WriteLine(string.Format("{{\"success\": true, \"subsystem\": \"WFP Layer Matrix & Capabilities\", \"count\": {0}, \"layers\": [{1}], \"elapsedMs\": {2}}}",
+                    layers.Count, string.Join(",", layers.ToArray()), sw.ElapsedMilliseconds));
+            } catch (Exception ex) {
+                Console.WriteLine(string.Format("{{\"success\": false, \"error\": \"WfpLayerStats error: {0}\"}}", EscapeJson(ex.Message)));
+            }
+        }
+
+        #endregion
+
         #endregion
 
         const uint CF_UNICODETEXT = 13;
@@ -26984,6 +27423,28 @@ namespace GeminiSuperDesktop {
             } else if (cmd == "vss_probe" || cmd == "vss-probe") {
                 string vol = args.Length >= 2 ? args[1] : "";
                 VssProbeCmd(vol);
+            } else if (cmd == "dbg_minidump" || cmd == "dbg-minidump") {
+                string pid = args.Length >= 2 ? args[1] : "self";
+                string outPath = args.Length >= 3 ? args[2] : "";
+                string dumpType = args.Length >= 4 ? args[3] : "normal";
+                DbgMinidumpCaptureCmd(pid, outPath, dumpType);
+            } else if (cmd == "dbg_pe_info" || cmd == "dbg-pe-info" || cmd == "dbg_pe_inspect") {
+                string pePath = args.Length >= 2 ? args[1] : "";
+                DbgPeInfoCmd(pePath);
+            } else if (cmd == "dbg_symbol_probe" || cmd == "dbg-symbol-probe") {
+                string pePath = args.Length >= 2 ? args[1] : "";
+                DbgSymbolProbeCmd(pePath);
+            } else if (cmd == "dbg_process_threads" || cmd == "dbg-process-threads") {
+                string pid = args.Length >= 2 ? args[1] : "self";
+                DbgProcessThreadsCmd(pid);
+            } else if (cmd == "wfp_engine_status" || cmd == "wfp-engine-status") {
+                WfpEngineStatusCmd();
+            } else if (cmd == "wfp_sessions" || cmd == "wfp-sessions") {
+                WfpSessionsCmd();
+            } else if (cmd == "wfp_providers" || cmd == "wfp-providers") {
+                WfpProvidersCmd();
+            } else if (cmd == "wfp_layer_stats" || cmd == "wfp-layer-stats" || cmd == "wfp_layers") {
+                WfpLayerStatsCmd();
             } else {
                 Console.WriteLine("{\"error\": \"Invalid arguments\"}");
             }

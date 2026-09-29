@@ -6,8 +6,8 @@
 [![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen.svg)](https://nodejs.org/)
 [![Platform](https://img.shields.io/badge/platform-Windows%20x64%20%7C%20Linux%20POSIX-blue.svg)](docs/CROSS_PLATFORM_SPEC.md)
 [![Protocol](https://img.shields.io/badge/protocol-MCP%20v1.30-purple.svg)](https://modelcontextprotocol.io/)
-[![Tools](https://img.shields.io/badge/sovereign%20tools-292-success.svg)](docs/OS_SUBSYSTEMS.md)
-[![Test Suites](https://img.shields.io/badge/test%20suites-82%20passed-brightgreen.svg)](test/run-tests.js)
+[![Tools](https://img.shields.io/badge/sovereign%20tools-300-success.svg)](docs/OS_SUBSYSTEMS.md)
+[![Test Suites](https://img.shields.io/badge/test%20suites-84%20passed-brightgreen.svg)](test/run-tests.js)
 [![Memory Engine](https://img.shields.io/badge/memory-64--bit%20HMB-orange.svg)](docs/HMB_SPEC.md)
 [![Support on Ko-fi](https://img.shields.io/badge/Ko--fi-Support%20Daniel-FF5E5B?logo=kofi&logoColor=white)](https://ko-fi.com/ssfdre38)
 
@@ -22,7 +22,7 @@ For years, AI models have been restricted to the **"Chatbot in a Browser Tab"** 
 
 **Gemini Super System rebuilds the operating system from the ground up for autonomous AI cognition.**
 
-By implementing the Model Context Protocol (MCP) as a native system call interface, the AI reasoning engine interacts directly with the operating system kernel. With **292 sovereign native tools** across **62 developmental phases**, the AI transitions from a passive chat advisor into a true **autonomous digital coworker** sitting directly at the system bus, keyboard, mouse, and display compositor.
+By implementing the Model Context Protocol (MCP) as a native system call interface, the AI reasoning engine interacts directly with the operating system kernel. With **300 sovereign native tools** across **64 developmental phases**, the AI transitions from a passive chat advisor into a true **autonomous digital coworker** sitting directly at the system bus, keyboard, mouse, and display compositor.
 
 ---
 
@@ -47,7 +47,7 @@ flowchart TD
         HAL <-->|Linux POSIX Subsystem| LNX[lib/linux-bridge.js /proc & /sys]
     end
 
-    subgraph "Bare-Metal OS Subsystems (292 Native Tools)"
+    subgraph "Bare-Metal OS Subsystems (300 Native Tools)"
         WIN --> KRN[NT Kernel, Drivers, Jobs & Power]
         WIN --> FS[NTFS USN, VSS Snapshots & ESENT ISAM]
         WIN --> ACT[Hardware Mouse, Keys, Reticles & XInput]
@@ -65,7 +65,7 @@ flowchart TD
 
 ## 🛠️ The 10 Sovereign OS Subsystems
 
-The 292 native tools are organized into 10 cohesive, kernel-grade subsystems. For the complete parameter reference and API mappings, see the [**Complete Subsystems & Tool Catalog**](docs/OS_SUBSYSTEMS.md).
+The 300 native tools are organized into 10 cohesive, kernel-grade subsystems. For the complete parameter reference and API mappings, see the [**Complete Subsystems & Tool Catalog**](docs/OS_SUBSYSTEMS.md).
 
 ```
 +----------------------------------------------------------------------------------------------------+
@@ -74,17 +74,17 @@ The 292 native tools are organized into 10 cohesive, kernel-grade subsystems. Fo
 | Subsystem         | Tools | Primary Underlying APIs          | Architectural Role                  |
 +-------------------+-------+----------------------------------+-------------------------------------+
 | 1. Cognitive Memory|   17  | 64-bit HMB, UIAutomation, WinRT  | Persistent memory, vision & UI tree |
-| 2. Process & Jobs |   13  | ToolHelp32, NT Jobs, PSAPI       | Scheduling, sandboxing & priorities |
+| 2. Process & Jobs |   17  | ToolHelp32, NT Jobs, DbgHelp,PSAPI| Scheduling, sandboxing & priorities |
 | 3. Storage & ISAM |   20  | NTFS USN, VSS, ESENT, VHDX, CAB  | Filesystem journaling & snapshots   |
 | 4. Hardware Input |   26  | SendInput, XInput, SwDevice, CAD | Biomechanical actuation & haptics  |
 | 5. Kernel & Power |   26  | NtQuerySystemInfo, ACPI, WMI, PDH| Telemetry, thermals & CPU governor  |
-| 6. Networking     |   36  | WinHTTP, WinINet, IPHlp, WLAN    | Sockets, routing, DNS & Mesh        |
+| 6. Networking     |   40  | WinHTTP, WinINet, IPHlp, WFP,WLAN| Sockets, routing, DNS & Mesh        |
 | 7. Security/Trust |   36  | CNG (BCrypt), DPAPI, Authenticode| Cryptography, TPM & code integrity  |
 | 8. Graphics/DWM   |   20  | DXGI, DWM, WCS, Magnification    | GPU VRAM duplication & display      |
 | 9. Audio & Media  |   23  | WASAPI, Media Foundation, WIC,TTS| Desktop loopback & volume mixer     |
 | 10. Linux POSIX   |   75+ | /proc, /sys Virtual Filesystems  | Cross-platform POSIX abstraction    |
 +-------------------+-------+----------------------------------+-------------------------------------+
-| Total Sovereign Tools: 292 Native MCP System Calls across 82 Green Test Suites                      |
+| Total Sovereign Tools: 300 Native MCP System Calls across 84 Green Test Suites                      |
 +----------------------------------------------------------------------------------------------------+
 ```
 
@@ -96,6 +96,7 @@ The 292 native tools are organized into 10 cohesive, kernel-grade subsystems. Fo
 
 ### 2. ⚡ Process, Thread & Job Scheduling
 * **NT Process Trees & Modules (`tlhelp32.h`)**: Complete parent-child process traversal, thread priority inspection, and loaded DLL module mapping.
+* **DbgHelp Process Crash & Symbol Forensics (`dbghelp.dll`)**: Captures native process crash minidumps (`super_dbg_minidump_capture`), deep PE/COFF binary header inspection (`super_dbg_pe_info`), RSDS/PDB symbol probes (`super_dbg_symbol_probe`), and thread state diagnostics (`super_dbg_process_threads`).
 * **NT Job Object Sandboxing (`kernel32.dll`)**: Encapsulates worker processes with hard CPU percentage limits and memory ceilings.
 * **Process Working Set Tuning (`psapi.dll`)**: Real-time inspection of private bytes and working set trimming to eliminate agent memory bloat.
 * **Restart Manager (`rstrtmgr.dll`)**: Identifies and resolves active file locks to prevent file collisions during automated builds.
@@ -121,6 +122,7 @@ The 292 native tools are organized into 10 cohesive, kernel-grade subsystems. Fo
 
 ### 6. 🌐 Networking, Protocols & Mesh
 * **Raw Sockets Table (`iphlpapi.dll`)**: Real-time enumeration of all active TCP/UDP sockets mapped directly to their owning process IDs.
+* **Windows Filtering Platform (`fwpuclnt.dll` / `fwpmu.h`)**: Direct session connection to the Base Filtering Engine (`super_wfp_engine_status`), active session audits (`super_wfp_sessions`), security provider enumeration (`super_wfp_providers`), and ALE layer matrix diagnostics (`super_wfp_layer_stats`).
 * **IP Routing & DNS**: Live inspection of routing tables, ARP caches, and non-cached direct DNS queries with resolver cache flushing.
 * **WinHTTP & WinINet Engine**: Enterprise HTTP proxy auto-detection (WPAD), session telemetry, and URL canonicalization.
 * **Native WiFi Subsystem (`wlanapi.dll`)**: Adapter radio states, network scanning, stored WLAN XML profile inspection, and signal metrics.
@@ -189,7 +191,7 @@ Add to your `~/.gemini/settings.json` or Antigravity configuration:
 ```
 
 ### 4. Run the Full Test Suite
-Validate all 82 test suites across all 292 sovereign native tools:
+Validate all 84 test suites across all 300 sovereign native tools:
 ```bash
 node test/run-tests.js
 ```
@@ -199,7 +201,7 @@ node test/run-tests.js
 ## 📚 Architectural Specifications & Documentation
 
 * [**`docs/ARCHITECTURE.md`**](docs/ARCHITECTURE.md): Complete AI-OS Architectural Specification (Kernel ABI, HAL, Subsystems, System Call flow, IPC Bus).
-* [**`docs/OS_SUBSYSTEMS.md`**](docs/OS_SUBSYSTEMS.md): Comprehensive catalog of all 10 Subsystems and each of the 292 native tools with Win32/NT API mappings.
+* [**`docs/OS_SUBSYSTEMS.md`**](docs/OS_SUBSYSTEMS.md): Comprehensive catalog of all 10 Subsystems and each of the 300 native tools with Win32/NT API mappings.
 * [**`docs/MCP_SYSTEM_CALL_ABI.md`**](docs/MCP_SYSTEM_CALL_ABI.md): Technical specification of the Model Context Protocol as a machine-to-machine System Call Interface.
 * [**`docs/HMB_SPEC.md`**](docs/HMB_SPEC.md): 64-Bit Haven Memory Bank binary layout, struct packings, and cross-runtime parity.
 * [**`docs/ERGONOMICS.md`**](docs/ERGONOMICS.md): Bio-kinetic motor profiles, mechanical detent math, and non-activating overlay architecture.

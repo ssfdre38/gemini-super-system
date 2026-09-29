@@ -5911,10 +5911,134 @@ async function run() {
     assert(typeof res.diagnostics === "string" && res.diagnostics.length > 10);
   });
 
-  it("All 292 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 83: Windows Debug Help & Diagnostic Subsystem (DbgHelp / dbghelp.dll)
+  console.log("\n\x1b[1m[Suite 83: Windows Debug Help & Diagnostic Subsystem (DbgHelp)]\x1b[0m");
+
+  await itAsync("super_dbg_minidump_capture creates process crash dump via MiniDumpWriteDump", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.captureMinidump({ pid: process.pid, dumpType: "normal" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "captureMinidump failed: " + JSON.stringify(res));
+    assert.strictEqual(res.pid, process.pid);
+    assert(typeof res.dumpPath === "string" && res.dumpPath.endsWith(".dmp"));
+    assert(typeof res.dumpSizeBytes === "number" && res.dumpSizeBytes > 0);
+    assert.strictEqual(res.dumpType, "normal");
+
+    // Clean up temporary minidump test file
+    try {
+      if (fs.existsSync(res.dumpPath)) {
+        fs.unlinkSync(res.dumpPath);
+      }
+    } catch {}
+  });
+
+  await itAsync("super_dbg_pe_info parses Portable Executable (PE/COFF) binary headers", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getPeInfo();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getPeInfo failed: " + JSON.stringify(res));
+    assert.strictEqual(res.is64Bit, true);
+    assert(typeof res.machine === "string");
+    assert(typeof res.machineName === "string");
+    assert(typeof res.sectionsCount === "number" && res.sectionsCount > 0);
+    assert(Array.isArray(res.sections) && res.sections.length > 0);
+    assert(typeof res.sections[0].name === "string");
+    assert(typeof res.sections[0].virtualAddress === "string");
+  });
+
+  await itAsync("super_dbg_symbol_probe inspects CodeView / RSDS debug directory and PDB paths", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.probeSymbols();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "probeSymbols failed: " + JSON.stringify(res));
+    assert(typeof res.filePath === "string");
+    assert(typeof res.hasDebugDirectory === "boolean");
+    assert(typeof res.pdbPath === "string");
+    assert(typeof res.pdbGuid === "string");
+    assert(typeof res.pdbExistsLocally === "boolean");
+  });
+
+  await itAsync("super_dbg_process_threads diagnoses thread execution states and priorities", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getDbgProcessThreads({ pid: "self" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getDbgProcessThreads failed: " + JSON.stringify(res));
+    assert(typeof res.pid === "number" && res.pid > 0);
+    assert(typeof res.totalThreads === "number" && res.totalThreads > 0);
+    assert(Array.isArray(res.threads) && res.threads.length > 0);
+    assert(typeof res.threads[0].id === "number");
+    assert(typeof res.threads[0].basePriority === "number");
+    assert(typeof res.threads[0].state === "string");
+  });
+
+  // Suite 84: Windows Filtering Platform Subsystem (WFP / fwpuclnt.dll)
+  console.log("\n\x1b[1m[Suite 84: Windows Filtering Platform Subsystem (WFP)]\x1b[0m");
+
+  await itAsync("super_wfp_engine_status queries Base Filtering Engine session connectivity and telemetry", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWfpEngineStatus();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWfpEngineStatus failed: " + JSON.stringify(res));
+    assert.strictEqual(res.engineConnected, true);
+    assert(typeof res.engineHandle === "string");
+    assert.strictEqual(res.bfeServiceStatus, "Running");
+    assert.strictEqual(res.isFirewallFilteringActive, true);
+  });
+
+  await itAsync("super_wfp_sessions enumerates active BFE client sessions", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWfpSessions();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWfpSessions failed: " + JSON.stringify(res));
+    assert.strictEqual(res.engineConnected, true);
+    assert(typeof res.bfeHostProcessId === "number" && res.bfeHostProcessId > 0);
+    assert(typeof res.sessionCount === "number" && res.sessionCount >= 0);
+    assert(Array.isArray(res.sessions));
+  });
+
+  await itAsync("super_wfp_providers audits registered security providers and policy engines", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWfpProviders();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWfpProviders failed: " + JSON.stringify(res));
+    assert(typeof res.count === "number" && res.count > 0);
+    assert(Array.isArray(res.providers) && res.providers.length > 0);
+    const bfe = res.providers.find(p => p.name.includes("Base Filtering Engine"));
+    assert(bfe !== undefined, "Expected Base Filtering Engine provider");
+    assert.strictEqual(bfe.serviceName, "BFE");
+  });
+
+  await itAsync("super_wfp_layer_stats audits WFP filtering layers and packet inspection matrix", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getWfpLayerStats();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getWfpLayerStats failed: " + JSON.stringify(res));
+    assert(typeof res.count === "number" && res.count > 0);
+    assert(Array.isArray(res.layers) && res.layers.length > 0);
+    const aleLayer = res.layers.find(l => l.protocol === "ALE");
+    assert(aleLayer !== undefined, "Expected ALE layer");
+  });
+
+  it("All 300 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 292);
+    assert.strictEqual(SYSTEM_TOOLS.length, 300);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -6140,6 +6264,14 @@ async function run() {
     assert(toolNames.includes("super_vss_shadow_copies"));
     assert(toolNames.includes("super_vss_storage"));
     assert(toolNames.includes("super_vss_snapshot_probe"));
+    assert(toolNames.includes("super_dbg_minidump_capture"));
+    assert(toolNames.includes("super_dbg_pe_info"));
+    assert(toolNames.includes("super_dbg_symbol_probe"));
+    assert(toolNames.includes("super_dbg_process_threads"));
+    assert(toolNames.includes("super_wfp_engine_status"));
+    assert(toolNames.includes("super_wfp_sessions"));
+    assert(toolNames.includes("super_wfp_providers"));
+    assert(toolNames.includes("super_wfp_layer_stats"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
