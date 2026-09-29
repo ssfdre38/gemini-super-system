@@ -110,6 +110,7 @@
   - [92. Windows Event Tracing for Windows (ETW) Subsystem](#92--windows-event-tracing-for-windows-etw-subsystem-evntraceh--advapi32dll)
   - [93. Windows Application Model & AppX/MSIX Packaging Subsystem](#93--windows-application-model--appxmsix-packaging-subsystem-appmodelh--appxpackagingh--kernel32dll)
   - [94. Windows XmlLite Streaming Subsystem](#94--windows-xmllite-streaming-subsystem-xmlliteh--xmllitedll)
+  - [95. Windows Extensible Storage Engine (ESENT) Subsystem](#95--windows-extensible-storage-engine-esent-subsystem-esenth--esentdll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1228,6 +1229,15 @@ Directly interfaces with Microsoft's high-performance, bare-metal Windows XmlLit
 - **High-Speed Element & Attribute Query (`super_xmllite_query`)**: Performs non-cached streaming filtering across massive XML documents. Locates elements matching target tag names and attribute criteria, reporting exact node positions, hierarchy depth, and attribute dictionaries without memory bloat.
 - **284 Tools Milestone**: Reaches **284 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **79 comprehensive test suites** and **75 environment health checks**.
 - **Native MCP Tools**: `super_xmllite_read`, `super_xmllite_write`, `super_xmllite_inspect`, `super_xmllite_query`.
+
+### 95. 🗄️ Windows Extensible Storage Engine (ESENT / JET Blue) Subsystem (`esent.h` / `esent.dll`)
+Directly interfaces with Microsoft's battle-tested, kernel-grade Windows Extensible Storage Engine (ESENT / JET Blue ISAM) architecture via native `esent.dll` P/Invoke:
+- **System Parameters & Telemetry (`super_esent_system_parameters`)**: Queries global ESENT engine configuration, page sizes (4KB, 8KB, 16KB, 32KB), cache telemetry, maximum database instances, engine version, and 64-bit architecture bitmasks via `JetGetSystemParameter`.
+- **Database Header & Page Geometry (`super_esent_database_info`)**: Inspects database state (`CleanShutdown`, `DirtyShutdown`, `Inconsistent`), page sizes, versioning, format levels, and total physical pages across Windows system databases (e.g. `DataStore.edb`, search indexes, live servicing catalogs) without mounting or locking.
+- **System Database Auditing (`super_esent_audit_databases`)**: Audits all standard Windows system ESENT databases across `C:\Windows\SoftwareDistribution\DataStore`, search repositories, and local app data, providing forensic file sizes, existence checks, and health telemetry.
+- **Zero-Dependency ISAM Transient Store (`super_esent_transient_store`)**: Dynamically creates, populates, and queries native ACID-compliant ISAM transient database stores (`.edb`) with B-tree indexes, table schemas, and structured record storage with zero third-party drivers or SQLite dependencies.
+- **288 Tools Milestone**: Reaches **288 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **80 comprehensive test suites** and **76 environment health checks**.
+- **Native MCP Tools**: `super_esent_system_parameters`, `super_esent_database_info`, `super_esent_audit_databases`, `super_esent_transient_store`.
 
 ---
 

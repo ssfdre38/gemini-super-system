@@ -25,6 +25,7 @@ data/*.png
 data/*.wav
 data/captures/*
 !data/captures/.gitkeep
+tools/data/
 
 # OS & Editor files
 .DS_Store
