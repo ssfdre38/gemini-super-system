@@ -524,18 +524,24 @@ const SYSTEM_TOOLS = [
       },
       {
         name: "super_run_playbook",
-        description: "Executes end-to-end multi-app autonomous playbooks ('discord_status_relay' or 'system_health_audit') with Zero Dead Air speech narration, live bus telemetry, and cross-application visual verification.",
+        description: "Executes deterministic multi-app autonomous playbooks (Computer Use 2.0 biomechanical actuation, storage cleanup & security audits, declarative multi-step workflows, system health audits, or Discord relays).",
         inputSchema: {
           type: "object",
           properties: {
             playbook: {
               type: "string",
-              enum: ["discord_status_relay", "system_health_audit"],
+              enum: [
+                "desktop_cleanup_and_audit",
+                "app_workflow_actuation",
+                "declarative_workflow",
+                "system_health_audit",
+                "discord_status_relay"
+              ],
               description: "Autonomous playbook name to execute."
             },
             params: {
               type: "object",
-              description: "Optional parameters for the playbook."
+              description: "Parameters for the selected playbook (e.g. windowTitle, searchElement, steps, typeText, verifyOcrText)."
             }
           },
           required: ["playbook"]

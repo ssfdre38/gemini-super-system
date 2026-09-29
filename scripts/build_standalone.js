@@ -10,32 +10,27 @@ console.log("=================================================");
 console.log("⚡ Building Standalone Native Binary (Node SEA) ⚡");
 console.log("=================================================\n");
 
-// 1. Locate esbuild
-const esbuildBin = "C:\\Users\\admin\\source\\gemini-cli-local\\node_modules\\esbuild\\bin\\esbuild";
-if (!fs.existsSync(esbuildBin)) {
-  console.error("Error: esbuild not found.");
-  process.exit(1);
-}
-
-// 2. Bundle index.js into dist/bundle.cjs
+// 1. Locate or run esbuild
 console.log("[1/5] Bundling application with esbuild...");
 const bundleOut = path.join(dist, "bundle.cjs");
-const buildProc = spawnSync("node", [
-  esbuildBin,
+
+const buildProc = spawnSync("npx.cmd", [
+  "--yes",
+  "esbuild",
   path.join(root, "index.js"),
   "--bundle",
   "--platform=node",
   "--target=node24",
   "--format=cjs",
   `--outfile=${bundleOut}`
-], { cwd: root, stdio: "inherit" });
+], { cwd: root, stdio: "inherit", shell: true });
 
 if (buildProc.status !== 0 || !fs.existsSync(bundleOut)) {
   console.error("Error: esbuild failed to generate bundle.cjs");
   process.exit(1);
 }
 
-// 3. Write sea-config.json
+// 2. Write sea-config.json
 console.log("[2/5] Writing sea-config.json with embedded asset...");
 const seaBlobPath = path.join(dist, "sea-prep.blob");
 const seaConfig = {
@@ -49,32 +44,68 @@ const seaConfig = {
 const seaConfigPath = path.join(root, "sea-config.json");
 fs.writeFileSync(seaConfigPath, JSON.stringify(seaConfig, null, 2), "utf8");
 
-// 4. Generate SEA Prep Blob
+// 3. Generate SEA Prep Blob
 console.log("[3/5] Generating Node SEA prep blob...");
-const seaBlob = spawnSync("node", ["--experimental-sea-config", "sea-config.json"], { cwd: root, stdio: "inherit" });
+const seaBlob = spawnSync(process.execPath, ["--experimental-sea-config", "sea-config.json"], { cwd: root, stdio: "inherit" });
 if (seaBlob.status !== 0 || !fs.existsSync(seaBlobPath)) {
   console.error("Error: Failed to generate SEA blob.");
   process.exit(1);
 }
 
-// 5. Copy node.exe to dist/gemini-super.exe
+// 4. Copy node.exe to dist/gemini-super.exe
 const targetExe = path.join(dist, "gemini-super.exe");
-console.log(`[4/5] Copying node.exe to ${targetExe}...`);
+console.log(`[4/5] Preparing clean binary target at ${targetExe}...`);
+if (fs.existsSync(targetExe)) {
+  try {
+    fs.unlinkSync(targetExe);
+  } catch (err) {
+    console.error("Warning: Could not remove old binary, waiting 500ms:", err.message);
+    const sleep = spawnSync("powershell", ["-Command", "Start-Sleep -Milliseconds 500"]);
+    try { fs.unlinkSync(targetExe); } catch (e) {
+      console.error("Fatal: Target binary is locked by another process:", e.message);
+      process.exit(1);
+    }
+  }
+}
 fs.copyFileSync(process.execPath, targetExe);
 
-// 5b. Remove signature on Windows before postject injection
-const signtool = "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\10.0.26100.0\\x64\\signtool.exe";
-if (fs.existsSync(signtool)) {
-  console.log("Removing Windows Authenticode signature from binary...");
-  spawnSync(signtool, ["remove", "/s", targetExe], { stdio: "inherit" });
+// 4b. Remove signature on Windows before postject injection
+function findSigntool() {
+  const kitBases = [
+    "C:\\Program Files (x86)\\Windows Kits\\10\\bin",
+    "C:\\Program Files\\Windows Kits\\10\\bin"
+  ];
+  for (const base of kitBases) {
+    if (fs.existsSync(base)) {
+      try {
+        const versions = fs.readdirSync(base).filter(d => d.startsWith("10."));
+        versions.sort().reverse();
+        for (const ver of versions) {
+          const candidate = path.join(base, ver, "x64", "signtool.exe");
+          if (fs.existsSync(candidate)) return candidate;
+        }
+      } catch {}
+    }
+  }
+  return null;
 }
 
-// 6. Inject blob with postject
+const signtool = findSigntool();
+if (signtool) {
+  console.log(`Removing Windows Authenticode signature from binary using ${signtool}...`);
+  const removeSig = spawnSync(signtool, ["remove", "/s", targetExe], { stdio: "inherit" });
+  if (removeSig.status !== 0) {
+    console.error("Warning: signtool remove returned non-zero, continuing...");
+  }
+}
+
+// 5. Inject blob with postject
 console.log("[5/5] Injecting SEA blob into executable via postject...");
-const postjectPath = "C:\\Users\\admin\\AppData\\Local\\npm-cache\\_npx\\c8510be4d849f3b2\\node_modules\\.bin\\postject.cmd";
 const fuse = "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2";
 
-const inject = spawnSync(postjectPath, [
+const inject = spawnSync("npx.cmd", [
+  "--yes",
+  "postject",
   targetExe,
   "NODE_SEA_BLOB",
   seaBlobPath,
