@@ -3107,9 +3107,11 @@ namespace GeminiSuperDesktop {
             } catch {}
 
             if (recursive && depth < maxDepth) {
+                if (list.Count >= limit && !string.IsNullOrEmpty(searchFilter)) return;
                 try {
                     dynamic subs = folder.GetFolders(0);
                     foreach (dynamic sf in subs) {
+                        if (list.Count >= limit && !string.IsNullOrEmpty(searchFilter)) break;
                         EnumerateFolderTasks(sf, recursive, depth + 1, maxDepth, list, stateFilter, searchFilter, limit, ref totalMatched);
                     }
                 } catch {}
@@ -3509,6 +3511,7 @@ namespace GeminiSuperDesktop {
                 var chainErrors = new List<string>();
                 try {
                     X509Chain chain = new X509Chain();
+                    chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
                     chainValid = chain.Build(c);
                     chainCount = chain.ChainElements.Count;
                     foreach (var s in chain.ChainStatus) {
@@ -3568,6 +3571,7 @@ namespace GeminiSuperDesktop {
                 if (fmt == "chain") {
                     try {
                         X509Chain chain = new X509Chain();
+                        chain.ChainPolicy.RevocationMode = X509RevocationMode.NoCheck;
                         chain.Build(c);
                         foreach (var el in chain.ChainElements) {
                             byte[] elRaw = el.Certificate.Export(X509ContentType.Cert);
