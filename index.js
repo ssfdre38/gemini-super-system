@@ -6430,7 +6430,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
   if (name === "super_clipboard") {
     const bridge = getClipboardBridge();
-    const res = await bridge.execute(args);
+    const res = await bridge.execute(args?.action || "get_text", args || {});
     return {
       content: [
         {
