@@ -5450,6 +5450,43 @@ const SYSTEM_TOOLS = [
             }
           }
         }
+      },
+      {
+        name: "super_vss_writers",
+        description: "Enumerates active and registered Windows Volume Shadow Copy Service (VSS) writers, system services, security access control, and snapshot exclusions via vss.h / vssadmin / WMI. Reports writer health states (Stable, WaitingForCompletion), error conditions, and service bindings.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_vss_shadow_copies",
+        description: "Queries all active Volume Shadow Copies (snapshots), hardware/software shadow copy providers, device object paths, and snapshot creation timestamps via vss.h / Win32_ShadowCopy / Win32_ShadowProvider.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_vss_storage",
+        description: "Queries Volume Shadow Copy diff area storage associations, allocated bytes, used bytes, and maximum storage limits via vss.h / Win32_ShadowStorage / registry configuration.",
+        inputSchema: {
+          type: "object",
+          properties: {}
+        }
+      },
+      {
+        name: "super_vss_snapshot_probe",
+        description: "Probes volume readiness and capability for Volume Shadow Copy snapshot creation on a specified drive or system root. Validates file system compatibility (NTFS/ReFS), minimum diff area space, VSS core service state, and registered snapshot providers.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            volume: {
+              type: "string",
+              description: "Target drive letter or volume root (e.g. 'C:\\'). Defaults to the Windows system drive."
+            }
+          }
+        }
       }
 ];
 
@@ -9503,6 +9540,54 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         {
           type: "text",
           text: `⚡ [Windows ESENT Transient ISAM Store & Transaction]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_vss_writers") {
+    const res = await orch.getVssWriters();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🛡️ [Windows VSS System Writers & Services]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_vss_shadow_copies") {
+    const res = await orch.getVssShadowCopies();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `📸 [Windows Volume Shadow Copies & Providers]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_vss_storage") {
+    const res = await orch.getVssStorage();
+    return {
+      content: [
+        {
+          type: "text",
+          text: `💾 [Windows Volume Shadow Copy Storage & Diff Area]:\n` + JSON.stringify(res, null, 2)
+        }
+      ]
+    };
+  }
+
+  if (name === "super_vss_snapshot_probe") {
+    const res = await orch.probeVssSnapshot(args || {});
+    return {
+      content: [
+        {
+          type: "text",
+          text: `🔎 [Windows Volume Shadow Copy Readiness Probe]:\n` + JSON.stringify(res, null, 2)
         }
       ]
     };

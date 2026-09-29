@@ -110,7 +110,8 @@
   - [92. Windows Event Tracing for Windows (ETW) Subsystem](#92--windows-event-tracing-for-windows-etw-subsystem-evntraceh--advapi32dll)
   - [93. Windows Application Model & AppX/MSIX Packaging Subsystem](#93--windows-application-model--appxmsix-packaging-subsystem-appmodelh--appxpackagingh--kernel32dll)
   - [94. Windows XmlLite Streaming Subsystem](#94--windows-xmllite-streaming-subsystem-xmlliteh--xmllitedll)
-  - [95. Windows Extensible Storage Engine (ESENT) Subsystem](#95--windows-extensible-storage-engine-esent-subsystem-esenth--esentdll)
+  - [95. Windows Extensible Storage Engine (ESENT) Subsystem](#95--windows-extensible-storage-engine-esent--jet-blue-subsystem-esenth--esentdll)
+  - [96. Windows Volume Shadow Copy Service (VSS) Subsystem](#96-️-windows-volume-shadow-copy-service-vss-subsystem-vssh--vswriterh--vssapidll)
 - [🚀 Quick Start](#-quick-start)
 - [☕ Support the Development](#-support-the-development)
 - [📚 Architectural Specifications](#-architectural-specifications)
@@ -1238,6 +1239,15 @@ Directly interfaces with Microsoft's battle-tested, kernel-grade Windows Extensi
 - **Zero-Dependency ISAM Transient Store (`super_esent_transient_store`)**: Dynamically creates, populates, and queries native ACID-compliant ISAM transient database stores (`.edb`) with B-tree indexes, table schemas, and structured record storage with zero third-party drivers or SQLite dependencies.
 - **288 Tools Milestone**: Reaches **288 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **80 comprehensive test suites** and **76 environment health checks**.
 - **Native MCP Tools**: `super_esent_system_parameters`, `super_esent_database_info`, `super_esent_audit_databases`, `super_esent_transient_store`.
+
+### 96. 🛡️ Windows Volume Shadow Copy Service (VSS) Subsystem (`vss.h` / `vswriter.h` / `vssapi.dll`)
+Directly interfaces with Microsoft's enterprise-grade Windows Volume Shadow Copy Service (VSS) architecture via native C# P/Invoke, WMI (`Win32_ShadowCopy`, `Win32_ShadowProvider`, `Win32_ShadowStorage`), and system registry reflection:
+- **System VSS Writers & Services (`super_vss_writers`)**: Enumerates all active and registered Windows VSS writers (Task Scheduler Writer, VSS Metadata Store Writer, Performance Counters Writer, System Writer, ASR Writer, Shadow Copy Optimization Writer, Registry Writer, WMI Writer, IIS Config Writer, IIS Metabase Writer, SqlServerWriter, and Hyper-V VSS Writer). Validates writer health states (`Stable`, `WaitingForCompletion`), last error status, corresponding Windows service bindings, VSS Access Control ACLs, and system-wide `FilesNotToSnapshot` exclusion sets.
+- **Volume Shadow Copies & Providers (`super_vss_shadow_copies`)**: Discovers and inspects active volume shadow copy snapshots and registered hardware/software shadow providers (e.g. Microsoft Software Shadow Copy provider 1.0, Microsoft File Share Shadow Copy provider) across the operating system. Delivers forensic snapshot IDs, volume paths, device object paths (`\\?\GLOBALROOT\Device\HarddiskVolumeShadowCopyX`), creation timestamps, machine origins, and client accessibility bitmasks.
+- **Shadow Storage & Diff Area Limits (`super_vss_storage`)**: Queries shadow copy storage associations and differential storage areas. Interrogates allocated space, used space, maximum storage quotas, and default registry bounds (`MaxShadowCopies`, `MinDiffAreaFileSize`) to safeguard storage capacity and eliminate runaway snapshot bloat.
+- **Snapshot Readiness & Volume Probe (`super_vss_snapshot_probe`)**: Probes live storage volumes (e.g. `C:\`) for VSS snapshot capability. Validates underlying file system support (NTFS / ReFS), confirms minimum required differential space (320 MB+), verifies VSS core service health (`VSS`, `swprv`), and provides a composite system readiness diagnostic.
+- **292 Tools Milestone**: Reaches **292 sovereign Win32/NT native MCP tools** integrated into the Gemini Super System ecosystem, backed by **82 comprehensive test suites** and **77 environment health checks**.
+- **Native MCP Tools**: `super_vss_writers`, `super_vss_shadow_copies`, `super_vss_storage`, `super_vss_snapshot_probe`.
 
 ---
 

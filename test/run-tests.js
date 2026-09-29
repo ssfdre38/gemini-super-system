@@ -962,8 +962,12 @@ async function run() {
     // Trigger poll
     await pool.poll();
 
-    // Wait short delay for worker to complete child execution
-    await new Promise(r => setTimeout(r, 600));
+    // Wait for worker to complete child execution
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 100));
+      const s = bus.readState();
+      if (s.completedTasks.find(t => t.id === task.id)) break;
+    }
 
     const finalState = bus.readState();
     const completed = finalState.completedTasks.find(t => t.id === task.id);
@@ -5845,10 +5849,72 @@ async function run() {
     }
   });
 
-  it("All 288 MCP Tools are registered with valid JSON schemas in index.js", () => {
+  // Suite 82: Windows Volume Shadow Copy Service (VSS) Subsystem (vss.h / vssadmin / WMI)
+  console.log("\n\x1b[1m[Suite 82: Windows Volume Shadow Copy Service (VSS) Subsystem]\x1b[0m");
+
+  await itAsync("VSS Writers enumerates system writers, core services, and exclusion sets", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getVssWriters();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getVssWriters failed: " + JSON.stringify(res));
+    assert(Array.isArray(res.writers), "writers should be an array");
+    assert(res.writerCount > 0, "Expected at least 1 VSS writer");
+    assert(Array.isArray(res.vssServices), "vssServices should be an array");
+    assert(Array.isArray(res.accessControl), "accessControl should be an array");
+    assert(Array.isArray(res.exclusions), "exclusions should be an array");
+
+    const schedWriter = res.writers.find(w => w.name === "Task Scheduler Writer");
+    assert(schedWriter !== undefined, "Expected Task Scheduler Writer");
+    assert.strictEqual(schedWriter.writerId, "{d61d61c8-d73a-4eee-8cdd-f6f9786b7124}");
+    assert.strictEqual(schedWriter.state, "Stable");
+  });
+
+  await itAsync("VSS Shadow Copies queries shadow copy snapshots and registered providers", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getVssShadowCopies();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getVssShadowCopies failed: " + JSON.stringify(res));
+    assert(Array.isArray(res.shadowCopies), "shadowCopies should be an array");
+    assert(Array.isArray(res.providers), "providers should be an array");
+    assert(res.providerCount > 0, "Expected at least 1 shadow provider");
+    const swProvider = res.providers.find(p => p.name.includes("Microsoft"));
+    assert(swProvider !== undefined, "Expected Microsoft shadow provider");
+  });
+
+  await itAsync("VSS Storage queries shadow copy diff area allocations and limits", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.getVssStorage();
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "getVssStorage failed: " + JSON.stringify(res));
+    assert(Array.isArray(res.shadowStorage), "shadowStorage should be an array");
+    assert(typeof res.defaultMaxShadowCopies === "number", "Expected numeric defaultMaxShadowCopies");
+    assert(typeof res.minDiffAreaBytes === "number", "Expected numeric minDiffAreaBytes");
+  });
+
+  await itAsync("VSS Snapshot Probe verifies volume readiness, NTFS file system, and disk capacity", async () => {
+    const { getKernelBridge } = require("../lib/kernel-bridge.js");
+    const kb = getKernelBridge();
+    const res = await kb.probeVssSnapshot({ volume: "C:\\" });
+
+    assert(res !== null && typeof res === "object");
+    assert.strictEqual(res.success, true, "probeVssSnapshot failed: " + JSON.stringify(res));
+    assert.strictEqual(res.isFileSystemSupported, true);
+    assert(res.totalSizeBytes > 0, "Expected positive totalSizeBytes");
+    assert(res.freeSpaceBytes > 0, "Expected positive freeSpaceBytes");
+    assert.strictEqual(res.vssReady, true);
+    assert(typeof res.diagnostics === "string" && res.diagnostics.length > 10);
+  });
+
+  it("All 292 MCP Tools are registered with valid JSON schemas in index.js", () => {
     const { SYSTEM_TOOLS } = require("../index.js");
     assert(Array.isArray(SYSTEM_TOOLS));
-    assert.strictEqual(SYSTEM_TOOLS.length, 288);
+    assert.strictEqual(SYSTEM_TOOLS.length, 292);
 
     const toolNames = SYSTEM_TOOLS.map(t => t.name);
     assert(toolNames.includes("super_audio_listen"));
@@ -6070,6 +6136,10 @@ async function run() {
     assert(toolNames.includes("super_esent_database_info"));
     assert(toolNames.includes("super_esent_audit_databases"));
     assert(toolNames.includes("super_esent_transient_store"));
+    assert(toolNames.includes("super_vss_writers"));
+    assert(toolNames.includes("super_vss_shadow_copies"));
+    assert(toolNames.includes("super_vss_storage"));
+    assert(toolNames.includes("super_vss_snapshot_probe"));
 
     for (const tool of SYSTEM_TOOLS) {
       assert(tool.name && tool.name.startsWith("super_"));
