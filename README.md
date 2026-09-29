@@ -153,36 +153,70 @@ The 300 native tools are organized into 10 cohesive, kernel-grade subsystems. Fo
 
 ---
 
-## ⚡ Quick Start
+## ⚡ 1-Click Install & Quick Start
 
-### 1. Launch Mission Control Web Dashboard
-Start the real-time telemetry dashboard on port `18880`:
-```bash
-npm run dashboard
-# or: node index.js --dashboard
+### 🚀 Option 1: 1-Click PowerShell Installer (Recommended)
+Open PowerShell (Admin or User) and run:
+```powershell
+irm https://raw.githubusercontent.com/ssfdre38/gemini-super-system/main/scripts/install.ps1 | iex
 ```
-Open `http://localhost:18880` to view live CPU/RAM vitals, active window hierarchy, 2D Semantic Galaxy Map, and the shared event bus.
+* Installs `gemini-super.exe` into `%LOCALAPPDATA%\Programs\GeminiSuper\bin`.
+* Adds `GeminiSuper\bin` to User `PATH`.
+* Autoconfigures MCP server definitions for **Antigravity CLI**, **Claude Desktop**, and **Cursor IDE**.
+* Validates system health via `--doctor`.
 
-### 2. Run Windows Native Companions
-```bash
-# Launch Native System Tray Companion (Zero-dependency background tray icon)
-npm run tray
-
-# Summon Floating Obsidian Command Bar HUD (WPF)
-npm run launcher
-
-# Start Ambient App-Switch Watcher in terminal
-npm run watch
+### 📦 Option 2: Pre-Built Standalone Binary (`gemini-super.exe`)
+Download [`gemini-super-windows-x64.zip`](https://github.com/ssfdre38/gemini-super-system/releases/latest) from GitHub Releases.
+* **Zero node_modules, zero Python, zero npm dependencies.**
+* Drop on any clean Windows 10/11 or Windows Server machine and run:
+```powershell
+gemini-super.exe --doctor
+gemini-super.exe --dashboard
 ```
 
-### 3. Connect to Antigravity CLI / Gemini MCP
-Add to your `~/.gemini/settings.json` or Antigravity configuration:
+### 🛠️ Option 3: Run from Source
+```powershell
+git clone https://github.com/ssfdre38/gemini-super-system.git
+cd gemini-super-system
+npm install
+node index.js --doctor
+# Build standalone SEA executable:
+npm run build:sea
+```
+
+---
+
+## 🦾 Computer Use 2.0: Autonomous Playbook Engine
+
+Traditional AI "computer use" relies on lossy screenshots, slow cloud vision APIs, and imprecise click guessing. Gemini Super System introduces **deterministic, kernel-grade computer use**:
+* **UIAutomation Control Trees**: 30ms traversal with exact integer pixel bounding boxes `[x, y, w, h]`.
+* **Bio-Kinetic Motor Curves**: Mouse glides along wrist-arc cubic Bézier trajectories obeying Fitts's Law.
+* **Offline WinRT OCR**: Hardware-accelerated text verification in ~100ms without cloud APIs.
+* **Zero Dead Air Telemetry**: Hardware audio chimes, SAPI voice feedback, and markdown audit reports.
+
+### 🌟 Showcase Playbooks
+
+| Playbook | Description | Direct CLI Command |
+|---|---|---|
+| **`desktop_cleanup_and_audit`** | Cleans stale temp files, audits storage volumes, evaluates Security Center health | `gemini-super.exe --playbook desktop_cleanup_and_audit` |
+| **`showcase_privacy_audit`** | Audits Windows Firewall, active sockets, AMSI antimalware, and port surface | `gemini-super.exe --playbook showcase_privacy_audit` |
+| **`showcase_cad_prototyping`** | Parametrically synthesizes watertight 3D spur gear & rotary knob STLs | `gemini-super.exe --playbook showcase_cad_prototyping` |
+| **`showcase_multimodal_companion`** | Senses remote tablet presence, active focus, and emits harmonic welcome chime | `gemini-super.exe --playbook showcase_multimodal_companion` |
+| **`declarative_workflow`** | Executes custom JSON array of macro steps (`focus`, `click`, `type`, `ocr_verify`, `chime`) | Invoked via MCP `super_run_playbook` |
+
+*For complete authoring instructions, see [**`docs/PLAYBOOKS.md`**](docs/PLAYBOOKS.md).*
+
+---
+
+## 🔌 Connecting to AI Clients (MCP Setup)
+
+### 1. Antigravity CLI (`~/.gemini/settings.json`)
 ```json
 {
   "mcpServers": {
     "gemini-super": {
-      "command": "node",
-      "args": ["C:\\Users\\admin\\source\\gemini-super-system\\index.js"],
+      "command": "gemini-super.exe",
+      "args": [],
       "trust": true,
       "timeout": 60000
     }
@@ -190,16 +224,36 @@ Add to your `~/.gemini/settings.json` or Antigravity configuration:
 }
 ```
 
-### 4. Run the Full Test Suite
-Validate all 84 test suites across all 300 sovereign native tools:
-```bash
-node test/run-tests.js
+### 2. Claude Desktop (`%APPDATA%\Claude\claude_desktop_config.json`)
+```json
+{
+  "mcpServers": {
+    "gemini-super": {
+      "command": "gemini-super.exe",
+      "args": []
+    }
+  }
+}
+```
+
+### 3. Cursor IDE (`~/.cursor/mcp.json`)
+```json
+{
+  "mcpServers": {
+    "gemini-super": {
+      "command": "gemini-super.exe",
+      "args": []
+    }
+  }
+}
 ```
 
 ---
 
 ## 📚 Architectural Specifications & Documentation
 
+* [**`docs/QUICKSTART.md`**](docs/QUICKSTART.md): 60-Second Zero-to-Sovereign quickstart guide.
+* [**`docs/PLAYBOOKS.md`**](docs/PLAYBOOKS.md): Computer Use 2.0 and Autonomous Playbook Engine specifications.
 * [**`docs/ARCHITECTURE.md`**](docs/ARCHITECTURE.md): Complete AI-OS Architectural Specification (Kernel ABI, HAL, Subsystems, System Call flow, IPC Bus).
 * [**`docs/OS_SUBSYSTEMS.md`**](docs/OS_SUBSYSTEMS.md): Comprehensive catalog of all 10 Subsystems and each of the 300 native tools with Win32/NT API mappings.
 * [**`docs/MCP_SYSTEM_CALL_ABI.md`**](docs/MCP_SYSTEM_CALL_ABI.md): Technical specification of the Model Context Protocol as a machine-to-machine System Call Interface.

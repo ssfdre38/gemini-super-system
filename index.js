@@ -535,7 +535,10 @@ const SYSTEM_TOOLS = [
                 "app_workflow_actuation",
                 "declarative_workflow",
                 "system_health_audit",
-                "discord_status_relay"
+                "discord_status_relay",
+                "showcase_privacy_audit",
+                "showcase_cad_prototyping",
+                "showcase_multimodal_companion"
               ],
               description: "Autonomous playbook name to execute."
             },
@@ -9967,6 +9970,24 @@ async function main() {
     const { runDoctor } = require("./lib/doctor.js");
     const doc = await runDoctor();
     process.exit(doc.overallSuccess ? 0 : 1);
+  }
+  if (process.argv.includes("--playbook")) {
+    const pbIdx = process.argv.indexOf("--playbook");
+    const pbName = process.argv[pbIdx + 1] || "desktop_cleanup_and_audit";
+    const orch = getOrchestrator();
+    await orch.initialize();
+    console.log("\n=======================================================");
+    console.log(`⚡ RUNNING AUTONOMOUS PLAYBOOK: "${pbName}"`);
+    console.log("=======================================================\n");
+    try {
+      const res = await orch.runPlaybook(pbName, {});
+      console.log(`\n✅ Playbook "${pbName}" completed successfully!\n`);
+      console.log(JSON.stringify(res, null, 2));
+      process.exit(0);
+    } catch (err) {
+      console.error(`\n❌ Playbook execution failed:`, err.message);
+      process.exit(1);
+    }
   }
   if (process.argv.includes("--watch")) {
     const orch = getOrchestrator();

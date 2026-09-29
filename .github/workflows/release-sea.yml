@@ -1,0 +1,69 @@
+name: Build & Release Standalone Executable (Node SEA)
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Standalone Windows Executable (x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Build Standalone SEA Executable
+        run: node scripts/build_standalone.js
+
+      - name: Verify Executable Health
+        run: |
+          .\dist\gemini-super.exe --doctor
+          .\dist\gemini-super.exe -- --version
+
+      - name: Package Release Zip
+        shell: pwsh
+        run: |
+          $releaseDir = "release-pkg"
+          New-Item -Path "$releaseDir\bin\tools" -ItemType Directory -Force | Out-Null
+          Copy-Item -Path "dist\gemini-super.exe" -Destination "$releaseDir\bin\gemini-super.exe" -Force
+          Copy-Item -Path "dist\tools\desktop_helper.exe" -Destination "$releaseDir\bin\tools\desktop_helper.exe" -Force
+          Copy-Item -Path "scripts\install.ps1" -Destination "$releaseDir\install.ps1" -Force
+          Copy-Item -Path "README.md" -Destination "$releaseDir\README.md" -Force
+          Copy-Item -Path "LICENSE" -Destination "$releaseDir\LICENSE" -Force -ErrorAction SilentlyContinue
+
+          Compress-Archive -Path "$releaseDir\*" -DestinationPath "gemini-super-windows-x64.zip" -Force
+          $hash = (Get-FileHash -Path "gemini-super-windows-x64.zip" -Algorithm SHA256).Hash
+          Set-Content -Path "gemini-super-windows-x64.zip.sha256" -Value "$hash  gemini-super-windows-x64.zip"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: |
+            gemini-super-windows-x64.zip
+            gemini-super-windows-x64.zip.sha256
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gemini-super-windows-x64
+          path: |
+            gemini-super-windows-x64.zip
+            gemini-super-windows-x64.zip.sha256
