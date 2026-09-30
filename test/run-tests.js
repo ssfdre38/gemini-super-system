@@ -5826,6 +5826,7 @@ async function run() {
 
     try {
       fs.mkdirSync(path.join(mockProc, "net"), { recursive: true });
+      fs.mkdirSync(path.join(mockProc, "asound"), { recursive: true });
       fs.mkdirSync(path.join(mockSys, "block", "sda", "queue"), { recursive: true });
       fs.mkdirSync(path.join(mockSys, "class", "thermal", "thermal_zone0"), { recursive: true });
       fs.mkdirSync(path.join(mockSys, "class", "drm", "card0-HDMI-A-1"), { recursive: true });
