@@ -5819,25 +5819,124 @@ async function run() {
     const mockRoot = path.join(os.tmpdir(), "mock_linux_fs_" + Date.now());
     const mockProc = path.join(mockRoot, "proc");
     const mockSys = path.join(mockRoot, "sys");
+    const mockEtc = path.join(mockRoot, "etc");
+    const mockDev = path.join(mockRoot, "dev");
+    const mockUsr = path.join(mockRoot, "usr");
+    const mockVar = path.join(mockRoot, "var");
 
     try {
       fs.mkdirSync(path.join(mockProc, "net"), { recursive: true });
       fs.mkdirSync(path.join(mockSys, "block", "sda", "queue"), { recursive: true });
       fs.mkdirSync(path.join(mockSys, "class", "thermal", "thermal_zone0"), { recursive: true });
+      fs.mkdirSync(path.join(mockSys, "class", "drm", "card0-HDMI-A-1"), { recursive: true });
+      fs.mkdirSync(path.join(mockDev, "shm"), { recursive: true });
+      fs.mkdirSync(path.join(mockEtc, "systemd", "system"), { recursive: true });
+      fs.mkdirSync(path.join(mockUsr, "share", "applications"), { recursive: true });
+      fs.mkdirSync(path.join(mockVar, "log"), { recursive: true });
 
       fs.writeFileSync(path.join(mockProc, "meminfo"), "MemTotal: 16384000 kB\nMemFree: 8192000 kB\nSlab: 512000 kB\n");
+      fs.writeFileSync(path.join(mockProc, "modules"), "zfs 4587520 5 - Live 0xffffffffc1000000\next4 983040 2 - Live 0xffffffffc0000000\n");
+      fs.writeFileSync(path.join(mockProc, "mounts"), "/dev/sda1 / ext4 rw,relatime 0 0\nrpool/ROOT/ubuntu /zfs zfs rw,xattr 0 0\n");
       fs.writeFileSync(path.join(mockProc, "net", "tcp"), "  sl  local_address rem_address   st tx rx tr tm ret uid to inode\n   0: 0100007F:1F90 00000000:0000 0A 00:00 00:00 00 0 0 1000 0 99988\n");
+      fs.writeFileSync(path.join(mockProc, "net", "route"), "Iface\tDestination\tGateway \tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU\tWindow\tIRTT\neth0\t00000000\t0101A8C0\t0003\t0\t0\t100\t00000000\t0\t0\t0\n");
+      fs.writeFileSync(path.join(mockProc, "net", "arp"), "IP address       HW type     Flags       HW address            Mask     Device\n192.168.1.1      0x1         0x2         00:11:22:33:44:55     *        eth0\n");
+      fs.writeFileSync(path.join(mockProc, "net", "dev"), "Inter-|   Receive                                                |  Transmit\n face |bytes    packets errs drop fifo frame compressed multicast|bytes    packets errs drop fifo colls carrier compressed\n  eth0: 1048576    1024    0    0    0     0          0         0  2097152    2048    0    0    0     0       0          0\n");
+      fs.writeFileSync(path.join(mockProc, "net", "unix"), "Num       RefCount Protocol Flags    Type St Inode Path\n00000000: 00000002 00000000 00010000 0001 01  12345 /run/systemd/private\n");
+      fs.writeFileSync(path.join(mockProc, "asound", "cards"), " 0 [PCH            ]: HDA-Intel - HDA Intel PCH\n                      HDA Intel PCH at 0xdf440000 irq 145\n");
       fs.writeFileSync(path.join(mockSys, "block", "sda", "size"), "1000000000");
       fs.writeFileSync(path.join(mockSys, "block", "sda", "queue", "rotational"), "0");
       fs.writeFileSync(path.join(mockSys, "class", "thermal", "thermal_zone0", "temp"), "42500\n");
+      fs.writeFileSync(path.join(mockSys, "class", "drm", "card0-HDMI-A-1", "status"), "connected\n");
+      fs.writeFileSync(path.join(mockSys, "class", "drm", "card0-HDMI-A-1", "modes"), "1920x1080\n1280x720\n");
+      fs.writeFileSync(path.join(mockEtc, "passwd"), "root:x:0:0:root:/root:/bin/bash\nubuntu:x:1000:1000:Ubuntu User:/home/ubuntu:/bin/bash\n");
+      fs.writeFileSync(path.join(mockEtc, "systemd", "system", "gemini.service"), "[Unit]\nDescription=Gemini Super Daemon\n");
+      fs.writeFileSync(path.join(mockUsr, "share", "applications", "gemini-desktop.desktop"), "[Desktop Entry]\nName=Gemini Desktop\nExec=/usr/bin/gemini\nType=Application\nCategories=Utility;Development;\n");
+      fs.writeFileSync(path.join(mockVar, "log", "syslog"), "Sep 29 16:00:00 ubuntu systemd[1]: Started Gemini Super System.\n");
 
-      const mockBridge = new LinuxBridge({ procPath: mockProc, sysPath: mockSys });
+      const mockBridge = new LinuxBridge({
+        procPath: mockProc,
+        sysPath: mockSys,
+        etcPath: mockEtc,
+        devPath: mockDev,
+        usrPath: mockUsr,
+        varPath: mockVar
+      });
+
       const vitals = await mockBridge.getKernelVitals();
       assert.strictEqual(vitals.totalRamMB, 16000);
+
+      const drivers = await mockBridge.getKernelDrivers();
+      assert.strictEqual(drivers.success, true);
+      assert.strictEqual(drivers.moduleCount, 2);
+      assert(drivers.modules.some(m => m.name === "zfs"));
+
+      const volumes = await mockBridge.getVolumes();
+      assert.strictEqual(volumes.success, true);
+      assert(volumes.volumes.some(v => v.fileSystem === "zfs"));
 
       const sockets = await mockBridge.getSocketTable();
       assert.strictEqual(sockets.sockets[0].localAddress, "127.0.0.1");
       assert.strictEqual(sockets.sockets[0].localPort, 8080);
+
+      const routes = await mockBridge.getRoutingTable();
+      assert.strictEqual(routes.success, true);
+      assert.strictEqual(routes.routes[0].interface, "eth0");
+      assert.strictEqual(routes.routes[0].isDefaultGateway, true);
+
+      const arp = await mockBridge.getArpTable();
+      assert.strictEqual(arp.success, true);
+      assert.strictEqual(arp.arpEntries[0].ipAddress, "192.168.1.1");
+      assert.strictEqual(arp.arpEntries[0].macAddress, "00:11:22:33:44:55");
+
+      const netDev = await mockBridge.getNetworkInterfaces();
+      assert.strictEqual(netDev.success, true);
+      assert.strictEqual(netDev.interfaces[0].name, "eth0");
+      assert.strictEqual(netDev.interfaces[0].rxBytes, 1048576);
+
+      const unixPipes = await mockBridge.manageNamedPipe({ action: "list" });
+      assert.strictEqual(unixPipes.success, true);
+      assert(unixPipes.pipes.some(p => p.path === "/run/systemd/private"));
+
+      // Shared Memory IPC in /dev/shm
+      const shmWrite = await mockBridge.manageSharedMemory({ action: "write", mapName: "test_shm", data: "SHM_TEST_DATA" });
+      assert.strictEqual(shmWrite.success, true);
+      const shmRead = await mockBridge.manageSharedMemory({ action: "read", mapName: "test_shm" });
+      assert.strictEqual(shmRead.data, "SHM_TEST_DATA");
+      const shmDelete = await mockBridge.manageSharedMemory({ action: "delete", mapName: "test_shm" });
+      assert.strictEqual(shmDelete.deleted, true);
+
+      // Process Tuning & Cgroups v2 Sandbox
+      const tuned = await mockBridge.tuneProcess({ pid: process.pid, priority: "high" });
+      assert.strictEqual(tuned.success, true);
+      const sandbox = await mockBridge.manageJobSandbox({ action: "create", sandboxName: "test_box", maxMemoryMB: 256 });
+      assert.strictEqual(sandbox.success, true);
+      assert.strictEqual(sandbox.memoryLimitMB, 256);
+
+      // User Accounts & Systemd Services
+      const accounts = await mockBridge.getNetAccounts();
+      assert.strictEqual(accounts.success, true);
+      assert(accounts.users.some(u => u.name === "ubuntu" && !u.isSystemAccount));
+
+      const services = await mockBridge.manageService({ action: "list" });
+      assert.strictEqual(services.success, true);
+      assert(services.services.some(s => s.name === "gemini"));
+
+      const events = await mockBridge.queryEventLog();
+      assert.strictEqual(events.success, true);
+      assert(events.events.length > 0);
+
+      // Display & Applications
+      const displays = await mockBridge.getDisplayDevices();
+      assert.strictEqual(displays.success, true);
+      assert.strictEqual(displays.displayDevices[0].isConnected, true);
+
+      const apps = await mockBridge.getAppxPackages();
+      assert.strictEqual(apps.success, true);
+      assert(apps.packages.some(p => p.name === "Gemini Desktop"));
+
+      const audio = await mockBridge.getAudioDevices();
+      assert.strictEqual(audio.success, true);
+      assert.strictEqual(audio.devices[0].shortName, "PCH");
 
       const disks = await mockBridge.getPhysicalDisks();
       assert.strictEqual(disks.physicalDisks[0].mediaType, "SSD / NVMe");
